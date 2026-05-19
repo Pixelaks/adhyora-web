@@ -12,37 +12,24 @@
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
     
     <meta name="theme-color" content="#0b111e">
-
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="mobile-web-app-capable" content="yes">
-
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Adhyora">
-    
-    <link rel="apple-touch-icon" href="../AdhyoraSplashLogo5.png">
+    <meta name="apple-mobile-web-app-title" content="Adhyora" />
 
     <script>
-    // Save the intention so it survives the login redirect!
-    if (window.location.hash === "#inbox") {
-        localStorage.setItem("pendingInboxOpen", "true");
-    }
-    if (window.location.hash === "#notifications") {
-        localStorage.setItem("pendingNotifOpen", "true");
-    }
-    if (window.location.hash === "#assignments") {
-        localStorage.setItem("pendingAssignOpen", "true");
-    }
-    if (window.location.hash === "#teacher_requests") {
-        localStorage.setItem("pendingTeacherReqOpen", "true");
-    }
-    if (window.location.hash === "#events") {
-        localStorage.setItem("pendingEventReqOpen", "true");
-    }
+        // Save the intention so it survives the login redirect!
+        if (window.location.hash === "#inbox") localStorage.setItem("pendingInboxOpen", "true");
+        if (window.location.hash === "#notifications") localStorage.setItem("pendingNotifOpen", "true");
+        if (window.location.hash === "#assignments") localStorage.setItem("pendingAssignOpen", "true");
+        if (window.location.hash === "#teacher_requests") localStorage.setItem("pendingTeacherReqOpen", "true");
+        if (window.location.hash === "#events") localStorage.setItem("pendingEventReqOpen", "true");
     </script>
     
     <script src="https://cdn.jsdelivr.net/npm/tsparticles@2.12.0/tsparticles.bundle.min.js"></script>
