@@ -1,0 +1,876 @@
+@import url('https://fonts.googleapis.com/css2?family=Yatra+One&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
+/* =========================================
+   🚀 DOM VIRTUALIZATION & RED COLOR PALETTE
+   ========================================= */
+/* BEFORE: .data-card, .sub-card, .ss-stu-card, .evt-card, .asn-card, .attd-row { */
+
+/* AFTER: Removed .asn-card so the badge can overflow the top freely! */
+.data-card, .sub-card, .ss-stu-card, .evt-card, .attd-row {
+    content-visibility: auto;
+    contain-intrinsic-size: 120px; 
+    will-change: transform; 
+}
+
+
+:root {
+    --brand-red: #dc2626;
+    --text-red: #991b1b;
+    --text-light-red: #ef4444;
+    --text-dark: #1e293b;
+    --text-muted: #64748b;
+    --bg-base: #ffffff;
+    --bg-surface: #f8fafc;
+    --bg-grid-color: rgba(220, 38, 38, 0.08); 
+    --card-bg: rgba(254, 242, 242, 0.9); 
+    --border-color: rgba(239, 68, 68, 0.2);
+}
+
+/* ==========================================
+   🚨 TEACHER LOADING SCREEN (SPLASH STYLE)
+   ========================================== */
+.teacher-loader {
+    position: fixed;
+    inset: 0;
+    background-color: #0b111e; /* Dark navy from your image */
+    
+    /* Subtle Grid Background Pattern */
+    background-image: 
+        linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-position: center center;
+    
+    z-index: 20000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.teacher-loader-content {
+    text-align: center;
+    position: relative;
+}
+
+.loader-subtitle {
+    font-family: 'Poppins', sans-serif;
+    font-size: 11px;
+    color: #888;
+    letter-spacing: 3px;
+    margin-bottom: -5px; /* Pulls it close to the main title */
+    text-transform: uppercase;
+}
+
+.loader-title {
+    font-family: 'Yatra One', system-ui, sans-serif !important;
+    font-size: 64px;
+    color: #C62828; /* The specific Red you requested */
+    margin: 0;
+    letter-spacing: 2px;
+    position: relative;
+    z-index: 2;
+}
+
+/* Backlight glow behind the text */
+.loader-glow {
+    position: absolute;
+    top: 35%; /* Centers it behind the word ADHYORA */
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 150px;
+    height: 50px;
+    background: #C62828;
+    filter: blur(60px);
+    opacity: 0.35;
+    z-index: 1;
+}
+
+/* Container for the spinner to space it below the title */
+.loader-spinner-area {
+    margin-top: 35px;
+    position: relative;
+    z-index: 2;
+}
+
+.loader-spinner {
+    width: 40px; 
+    height: 40px; 
+    border: 3px solid rgba(198, 40, 40, 0.15); 
+    border-top-color: #C62828; 
+    border-radius: 50%; 
+    animation: spin 1s linear infinite; 
+    margin: 0 auto 15px;
+}
+
+.loader-status-text {
+    color: #94a3b8; 
+    font-family: 'Poppins', sans-serif; 
+    font-size: 11px; 
+    font-weight: 600;
+    letter-spacing: 2px;
+    margin: 0;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+
+body {
+    background-color: var(--bg-base);
+    color: var(--text-red);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.dashboard-wrapper { flex: 1; display: flex; overflow: hidden; position: relative; padding-top: env(safe-area-inset-top); }
+
+.logo-text {
+    font-family: 'Yatra One', cursive;
+    color: var(--brand-red);
+    font-size: 32px;
+    letter-spacing: 2px;
+    text-align: center;
+    margin: 20px 0;
+    cursor: pointer;
+}
+
+/* =========================================
+   🚨 ATTENDANCE MOBILE RESPONSIVENESS FIXES
+   ========================================= */
+
+/* 1. Header Auto-Wrapping & Compact Spacing */
+#attMainScreen > div:first-child {
+    flex-wrap: wrap !important;
+    gap: 15px;
+    padding: 12px 15px 10px !important; /* Shrinks the massive padding */
+}
+#attMainScreen > div:first-child > div {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    width: 100%;
+}
+@media (min-width: 450px) {
+    #attMainScreen > div:first-child > div {
+        width: auto;
+    }
+}
+
+/* 2. Compact Top Buttons */
+#btnOpenHistory, #attDateBtn {
+    padding: 4px 10px !important; /* Reduced vertical padding slightly */
+    min-height: 38px !important; 
+    height: auto !important; /* Lets the button stretch down if the text needs room */
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+}
+#btnOpenHistory { font-size: 12px !important; }
+#attDateText { 
+    font-size: 10px !important; 
+    line-height: 1.1 !important; /* Squishes the day and the date closer together */
+}
+
+/* 3. Force Dropdowns onto ONE Row */
+#attMainScreen > div:nth-child(2) {
+    flex-wrap: nowrap !important; 
+    padding: 10px 15px !important; 
+    gap: 6px !important; 
+}
+#attSemDropdown, #attPeriodDropdown {
+    flex: 1 !important;
+    min-width: 0 !important; 
+    padding: 8px 4px !important;
+    font-size: 11px !important; 
+}
+#attSubjDropdown {
+    flex: 1.5 !important; 
+    min-width: 0 !important;
+    padding: 8px 25px 8px 4px !important; /* 25px padding on the right protects the arrow */
+    font-size: 11px !important;
+}
+
+/* 4. Prevent Text Overlapping the Arrow */
+.filter-select, #attSemDropdown, #attPeriodDropdown, #attSubjDropdown {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+
+
+/* =========================================
+   🚨 SIDEBAR (PC HORIZONTAL BUTTONS)
+   ========================================= */
+.sidebar {
+    width: 300px; padding: 20px; display: flex; flex-direction: column;
+    overflow-y: auto; border-right: 1px solid transparent; 
+}
+
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--brand-red); border-radius: 4px; }
+
+.nav-grid { display: flex; flex-direction: column; gap: 12px; }
+
+.menu-btn {
+    background-color: var(--card-bg); 
+    border: 1px solid var(--border-color); 
+    border-radius: 12px; 
+    padding: 15px 20px; 
+    display: flex; 
+    flex-direction: row; 
+    justify-content: space-between;
+    align-items: center; 
+    cursor: pointer; 
+    transition: all 0.2s;
+    background-image: linear-gradient(var(--bg-grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--bg-grid-color) 1px, transparent 1px);
+    background-size: 15px 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+}
+
+.menu-btn:hover {
+    background-color: rgba(254, 202, 202, 0.8);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(220, 38, 38, 0.15);
+}
+
+
+.btn-text { font-weight: 600; color: var(--text-red); font-size: 14px; }
+.btn-icon { color: var(--text-red); font-size: 16px; opacity: 0.8; }
+
+/* =========================================
+   🚨 FLOATING TOP NAV PILL (PC)
+   ========================================= */
+.icon-nav-container { position: absolute; top: 20px; right: 40px; z-index: 10; }
+.icon-nav {
+    background-color: #fff5f5; border: 2px solid #fecaca; border-radius: 30px;
+    padding: 8px 20px; display: flex; gap: 20px; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.1);
+    background-image: linear-gradient(var(--bg-grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--bg-grid-color) 1px, transparent 1px);
+    background-size: 15px 15px;
+}
+.nav-icon-btn { background: none; border: none; font-size: 18px; color: #1e293b; cursor: pointer; position: relative; transition: transform 0.2s; }
+.nav-icon-btn:hover, .nav-icon-btn.active-nav { color: var(--brand-red); transform: scale(1.1); }
+
+.notification-dot {
+    position: absolute; top: -2px; right: -2px; width: 8px; height: 8px;
+    background-color: #ef4444; border-radius: 50%; border: 1px solid #fff;
+    display: none;
+}
+
+/* =========================================
+   🚨 MAIN CONTENT AREA
+   ========================================= */
+.main-content { flex: 1; padding: 90px 40px 40px 40px; display: flex; flex-direction: column; overflow: hidden; }
+
+.welcome-card {
+    width: 100%; height: 100%; background-color: #fef2f2; border: 2px solid var(--border-color);
+    border-radius: 20px; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.02);
+    position: relative; overflow: hidden;
+    background-image: linear-gradient(var(--bg-grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--bg-grid-color) 1px, transparent 1px);
+    background-size: 30px 30px;
+}
+
+.welcome-text {
+    font-family: 'Yatra One', cursive; color: var(--text-light-red); font-size: 48px;
+    letter-spacing: 3px; text-shadow: 2px 2px 4px rgba(255,255,255,0.8);
+    background: rgba(255,255,255,0.5); padding: 10px 30px; border-radius: 15px; text-align: center; 
+}
+
+.dashboard-view { width: 100%; height: 100%; transition: opacity 0.3s ease; }
+.hidden-view { display: none !important; opacity: 0; }
+.scrollable-list::-webkit-scrollbar { width: 4px; }
+.scrollable-list::-webkit-scrollbar-thumb { background: var(--brand-red); border-radius: 4px; }
+
+/* =========================================
+   🚨 COMPONENT STYLES (Attendance & Filters)
+   ========================================= */
+
+/* The Modern Attendance Toggle Track */
+.attd-toggle {
+    position: relative;
+    width: 60px;
+    height: 30px;
+    background: #fee2e2;
+    border-radius: 10px; /* Modern rounded-square look */
+    cursor: pointer;
+    transition: background 0.3s ease;
+    display: flex;
+    align-items: center;
+    box-shadow: inset 0 2px 4px rgba(220, 38, 38, 0.1);
+}
+
+/* The 'A' (Absent) / 'P' (Present) Text */
+.attd-toggle::before {
+    content: 'A';
+    position: absolute;
+    right: 12px;
+    font-size: 13px;
+    font-weight: 800;
+    color: #ef4444; /* Light Red */
+    font-family: 'Poppins', sans-serif;
+    transition: all 0.3s ease;
+}
+
+/* The Sliding Thumb */
+.attd-toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 24px;
+    height: 24px;
+    background: white;
+    border-radius: 7px;
+    /* Satisfying "bouncy" slide animation */
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+    box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+}
+
+/* --- ACTIVE (PRESENT) STATE --- */
+.attd-toggle.active {
+    background: #10b981; /* Success Green */
+    box-shadow: inset 0 2px 4px rgba(16, 185, 129, 0.2);
+}
+
+.attd-toggle.active::before {
+    content: 'P';
+    left: 12px;
+    right: auto;
+    color: #ecfdf5; /* Light green text */
+}
+
+.attd-toggle.active::after {
+    transform: translateX(30px); /* Slide perfectly to the right */
+}
+
+.attd-toggle.locked {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: grayscale(0.5);
+}
+
+/* Filter Dropdowns (Leave this as it was) */
+.filter-select { padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-base); color: var(--text-dark); font-weight: 600; flex: 1; min-width: 100px;}
+
+/* =========================================
+   🚨 POPUPS & FULL SETTINGS DRAWER
+   ========================================= */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000;
+    visibility: hidden; opacity: 0; transition: opacity 0.3s ease, visibility 0.3s;
+    display: flex !important; justify-content: center !important; align-items: center !important;
+}
+.modal-overlay.active { visibility: visible; opacity: 1; }
+
+.compose-modal { 
+    margin: auto !important; position: relative !important;
+    transform: translateY(-20px); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); 
+}
+.modal-overlay.active .compose-modal { transform: translateY(0); }
+
+/* Settings Drawer */
+.settings-drawer {
+    position: absolute; top: 0; left: -350px; width: 350px; height: 100%; background: #ffffff; 
+    box-shadow: 5px 0 20px rgba(0,0,0,0.1); transition: left 0.4s cubic-bezier(0.25, 1, 0.5, 1); 
+    display: flex; flex-direction: column; padding: 30px;
+}
+.modal-overlay.active .settings-drawer { left: 0; }
+.close-settings { position: absolute; top: 20px; right: 20px; background: none; border: none; font-size: 24px; color: #888; cursor: pointer; transition: 0.2s; }
+.close-settings:hover { color: var(--text-red); transform: scale(1.1); }
+
+.settings-header { text-align: center; margin-top: 30px; margin-bottom: 30px; }
+.profile-avatar {
+    width: 80px; height: 80px; background: var(--bg-grid-color); border: 2px dashed var(--brand-red);
+    border-radius: 50%; margin: 0 auto 15px; display: flex; justify-content: center; align-items: center;
+    font-size: 30px; color: var(--text-red);
+}
+
+.settings-menu { display: flex; flex-direction: column; gap: 10px; flex: 1; overflow-y: auto; padding-right: 5px;}
+.settings-menu::-webkit-scrollbar { width: 4px; }
+.settings-menu::-webkit-scrollbar-thumb { background: var(--brand-red); border-radius: 4px; }
+
+.settings-btn {
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px;
+    text-align: left; font-size: 14px; font-weight: 600; color: #334155; 
+    cursor: pointer; transition: all 0.2s; display: flex; gap: 10px; align-items: center;
+}
+.settings-btn i { width: 20px; text-align: center; color: var(--brand-red); }
+.settings-btn:hover { background: #fef2f2; border-color: var(--brand-red); color: var(--text-red); transform: translateX(4px); }
+
+/* Logout Specific Styling */
+.logout-btn { background: #fff5f5; border-color: #fecaca; color: #ef4444; margin-top: auto; }
+.logout-btn i { color: #ef4444; }
+.logout-btn:hover { background: #fee2e2; border-color: #ef4444; color: #dc2626; transform: translateX(4px); }
+
+.settings-footer { text-align: center; font-size: 11px; color: #94a3b8; padding-top: 20px; }
+
+.toggle-switch { width: 36px; height: 18px; background: #cbd5e1; border-radius: 20px; position: relative; pointer-events: none; transition: background-color 0.3s; }
+.toggle-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: white; border-radius: 50%; transition: left 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.toggle-switch.active { background: var(--brand-red); }
+.toggle-switch.active::after { left: 20px; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* =========================================
+   🚨 STUDENT DASHBOARD UI ELEMENTS
+   ========================================= */
+.status-pending { background-color: #fffbeb; border-color: #fcd34d; color: #b45309; }
+.status-approved { background-color: #f0fdf4; border-color: #86efac; color: #166534; }
+.status-declined { background-color: #fef2f2; border-color: #fca5a5; color: #b91c1c; }
+.hod-badge { background-color: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: bold; margin-left: 8px; vertical-align: middle; border: 1px solid #bfdbfe; }
+
+.circle-wave-wrap { width: 140px; height: 140px; border-radius: 50%; border: 6px solid var(--bg-surface); position: relative; overflow: hidden; background: var(--bg-base); display: flex; justify-content: center; align-items: center; margin: 0 auto; box-shadow: inset 0 0 10px rgba(0,0,0,0.05); }
+.circle-wave-fill { position: absolute; left: -50%; width: 200%; height: 200%; top: var(--wave-height, 105%); background: var(--wave-color, var(--brand-red)); z-index: 0; transition: top 0.5s ease-out, background-color 0.5s; border-radius: 40%; animation: waveSpin 6s linear infinite; }
+@keyframes waveSpin { 100% { transform: rotate(360deg); } }
+.circle-wave-text { position: relative; z-index: 1; font-size: 28px; font-weight: bold; color: var(--text-dark); text-shadow: 0px 0px 8px rgba(255,255,255,0.9); }
+
+.wavy-row { position: relative; background: var(--bg-surface); text-align: center; padding: 12px; border-bottom: 1px solid var(--border-color); overflow: hidden; margin: 5px 0; border-radius: 8px; }
+.wavy-row-fill { position: absolute; left: 0; bottom: 0; width: 100%; height: var(--wave-percent, 0%); background: var(--wave-color, var(--brand-red)); z-index: 0; transition: height 0.5s ease-out, background-color 0.5s; }
+.wavy-row-fill::before { content: ''; position: absolute; left: 0; top: -10px; width: 200%; height: 10px; background: inherit; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 20' preserveAspectRatio='none'%3E%3Cpath d='M0,20 Q50,0 100,10 T200,10 V20 H0 Z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 20' preserveAspectRatio='none'%3E%3Cpath d='M0,20 Q50,0 100,10 T200,10 V20 H0 Z'/%3E%3C/svg%3E"); -webkit-mask-size: 100px 10px; mask-size: 100px 10px; animation: waveSlide 2s linear infinite; }
+@keyframes waveSlide { 0% { transform: translateX(0); } 100% { transform: translateX(-100px); } }
+.wavy-text { position: relative; z-index: 1; font-weight: bold; color: var(--text-dark); font-size: 14px; text-shadow: 0px 0px 5px rgba(255,255,255,0.8); }
+
+.stat-row { padding: 10px 15px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: flex-start; gap: 15px; font-size: 13px; color: var(--text-muted); }
+.stat-label { width: 120px; font-weight: 600; }
+.stat-value { font-weight: bold; color: var(--text-dark); }
+
+/* =========================================
+   🚨 TIMETABLE VIEWER STYLES
+   ========================================= */
+.tt-days-container { display: flex; gap: 8px; justify-content: center; }
+.tt-day-btn { 
+    background: var(--bg-base) !important; /* 🚨 Forced solid white to completely block grid lines */
+    color: var(--text-muted); 
+    border: 1px dashed var(--border-color); 
+    padding: 8px 15px; 
+    border-radius: 12px; 
+    font-weight: 600; 
+    font-size: 13px; 
+    cursor: pointer; 
+    transition: all 0.2s; 
+}
+
+.tt-day-btn.active { 
+    background: var(--brand-red) !important; 
+    color: white; 
+    border-style: solid; 
+    box-shadow: 0 4px 10px rgba(220, 38, 38, 0.3); 
+    transform: translateY(-2px); 
+}
+
+.tt-main-wrapper { display: flex; flex-direction: column; padding-left: 10px; padding-top: 10px; }
+.tt-row { display: flex; flex-direction: row; gap: 20px; align-items: stretch; margin-bottom: 20px; position: relative; }
+.tt-timeline-col { width: 40px; min-width: 40px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; position: relative; z-index: 2; }
+.tt-node { width: 32px; height: 32px; background: var(--bg-base); border: 2px solid var(--border-color); border-radius: 50%; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 14px; color: var(--text-muted); z-index: 3; transition: background 0.3s, color 0.3s, border-color 0.3s; }
+.tt-line-bg { position: absolute; top: 32px; bottom: -20px; width: 6px; background: var(--border-color); z-index: 1; border-radius: 3px; overflow: hidden; }
+.tt-line-fill { position: absolute; top: 0; left: 0; width: 100%; background: var(--brand-red); height: 0%; transition: height 0.5s ease; }
+
+.tt-card { flex: 1; display: flex; flex-direction: column; gap: 10px; border-radius: 12px; padding: 15px; min-height: 80px; transition: all 0.3s ease; background: var(--bg-base); }
+.tt-pill-grid { display: grid; grid-template-columns: 1fr 2.5fr; gap: 10px; }
+.tt-pill { 
+    background: var(--bg-base); 
+    border: 1px solid var(--border-color); 
+    border-radius: 20px; 
+    padding: 8px 10px; 
+    text-align: center; 
+    font-size: 13px; 
+    font-weight: 700; 
+    color: var(--text-dark); 
+    display: flex; /* 🚨 Flex ensures multi-line text stays vertically centered */
+    align-items: center;
+    justify-content: center;
+    line-height: 1.3;
+    /* 🚨 REMOVED nowrap and ellipsis! Text will now wrap naturally so teachers can read everything */
+    white-space: normal; 
+    word-wrap: break-word; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02); 
+    min-width: 0; 
+}
+
+.tt-pill.primary { color: var(--brand-red); }
+
+/* =========================================
+   📱 TIMETABLE MOBILE & PHONE FIXES
+   ========================================= */
+@media (max-width: 480px) { 
+    
+    /* 🚨 Reclaim Screen Space & Shift Left */
+    #timetableView > .scrollable-list { padding: 15px 10px !important; } 
+    .tt-main-wrapper { padding-left: 0; padding-top: 5px; } 
+    
+    /* 🚨 Perfect Card Width & Goldilocks Sizing */
+    .tt-row { gap: 8px; margin-bottom: 15px; } 
+    .tt-timeline-col { width: 30px; min-width: 30px; } 
+    .tt-card { padding: 12px 10px; gap: 8px; } 
+    .tt-pill-grid { grid-template-columns: 1fr 3fr; gap: 6px; } 
+    .tt-pill { font-size: 11px; padding: 6px 6px; } /* Clean size, allows wrapping without stretching */
+    
+    /* 🚨 Day Buttons Fold Fix (Forces 5 buttons to share space perfectly) */
+    .tt-days-container { flex-wrap: nowrap !important; gap: 4px; width: 100%; } 
+    .tt-day-btn { padding: 8px 2px; font-size: 11px; flex: 1; min-width: 0; text-align: center; } 
+
+   /* =========================================
+       🚨 ASSIGN CLASSES (HOD) PHONE FIXES
+       ========================================= */
+    /* Recover screen padding on phones */
+    #assignView > div:first-child { padding: 15px 10px 10px !important; } 
+    #assignView > div:nth-child(2) { padding: 15px 10px !important; } 
+    #asnListContainer { padding: 15px 10px !important; } 
+
+    /* Day button mobile spacing */
+    .asn-days-container { gap: 4px; width: 100%; }
+    .asn-day-btn { padding: 8px 2px; font-size: 11px; }
+
+    /* Remove horizontal scroll limits & tighten the dropdown grid */
+    .asn-periods-grid { grid-template-columns: 1fr; gap: 15px; } 
+    .asn-grid { gap: 5px; } 
+    .asn-input { padding: 8px 6px; font-size: 11px; } 
+    
+    /* Shrink internal card padding slightly */
+    .asn-period-wrapper { padding: 12px 10px; }
+    .asn-card { padding: 15px 10px 10px; }
+
+   /* =========================================
+       🚨 ACADEMIC CALENDAR MOBILE & FOLD FIXES
+       ========================================= */
+    #calendarView {
+        padding: 10px !important;
+    }
+
+    #calViewCard {
+        height: auto !important; /* 🚨 Stop the card from stretching full-screen vertically */
+        max-height: 90vh !important;
+        padding: 16px !important;
+        border-radius: 20px !important;
+    }
+
+    #calGridContainer {
+        flex: none !important; /* Disables infinite flex stretching */
+        width: 100% !important;
+        height: auto !important;
+        /* 🚨 PURE MATH: 7 columns / 6 rows makes every single cell a perfect, unsquished square! */
+        aspect-ratio: 7 / 6 !important; 
+        margin-bottom: 15px !important;
+        gap: 4px !important; /* Tightens the space between squares on mobile */
+    }
+
+    #calUpcomingEventBanner {
+        padding: 12px !important;
+        font-size: 13px !important;
+    }
+
+   /* 🚨 Recover screen padding on Student Dashboard for narrow phones */
+    #studentDashboardView { padding: 15px 10px !important; }
+
+   /* =========================================
+       🚨 SUBJECT ASSIGN DROPDOWNS PHONE FIX
+       ========================================= */
+    #subjectAssignView > div:nth-child(2) {
+        flex-wrap: nowrap !important; /* 🚨 Forces them into exactly one row */
+        padding: 10px 10px !important; /* Recovers screen padding */
+        gap: 5px !important; /* Shrinks the gap between them */
+    }
+    
+    #saSemDrop, #saCatDrop {
+        flex: 1 !important;
+        min-width: 0 !important; /* 🚨 Allows them to squish */
+        padding: 8px 4px !important;
+        font-size: 11px !important;
+    }
+    
+    #saSubDrop {
+        flex: 1.5 !important; /* Gives the Subject dropdown slightly more room */
+        min-width: 0 !important;
+        padding: 8px 20px 8px 4px !important; /* 20px on the right protects the browser arrow */
+        font-size: 11px !important;
+    }
+}
+/* =========================================
+   🚨 ASSIGN CLASSES EDITOR STYLES
+   ========================================= */
+.asn-select-pill { background: rgba(220, 38, 38, 0.08); color: var(--brand-red); border: 1px solid var(--brand-red); padding: 8px 20px; border-radius: 20px; font-weight: 700; font-size: 14px; outline: none; cursor: pointer; font-family: 'Poppins', sans-serif; box-shadow: 0 2px 10px rgba(220, 38, 38, 0.1); }
+.asn-days-container { 
+    display: flex; 
+    gap: 6px; 
+    flex-wrap: nowrap !important; /* 🚨 Forbids wrapping on ANY screen size */
+    justify-content: center; 
+    width: 100%;
+}
+
+.asn-day-btn { 
+    background: #ffffff !important; 
+    color: var(--text-muted); 
+    border: 1px solid var(--border-color); 
+    padding: 8px 2px; 
+    border-radius: 12px; 
+    font-weight: 600; 
+    font-size: 13px; 
+    cursor: pointer; 
+    transition: all 0.2s; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02); 
+    flex: 1; /* 🚨 Forces them to share space evenly everywhere */
+    min-width: 0; /* 🚨 Allows them to squish without breaking */
+    text-align: center;
+}
+
+.asn-day-btn.active { 
+    background: var(--brand-red) !important; 
+    color: white; 
+    border-color: var(--brand-red); 
+    box-shadow: 0 4px 10px rgba(220, 38, 38, 0.3); 
+    transform: translateY(-2px); 
+}
+
+.asn-periods-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; width: 100%; align-items: start; }
+.asn-period-wrapper { 
+    background: #fff5f5; /* 🚨 Replaced gray with a beautiful, soft pastel red tint */
+    border: 2px solid var(--border-color); 
+    border-radius: 16px; 
+    padding: 15px; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 15px; 
+    box-shadow: 0 4px 15px rgba(220, 38, 38, 0.05); /* Added a soft red shadow */
+}
+.asn-period-header { text-align: center; font-weight: 800; color: var(--brand-red); font-size: 16px; text-transform: uppercase; letter-spacing: 1px; }
+
+.asn-card { width: 100%; background: var(--bg-base); border: 1px solid var(--border-color); border-radius: 12px; padding: 25px 15px 15px 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); position: relative; margin-top: 15px; }
+.asn-card.split { border-color: #fca5a5; background: #fff5f5; margin-top: 15px; }
+.asn-batch-badge { position: absolute; top: -12px; left: 15px; background: var(--brand-red); color: white; font-size: 11px; padding: 4px 12px; border-radius: 12px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-transform: uppercase; }
+
+.asn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.asn-input { 
+    width: 100%; 
+    padding: 8px 12px; 
+    border-radius: 8px; 
+    border: 1px solid var(--border-color); 
+    background: var(--bg-base); 
+    font-family: 'Poppins', sans-serif; 
+    font-size: 12px; 
+    font-weight: 600; 
+    color: var(--text-dark); 
+    outline: none; 
+    transition: border 0.2s; 
+    min-width: 0; /* 🚨 CRITICAL: Allows inputs to shrink on narrow screens */
+    text-overflow: ellipsis; /* Adds ... if the text is too long */
+}
+.asn-input:focus { border-color: var(--brand-red); }
+.asn-input.select { appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 10px center; background-size: 1em; padding-right: 25px; }
+.asn-input:disabled { background: var(--bg-surface); color: var(--text-muted); cursor: not-allowed; border-color: var(--border-color); }
+
+.asn-split-btn { width: 100%; background: var(--bg-surface); color: var(--text-dark); border: 1px solid var(--border-color); padding: 8px; border-radius: 8px; font-weight: 700; font-size: 14px; font-family: 'Poppins', sans-serif; cursor: pointer; transition: 0.2s; }
+.asn-split-btn:hover { background: #fee2e2; border-color: var(--brand-red); color: var(--brand-red); }
+.asn-split-btn.del { background: #fca5a5; color: var(--text-dark); border: none; }
+.asn-split-btn.del:hover { background: var(--brand-red); color: white; }
+
+/* =========================================
+   🌙 DARK MODE OVERRIDES (ULTIMATE V6)
+   ========================================= */
+body.dark-mode {
+    --bg-base: #0f172a;       /* Deep slate background */
+    --bg-surface: #1e293b;    /* Lighter slate for floating cards */
+    --brand-red: #b91c1c;     /* 🚨 Darkened to a deep, eye-friendly crimson so buttons don't blind you! */
+    --text-red: #f87171;      
+    --text-light-red: #fca5a5;
+    --text-dark: #94a3b8;     /* Soft Slate-400 (Zero eye strain) */
+    --text-muted: #64748b;    /* Slate-500 for secondary text */
+    --bg-grid-color: rgba(220, 38, 38, 0.12); /* Visible grid */
+    --card-bg: #1e293b;       
+    --border-color: #334155;  /* Slate-700 lines */
+    color: var(--text-dark);
+    color-scheme: dark;       /* Forces native checkboxes and date-pickers dark! */
+}
+
+/* 🚨 1. SCROLLBAR FIXES */
+body.dark-mode *::-webkit-scrollbar-track { background: var(--bg-base) !important; }
+body.dark-mode *::-webkit-scrollbar-thumb { background: #475569 !important; border-radius: 4px; }
+body.dark-mode *::-webkit-scrollbar-thumb:hover { background: var(--brand-red) !important; }
+
+/* 🚨 2. TOP NAV & BOTTOM NAV BAR FIX */
+body.dark-mode .icon-nav {
+    background: var(--bg-surface) !important; 
+    border: 1px solid var(--border-color) !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5) !important;
+}
+body.dark-mode .icon-nav-container .nav-icon-btn { color: var(--text-muted) !important; }
+body.dark-mode .icon-nav-container .nav-icon-btn:hover,
+body.dark-mode .icon-nav-container .nav-icon-btn.active-nav { color: var(--brand-red) !important; }
+
+/* 🚨 3. WELCOME TEXT COLOR FIX */
+body.dark-mode .welcome-text { 
+    color: var(--brand-red) !important; 
+    background: transparent !important; 
+    text-shadow: 0 0 15px rgba(185, 28, 28, 0.3) !important; 
+}
+
+/* 🚨 4. ULTIMATE CATCH-ALL FOR INLINE JS CARDS */
+body.dark-mode [style*="background: white"],
+body.dark-mode [style*="background:white"],
+body.dark-mode [style*="background: #ffffff"],
+body.dark-mode [style*="background:#ffffff"],
+body.dark-mode [style*="background-color: white"],
+body.dark-mode [style*="background-color:white"],
+body.dark-mode [style*="background-color: #ffffff"],
+body.dark-mode [style*="background-color:#ffffff"],
+body.dark-mode [style*="background: var(--bg-base)"],
+body.dark-mode [style*="background:var(--bg-base)"] {
+    background-color: var(--bg-surface) !important;
+    color: var(--text-dark) !important;
+    /* 🚨 MAGIC FIX: Apply borders ONLY to Top, Right, and Bottom. This protects your colored left borders! */
+    border-top: 1px solid var(--border-color) !important;
+    border-right: 1px solid var(--border-color) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}
+
+/* Catch light pink backgrounds */
+body.dark-mode [style*="background: #fff5f5"],
+body.dark-mode [style*="background:#fff5f5"],
+body.dark-mode [style*="background: #fef2f2"],
+body.dark-mode [style*="background:#fef2f2"],
+body.dark-mode [style*="background: #fee2e2"],
+body.dark-mode [style*="background:#fee2e2"],
+body.dark-mode [style*="background: rgba(220, 38, 38, 0.08)"] {
+    background-color: rgba(220, 38, 38, 0.1) !important;
+    border-top: 1px solid rgba(220, 38, 38, 0.2) !important;
+    border-right: 1px solid rgba(220, 38, 38, 0.2) !important;
+    border-bottom: 1px solid rgba(220, 38, 38, 0.2) !important;
+}
+
+/* Protect Green active buttons */
+body.dark-mode [style*="background: #10b981"],
+body.dark-mode [style*="background:#10b981"] {
+    background: #065f46 !important; 
+    color: #a7f3d0 !important; 
+    border-color: #065f46 !important;
+}
+
+/* 🚨 5. CALENDAR FIXES */
+body.dark-mode #calViewCard { background: var(--bg-surface) !important; }
+body.dark-mode #calUpcomingEventBanner { background: rgba(16, 185, 129, 0.15) !important; color: #34d399 !important; }
+body.dark-mode #calPrevMonthBtn, body.dark-mode #calNextMonthBtn { background: rgba(16, 185, 129, 0.15) !important; color: #34d399 !important; }
+
+/* Target the buttons inside the calendar specifically */
+body.dark-mode #calGridContainer > button { 
+    background: var(--bg-base) !important; 
+    border: 1px solid var(--border-color) !important; 
+    color: var(--text-dark) !important;
+}
+
+/* Calendar: Active Green Day */
+body.dark-mode #calGridContainer > button[style*="white"],
+body.dark-mode #calGridContainer > button[style*="#22c55e"],
+body.dark-mode #calGridContainer > button[style*="rgb(34, 197, 94)"] { 
+    background: #059669 !important; 
+    color: #ffffff !important; 
+    border: none !important;
+}
+
+/* Calendar: Red Holidays/Weekends */
+body.dark-mode #calGridContainer > button[style*="#ef4444"],
+body.dark-mode #calGridContainer > button[style*="rgb(239, 68, 68)"] {
+    background: rgba(220, 38, 38, 0.15) !important;
+    color: #fca5a5 !important;
+    border-color: rgba(220, 38, 38, 0.3) !important;
+}
+
+/* Calendar: Blue Semester Start/End */
+body.dark-mode #calGridContainer > button[style*="#3b82f6"],
+body.dark-mode #calGridContainer > button[style*="rgb(59, 130, 246)"] {
+    background: rgba(59, 130, 246, 0.15) !important;
+    color: #93c5fd !important;
+    border-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+/* 🚨 6. TIMETABLE BEAUTIFICATION */
+body.dark-mode .tt-card { background: var(--bg-surface) !important; border-color: var(--border-color) !important; box-shadow: 0 4px 15px rgba(0,0,0,0.3) !important; }
+body.dark-mode .tt-pill { background: var(--bg-base) !important; color: var(--text-dark); border-color: var(--border-color); }
+body.dark-mode .tt-node { background: var(--bg-surface) !important; color: var(--text-dark); border-color: var(--border-color); }
+body.dark-mode .tt-day-btn { background: var(--bg-surface) !important; border-color: var(--border-color) !important; color: var(--text-muted); }
+body.dark-mode .tt-day-btn.active { background: var(--brand-red) !important; color: #ffffff !important; border-color: var(--brand-red) !important; }
+
+/* 🚨 7. ASSIGN CLASSES PANEL */
+body.dark-mode .asn-period-wrapper { background: rgba(220, 38, 38, 0.03) !important; border-color: var(--border-color) !important; }
+body.dark-mode .asn-card { background: var(--bg-surface) !important; border-color: var(--border-color) !important; }
+body.dark-mode .asn-card.split { background: rgba(220, 38, 38, 0.08) !important; border-color: rgba(220, 38, 38, 0.3) !important; }
+body.dark-mode .asn-day-btn { background: var(--bg-surface) !important; border-color: var(--border-color) !important; color: var(--text-muted); }
+body.dark-mode .asn-day-btn.active { background: var(--brand-red) !important; border-color: var(--brand-red) !important; color: #ffffff !important; }
+body.dark-mode .asn-input, body.dark-mode .asn-split-btn { background: var(--bg-base) !important; color: var(--text-dark) !important; border-color: var(--border-color) !important; }
+body.dark-mode .asn-select-pill { background: rgba(220, 38, 38, 0.1) !important; color: var(--text-red) !important; border-color: rgba(220, 38, 38, 0.3) !important; }
+
+/* 🚨 8. STUDENT DASHBOARD STATS & WAVES */
+body.dark-mode .circle-wave-wrap { background: var(--bg-base) !important; border-color: var(--border-color) !important; }
+body.dark-mode .circle-wave-text { color: var(--text-dark) !important; text-shadow: 0 0 10px rgba(0,0,0,0.8) !important; }
+body.dark-mode .wavy-row { background: var(--bg-base) !important; border-color: var(--border-color) !important; }
+body.dark-mode .wavy-text { color: var(--text-dark) !important; text-shadow: 0 0 5px rgba(0,0,0,0.8) !important; }
+body.dark-mode .hod-badge { background-color: rgba(29, 78, 216, 0.2) !important; color: #93c5fd !important; border-color: #1e3a8a !important; }
+body.dark-mode .status-pending { background-color: rgba(180, 83, 9, 0.2) !important; color: #fcd34d !important; border-color: #92400e !important; }
+body.dark-mode .status-approved { background-color: rgba(22, 101, 52, 0.2) !important; color: #86efac !important; border-color: #14532d !important; }
+body.dark-mode .status-declined { background: rgba(220, 38, 38, 0.2) !important; color: #fca5a5 !important; border-color: #7f1d1d !important; }
+body.dark-mode .stat-label { color: var(--text-muted) !important; }
+body.dark-mode .stat-value { color: var(--text-dark) !important; }
+
+/* 🚨 9. INPUTS, SELECTS, TOGGLES & CHECKBOXES */
+body.dark-mode input, body.dark-mode select, body.dark-mode textarea { background-color: var(--bg-base) !important; color: var(--text-dark) !important; border-color: var(--border-color) !important; }
+body.dark-mode input::placeholder, body.dark-mode textarea::placeholder { color: var(--text-muted) !important; }
+body.dark-mode .filter-select { background: var(--bg-base) !important; color: var(--text-dark) !important; border-color: var(--border-color) !important; }
+body.dark-mode input[type="checkbox"] { accent-color: var(--brand-red); background-color: var(--bg-surface) !important; }
+
+body.dark-mode .attd-toggle { background: #334155 !important; border: 1px solid var(--border-color) !important; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3) !important; }
+body.dark-mode .attd-toggle::after { background: #94a3b8 !important; }
+body.dark-mode .attd-toggle::before { color: #fca5a5 !important; }
+body.dark-mode .attd-toggle.active { background: rgba(16, 185, 129, 0.2) !important; border-color: #065f46 !important; }
+body.dark-mode .attd-toggle.active::after { background: #34d399 !important; }
+body.dark-mode .attd-toggle.active::before { color: #a7f3d0 !important; }
+
+/* 🚨 10. POPUPS & SIDEBAR */
+body.dark-mode .compose-modal, body.dark-mode .settings-drawer, body.dark-mode .welcome-card { background-color: var(--bg-surface) !important; border-color: var(--border-color) !important; box-shadow: 0 10px 40px rgba(0,0,0,0.5) !important; }
+body.dark-mode .sidebar { background-color: var(--bg-base); }
+body.dark-mode .menu-btn { background-color: var(--bg-surface); border-color: var(--border-color); }
+body.dark-mode .menu-btn:hover { background-color: rgba(220, 38, 38, 0.1); border-color: rgba(220, 38, 38, 0.3); }
+body.dark-mode .btn-text, body.dark-mode .btn-icon { color: var(--text-dark); }
+body.dark-mode .settings-btn { background: var(--bg-base); color: var(--text-dark); border-color: var(--border-color); }
+body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color: var(--brand-red); color: var(--brand-red); }
+
+/* =========================================
+   📱 MOBILE POLISH & 2-COLUMN GRID FIX
+   ========================================= */
+@media (max-width: 1024px) {
+    body { height: 100dvh !important; overflow: hidden !important; }
+    .dashboard-wrapper { flex-direction: column; }
+    
+    /* 🚨 HIDE MAIN CONTENT BY DEFAULT TO PREVENT OVERLAP */
+    .main-content {
+        display: none !important; 
+        flex: 1 !important; height: auto !important; margin-bottom: 85px !important; 
+        padding: 15px !important; box-sizing: border-box !important; overflow: hidden !important;
+    }
+    .main-content.mobile-active { display: flex !important; }
+    
+    .sidebar { 
+        width: 100% !important; flex: 1; border-right: none; padding: 20px; 
+        justify-content: center; padding-bottom: 100px !important; display: flex !important; 
+    }
+    .sidebar.mobile-hidden { display: none !important; } 
+    
+    /* 🚨 EXACT 2-COLUMN GRID ON MOBILE */
+    .nav-grid { 
+        display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; max-width: 500px; margin: 0 auto; 
+    }
+    
+    /* Stack text above icon for mobile */
+    .menu-btn { 
+        flex-direction: column; justify-content: center; gap: 8px; padding: 20px 10px; text-align: center; 
+    }
+    .btn-text { font-size: 12px; color: var(--text-red); }
+    .btn-icon { font-size: 20px; color: var(--text-red); opacity: 1; }
+    
+    /* Floating Bottom Nav Pill */
+    .icon-nav-container { 
+        position: fixed; top: auto; bottom: 15px; left: 0; right: 0; z-index: 10; 
+        display: flex; justify-content: center; pointer-events: none; 
+    }
+    .icon-nav { 
+        pointer-events: auto; width: 90%; max-width: 350px; justify-content: space-around; 
+        box-shadow: 0 5px 20px rgba(220, 38, 38, 0.2); 
+    }
+}
