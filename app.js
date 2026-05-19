@@ -95,12 +95,14 @@ window.switchPanel = function(panelId, pushToHistory = true) {
     document.getElementById(panelId).classList.add('active');
     
     if (pushToHistory) {
-        history.pushState({ panel: panelId }, "", `#${panelId}`);
+        // 🚨 FIXED: Keep the URL perfectly clean but remember the history state!
+        history.pushState({ panel: panelId }, "", window.location.pathname);
     }
 }
 
 window.addEventListener('load', () => {
-    history.replaceState({ panel: 'roleSelectionPanel' }, "", "#roleSelectionPanel");
+    // 🚨 FIXED: Strips any leftover # or .html from the URL bar on boot
+    history.replaceState({ panel: 'roleSelectionPanel' }, "", "/");
 });
 
 window.addEventListener('popstate', (e) => {
