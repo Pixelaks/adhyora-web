@@ -1440,7 +1440,7 @@ async function requestPushPermissions() {
             console.log('Notification permission granted.');
             
             // 1. Register the Service Worker
-            const swRegistration = await navigator.serviceWorker.register('/AdhyoraWeb/firebase-messaging-sw.js');
+            const swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
             
             // 2. Generate the Web Push Token
             const currentToken = await getToken(messaging, { 
