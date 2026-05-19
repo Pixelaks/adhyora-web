@@ -38,14 +38,14 @@ self.addEventListener('notificationclick', function(event) {
       
       for (let i = 0; i < windowClients.length; i++) {
         let client = windowClients[i];
-        if (client.url.includes('pixelaks.in')) {
+        if (client.url.includes('adhyora.pixelaks.in')) {
           client.postMessage({ action: targetAction }); // 🚨 DYNAMIC ACTION
           return client.focus(); 
         }
       }
       
       if (clients.openWindow) {
-        return clients.openWindow('https://pixelaks.in/AdhyoraWeb/index.html' + targetHash); // 🚨 DYNAMIC HASH
+        return clients.openWindow('https://adhyora.pixelaks.in/' + targetHash); // 🚨 DYNAMIC HASH
       }
     })
   );
