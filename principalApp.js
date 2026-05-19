@@ -3411,7 +3411,7 @@ async function requestPushPermissions() {
             console.log("🚀 STEP 2: Registering Service Worker...");
             
             // 🚨 REVERTED TO THE EXACT PATH THAT WORKED FOR STUDENTS
-            const swRegistration = await navigator.serviceWorker.register('/AdhyoraWeb/firebase-messaging-sw.js');
+            const swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
             console.log("👉 Service Worker Registered Successfully!", swRegistration);
 
             console.log("🚀 STEP 3: Asking Firebase for Token...");
