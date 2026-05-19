@@ -271,13 +271,26 @@ if (role === "Student") {
 
     showToast("Verifying Student Access...");
 
-    const rollNo = email.split('@')[0].toUpperCase();
+    let studentSnap = null;
+    let rollNo = "";
+    
+    try {
+        // 🚀 MATCHES C#: Query directly by the Firebase Auth UID
+        const studentsRef = collection(db, "colleges", selectedCollegeID, "students");
+        const q = query(studentsRef, where("userID", "==", user.uid), limit(1));
+        const querySnapshot = await getDocs(q);
 
-    const studentRef = doc(db, "colleges", selectedCollegeID, "students", rollNo);
-    const studentSnap = await getDoc(studentRef);
+        if (!querySnapshot.empty) {
+            const studentDoc = querySnapshot.docs[0];
+            studentSnap = studentDoc;
+            rollNo = studentDoc.id; // The document ID is their Roll Number
+        }
+    } catch (e) {
+        console.error("Database query failed", e);
+    }
 
-    if (!studentSnap.exists()) {
-        showToast("Student record not found.");
+    if (!studentSnap || !studentSnap.exists()) {
+        showToast("Student profile not found in this college.");
         await signOut(auth);
         document.getElementById("loginPassword").value = "";
         resetSignInBtn();
@@ -286,16 +299,19 @@ if (role === "Student") {
 
     const studentData = studentSnap.data();
 
-    if (studentData.email?.toLowerCase() !== email.toLowerCase()) {
-        showToast("Security Check Failed.");
+    // 🚨 MATCHES C#: Prevent Banned/Declined Students from logging in
+    const status = studentData.status || "Approved";
+    if (status === "Declined" || status === "Banned") {
+        showToast(`Access Denied: Account ${status} by Principal.`);
         await signOut(auth);
         document.getElementById("loginPassword").value = "";
         resetSignInBtn();
         return;
     }
 
-    if (studentData.userID !== user.uid) {
-        showToast("Unauthorized account.");
+    // Safety verification: Ensure the email they typed matches the database
+    if (studentData.email?.toLowerCase() !== email.toLowerCase()) {
+        showToast("Security Check Failed: Email mismatch.");
         await signOut(auth);
         document.getElementById("loginPassword").value = "";
         resetSignInBtn();
@@ -308,6 +324,66 @@ if (role === "Student") {
     localStorage.setItem("adhyora_college", selectedCollegeID);
     localStorage.setItem("adhyora_roll", rollNo);
 
+    // Route straight to their personal dashboard file
+    window.location.href = `studentDashboard.html?college=${selectedCollegeID}&uid=${user.uid}&roll=${rollNo}`;
+}if (role === "Student") {
+
+    showToast("Verifying Student Access...");
+
+    let studentSnap = null;
+    let rollNo = "";
+    
+    try {
+        // 🚀 MATCHES C#: Query directly by the Firebase Auth UID
+        const studentsRef = collection(db, "colleges", selectedCollegeID, "students");
+        const q = query(studentsRef, where("userID", "==", user.uid), limit(1));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+            const studentDoc = querySnapshot.docs[0];
+            studentSnap = studentDoc;
+            rollNo = studentDoc.id; // The document ID is their Roll Number
+        }
+    } catch (e) {
+        console.error("Database query failed", e);
+    }
+
+    if (!studentSnap || !studentSnap.exists()) {
+        showToast("Student profile not found in this college.");
+        await signOut(auth);
+        document.getElementById("loginPassword").value = "";
+        resetSignInBtn();
+        return;
+    }
+
+    const studentData = studentSnap.data();
+
+    // 🚨 MATCHES C#: Prevent Banned/Declined Students from logging in
+    const status = studentData.status || "Approved";
+    if (status === "Declined" || status === "Banned") {
+        showToast(`Access Denied: Account ${status} by Principal.`);
+        await signOut(auth);
+        document.getElementById("loginPassword").value = "";
+        resetSignInBtn();
+        return;
+    }
+
+    // Safety verification: Ensure the email they typed matches the database
+    if (studentData.email?.toLowerCase() !== email.toLowerCase()) {
+        showToast("Security Check Failed: Email mismatch.");
+        await signOut(auth);
+        document.getElementById("loginPassword").value = "";
+        resetSignInBtn();
+        return;
+    }
+
+    showToast("Login Successful!");
+
+    localStorage.setItem("adhyora_role", "Student");
+    localStorage.setItem("adhyora_college", selectedCollegeID);
+    localStorage.setItem("adhyora_roll", rollNo);
+
+    // Route straight to their personal dashboard file
     window.location.href = `studentDashboard.html?college=${selectedCollegeID}&uid=${user.uid}&roll=${rollNo}`;
 }
 
@@ -565,11 +641,11 @@ registerBtn.addEventListener("click", async (e) => {
             await sendEmailVerification(user);
 
             const studentRef = doc(db, "colleges", selectedCollegeID, "students", rollNo);
-            await updateDoc(studentRef, {
+            await setDoc(studentRef, {
                 userID: user.uid,
                 email: email,
                 authStatus: "Verified"
-            });
+            }, { merge: true });
 
             await signOut(auth);
             showToast("Success! A verification link has been sent to your email.");
