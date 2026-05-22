@@ -5,25 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Adhyora - Principal Dashboard</title>
     <link rel="stylesheet" href="principal.css">
-    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Yatra+One&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
     <link rel="manifest" href="manifest.json">
-
-    <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="shortcut icon" href="/favicon.ico" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    
-    <link rel="manifest" href="/site.webmanifest" />
     
     <meta name="theme-color" content="#0a0a0a">
+
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Adhyora">
+    
+    <link rel="apple-touch-icon" href="../AdhyoraSplashLogo5.png">
     
     <script src="https://cdn.jsdelivr.net/npm/tsparticles@2.12.0/tsparticles.bundle.min.js" integrity="sha256-70BCrkp9+0GVucB3LqINUjt+MGTDxlHGxB+bTj7TFZE=" crossorigin="anonymous"></script>
 </head>
@@ -429,6 +424,14 @@
                     </div>
 
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; flex: 1; align-items: start;">
+                        <!-- 💳 NEW DYNAMIC FEE CONFIGURATION CARD -->
+                        <div class="data-upload-card" style="border-color: #fca5a5; background: #fff5f5;">
+                            <div class="up-icon" style="color: #ef4444; background: #fee2e2;"><i class="fas fa-credit-card"></i></div>
+                            <h4 style="color: #991b1b;">Semester Fee Settings</h4>
+                            <p>Configure the dynamic core tuition fee structure rules for active academic years.</p>
+                            <button id="btnOpenFeeConfig" style="background: #ef4444; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2);">Open Fee Setup</button>
+                        </div>
+
                         <div class="data-upload-card" style="border-color: #6ee7b7; background: #f0fdf4;">
                             <div class="up-icon" style="color: #10b981; background: #d1fae5;"><i class="fas fa-user-graduate"></i></div>
                             <h4 style="color: #047857;">Students Roster</h4>
@@ -466,6 +469,53 @@
                             <p style="color: #b91c1c;">Advance all students to the next semester or graduate them.</p>
                             <button id="btnOpenPromote" style="background: #ef4444; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2);">Promote Semester</button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- 💳 DYNAMIC FEE STRUCTURE TEMPLATE OVERLAY POPUP -->
+                <div class="modal-overlay" id="feeConfigOverlay">
+                    <div class="compose-modal" style="background: white; width: 90%; max-width: 450px; margin: auto; margin-top: 10vh; border-radius: 20px; padding: 30px; position: relative; border: 1px solid var(--border-color); box-shadow: 0 20px 50px rgba(0,0,0,0.1);">
+                        <button class="close-settings" onclick="document.getElementById('feeConfigOverlay').classList.remove('active')"><i class="fas fa-times"></i></button>
+                        <h3 style="color: var(--text-green); margin-bottom: 20px; font-family: 'Yatra One', cursive; font-size: 20px;"><i class="fas fa-calculator"></i> Set Semester Fee</h3>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px;">
+                            <div>
+                                <label style="font-size: 12px; font-weight: bold; color: #64748b; margin-bottom: 5px; display: block;">Select Department</label>
+                                <select id="feeDeptDrop" class="input-field" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green);"></select>
+                            </div>
+                            
+                            <div style="display: flex; gap: 15px;">
+                                <div style="flex: 1;">
+                                    <label style="font-size: 12px; font-weight: bold; color: #64748b; margin-bottom: 5px; display: block;">Admission Year</label>
+                                    <select id="feeBatchYearDrop" class="input-field" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green);">
+                                        <option value="2024">2024 Batch</option>
+                                        <option value="2025">2025 Batch</option>
+                                        <option value="2026">2026 Batch</option>
+                                        <option value="2027">2027 Batch</option>
+                                    </select>
+                                </div>
+                                <div style="flex: 1;">
+                                    <label style="font-size: 12px; font-weight: bold; color: #64748b; margin-bottom: 5px; display: block;">Target Semester</label>
+                                    <select id="feeSemesterDrop" class="input-field" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green);">
+                                        <option value="1">Semester 1</option>
+                                        <option value="2">Semester 2</option>
+                                        <option value="3">Semester 3</option>
+                                        <option value="4">Semester 4</option>
+                                        <option value="5">Semester 5</option>
+                                        <option value="6">Semester 6</option>
+                                        <option value="7">Semester 7</option>
+                                        <option value="8">Semester 8</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label style="font-size: 12px; font-weight: bold; color: #64748b; margin-bottom: 5px; display: block;">Tuition Fee Amount (₹)</label>
+                                <input type="number" id="feeAmountInput" placeholder="e.g. 45000" min="0" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: #334155;">
+                            </div>
+                        </div>
+
+                        <button id="btnSaveFeeStructure" style="width: 100%; background: var(--brand-green); color: white; border: none; padding: 15px; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 10px rgba(74, 222, 128, 0.3);">Publish Fee Structure</button>
                     </div>
                 </div>
 
