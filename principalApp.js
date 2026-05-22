@@ -4321,14 +4321,7 @@ window.addEventListener('popstate', () => {
         "pinOverlay", "confirmOverlay", "durationOverlay", "addDeptOverlay", "combineOverlay",
         "moveBatchOverlay", "deptSplitOverlay", "promoteWarningOverlay", "exportOverlay",
         "subjectEditOverlay", "studentAdminOverlay", "composeOverlay", "settingsOverlay",
-        "themesModal", "sessionsModal", "reAuthOverlay", "subSuccessPanel"
-    ];
-
-    const closableOverlays = [
-    "pinOverlay", "confirmOverlay", "durationOverlay", "addDeptOverlay", "combineOverlay",
-    "moveBatchOverlay", "deptSplitOverlay", "promoteWarningOverlay", "exportOverlay",
-    "subjectEditOverlay", "studentAdminOverlay", "composeOverlay", "settingsOverlay",
-    "themesModal", "sessionsModal", "reAuthOverlay", "subSuccessPanel", "feeConfigOverlay" // Added here
+        "themesModal", "sessionsModal", "reAuthOverlay", "subSuccessPanel", "feeConfigOverlay"
     ];
     
     for (let id of closableOverlays) {
