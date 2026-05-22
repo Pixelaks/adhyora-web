@@ -678,14 +678,42 @@ document.getElementById("btnSaveDuration").addEventListener("click", () => {
     else { updateDoc(doc(db, "colleges", currentCollegeID, "departments", "DEPT_" + rcTargetName.replace(/\s+/g, '')), { maxYears: yrs }); showRcToast("Duration Updated!"); }
 });
 function RC_ExecuteAction() {
-    if (rcCurrentAction === "ADD") { rcIsCreatingNew = true; document.getElementById("durationTitle").innerHTML = `<i class="fas fa-clock"></i> Set Duration`; document.getElementById("durationSelect").value = 3; document.getElementById("durationOverlay").classList.add("active"); }
-    else if (rcCurrentAction === "REGEN_SINGLE") { let newCode = String(Math.floor(100000 + Math.random() * 900000)); let oldCode = rcCachedDepts.find(d => d.name === rcTargetName)?.roomCode || ""; RC_SaveCodeToDB(rcTargetName, newCode, 3, oldCode); RC_KickTeachers(rcTargetName); showRcToast(`New Code Generated`); }
-    else if (rcCurrentAction === "REGEN_ALL") { rcCachedDepts.forEach(d => { let newCode = String(Math.floor(100000 + Math.random() * 900000)); RC_SaveCodeToDB(d.name, newCode, d.maxYears, d.roomCode); RC_KickTeachers(d.name); }); showRcToast(`All Codes Regenerated`); }
-    else if (rcCurrentAction === "DELETE") { let deptID = "DEPT_" + rcTargetName.replace(/\s+/g, ''); deleteDoc(doc(db, "colleges", currentCollegeID, "departments", deptID)); RC_KickTeachers(rcTargetName); showRcToast(`Deleted ${rcTargetName}`); }
+    if (rcCurrentAction === "ADD") { 
+        rcIsCreatingNew = true; 
+        document.getElementById("durationTitle").innerHTML = `<i class="fas fa-clock"></i> Set Duration`; 
+        document.getElementById("durationSelect").value = 3; 
+        document.getElementById("durationOverlay").classList.add("active"); 
+    }
+    else if (rcCurrentAction === "REGEN_SINGLE") { 
+        let newCode = String(Math.floor(100000 + Math.random() * 900000)); 
+        let oldCode = rcCachedDepts.find(d => d.name === rcTargetName)?.roomCode || ""; 
+        RC_SaveCodeToDB(rcTargetName, newCode, 3, oldCode); 
+        RC_KickTeachers(rcTargetName); 
+        showRcToast(`New Code Generated`); 
+    }
+    else if (rcCurrentAction === "REGEN_ALL") { 
+        rcCachedDepts.forEach(d => { 
+            let newCode = String(Math.floor(100000 + Math.random() * 900000)); 
+            RC_SaveCodeToDB(d.name, newCode, d.maxYears, d.roomCode); 
+            RC_KickTeachers(d.name); 
+        }); 
+        showRcToast(`All Codes Regenerated`); 
+    }
+    else if (rcCurrentAction === "DELETE") { 
+        let deptID = "DEPT_" + rcTargetName.replace(/\s+/g, ''); 
+        deleteDoc(doc(db, "colleges", currentCollegeID, "departments", deptID)); 
+        RC_KickTeachers(rcTargetName); 
+        showRcToast(`Deleted ${rcTargetName}`); 
+    }
     else if (rcCurrentAction === "COMBINE") {
-        let name1 = document.getElementById("combineSelect1").value; let name2 = document.getElementById("combineSelect2").value;
-        let deptID1 = "DEPT_" + name1.replace(/\s+/g, ''); let deptID2 = "DEPT_" + name2.replace(/\s+/g, '');
-        const batch = writeBatch(db); batch.set(doc(db, "colleges", currentCollegeID, "departments", deptID1), { linkedDepartments: [deptID2] }, { merge: true }); batch.set(doc(db, "colleges", currentCollegeID, "departments", deptID2), { linkedDepartments: [deptID1] }, { merge: true }); batch.commit().then(() => showRcToast("Departments Combined!"));
+        let name1 = document.getElementById("combineSelect1").value; 
+        let name2 = document.getElementById("combineSelect2").value;
+        let deptID1 = "DEPT_" + name1.replace(/\s+/g, ''); 
+        let deptID2 = "DEPT_" + name2.replace(/\s+/g, '');
+        const batch = writeBatch(db); 
+        batch.set(doc(db, "colleges", currentCollegeID, "departments", deptID1), { linkedDepartments: [deptID2] }, { merge: true }); 
+        batch.set(doc(db, "colleges", currentCollegeID, "departments", deptID2), { linkedDepartments: [deptID1] }, { merge: true }); 
+        batch.commit().then(() => showRcToast("Departments Combined!"));
     }
     else if (rcCurrentAction === "DATA_UPLOAD") {
         document.getElementById("pinOverlay").classList.remove("active");
@@ -708,32 +736,32 @@ function RC_ExecuteAction() {
         SS_ExecuteMove();
     }
     else if (rcCurrentAction === "PUBLISH_FEE_STRUCTURE") {
-    document.getElementById("pinOverlay").classList.remove("active");
-    
-    let targetDept = document.getElementById("feeDeptDrop").value;
-    let batchYear = document.getElementById("feeBatchYearDrop").value;
-    let semNum = document.getElementById("feeSemesterDrop").value;
-    let feeAmt = parseFloat(document.getElementById("feeAmountInput").value);
+        document.getElementById("pinOverlay").classList.remove("active");
+        
+        let targetDept = document.getElementById("feeDeptDrop").value;
+        let batchYear = document.getElementById("feeBatchYearDrop").value;
+        let semNum = document.getElementById("feeSemesterDrop").value;
+        let feeAmt = parseFloat(document.getElementById("feeAmountInput").value);
 
-    showRcToast("Publishing fee template rule...");
+        showRcToast("Publishing fee template rule...");
 
-    // Format unique, predictable identifier strings to keep your data footprint clean
-    let cleanDeptStr = targetDept.replace(/\s+/g, '');
-    let templateID = `FEE_${cleanDeptStr}_Batch${batchYear}_Sem${semNum}`;
+        // Format unique, predictable identifier strings to keep your data footprint clean
+        let cleanDeptStr = targetDept.replace(/\s+/g, '');
+        let templateID = `FEE_${cleanDeptStr}_Batch${batchYear}_Sem${semNum}`;
 
-    setDoc(doc(db, "colleges", currentCollegeID, "fee_templates", templateID), {
-        departmentName: targetDept,
-        batchYear: batchYear,
-        semesterNumber: parseInt(semNum),
-        tuitionFee: feeAmt,
-        lastConfiguredBy: currentUserID,
-        updatedAt: serverTimestamp()
-    }, { merge: true }).then(() => {
-        showRcToast(`✅ Fee of ₹${feeAmt.toLocaleString('en-IN')} published for ${targetDept}!`);
-    }).catch(err => {
-        showRcToast("❌ Database write error.");
-    });
-}
+        setDoc(doc(db, "colleges", currentCollegeID, "fee_templates", templateID), {
+            departmentName: targetDept,
+            batchYear: batchYear,
+            semesterNumber: parseInt(semNum),
+            tuitionFee: feeAmt,
+            lastConfiguredBy: currentUserID,
+            updatedAt: serverTimestamp()
+        }, { merge: true }).then(() => {
+            showRcToast(`✅ Fee of ₹${feeAmt.toLocaleString('en-IN')} published for ${targetDept}!`);
+        }).catch(err => {
+            showRcToast("❌ Database write error.");
+        });
+    }
 }
 function RC_SaveCodeToDB(name, code, years, oldCode) {
     let deptID = "DEPT_" + name.replace(/\s+/g, '');
