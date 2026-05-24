@@ -132,7 +132,7 @@ async function enforceVersionCheck() {
       }
 
       // CLEAR STORAGE
-      localStorage.clear();
+      //localStorage.clear();
 
       // FORCE HARD REFRESH
       window.location.href =
