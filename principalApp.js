@@ -4019,6 +4019,10 @@ function ValidateExpiry(expirySeconds, isTrialUsed) {
 // 🚨 THE ANTI-HACK GHOST UI (SMART VERSION)
 function HandleBlockState(msg, isFirstTime) {
     document.getElementById("subBlockText").innerText = msg;
+
+    // 🚨 FIX: Force phone notification bar color to match the deep dark paywall sheet (#0a0a0a)
+    const metaThemeColor = document.getElementById("pwaThemeColorMeta");
+    if(metaThemeColor) metaThemeColor.setAttribute("content", "#0a0a0a");
     
     // 🚨 DYNAMIC TEXT UPDATES
     let heading = document.getElementById("subBlockHeading");
@@ -4204,6 +4208,10 @@ let securityListener = null;
 let isFirstSecurityLoad = true;
 
 function CheckSecurityPin() {
+
+    const metaThemeColor = document.getElementById("pwaThemeColorMeta");
+    if(metaThemeColor) metaThemeColor.setAttribute("content", "#0f172a");
+    
     document.querySelector(".main-content").style.display = "none";
     document.getElementById("mainSidebar").style.display = "none";
     document.getElementById("initialAppLoader").style.display = "none"; 
@@ -4217,6 +4225,7 @@ function CheckSecurityPin() {
             const hashedLivePin = await hashText(livePin); // 🚨 Hash it immediately!
             
             // REMOTE HACK PREVENTION (Comparing Hashes)
+            // REMOTE HACK PREVENTION (Comparing Hashes)
             if (!isFirstSecurityLoad && cachedAdminPinHash && cachedAdminPinHash !== hashedLivePin) {
                 isBioEnabledLocally = false;
                 localStorage.setItem(`adhyora_bio_${currentUserID}`, "false");
@@ -4227,6 +4236,9 @@ function CheckSecurityPin() {
                 document.querySelector(".main-content").style.display = "none";
                 document.getElementById("mainSidebar").style.display = "none";
                 elLock.screen.style.display = "flex";
+                
+                // 🚨 FIX: Recapture system status color fields on unexpected forced remote logs
+                if(metaThemeColor) metaThemeColor.setAttribute("content", "#0f172a");
                 
                 showRcToast("Security PIN was changed remotely. Biometrics reset.");
                 SetLockMode("LOGIN");
@@ -4549,6 +4561,13 @@ function UnlockSecurityWall() {
     document.getElementById("mainSidebar").style.display = "";
     
     failedPinAttempts = 0;
+
+    // 🚨 FIX: Evaluate the active storage preference trace to re-sync status bar headers to your normal light/dark settings
+    const savedThemeIsDark = localStorage.getItem("adhyora_principal_theme") === "dark";
+    const metaThemeColor = document.getElementById("pwaThemeColorMeta");
+    if(metaThemeColor) {
+        metaThemeColor.setAttribute("content", savedThemeIsDark ? "#0f172a" : "#ffffff");
+    }
     
     // 🚨 CHAIN REACTION: Now that PIN is verified, check Subscription!
     startSubscriptionListener(); 
