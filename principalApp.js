@@ -203,15 +203,39 @@ document.getElementById("btnDevices").addEventListener("click", () => {
 });
 
 // --- THEME LOGIC ---
+// --- THEME LOGIC WITH BRUSH REVEAL TRANSITION ---
 function applyTheme(isDark) {
+    // Fallback gracefully for older browsers that don't support modern View Transitions
+    if (!document.startViewTransition) {
+        executeThemeClassToggle(isDark);
+        return;
+    }
+
+    // Trigger the paint brush frame transition matrix
+    document.startViewTransition(() => {
+        executeThemeClassToggle(isDark);
+    });
+}
+
+// Helper function to handle structural class and border adjustments
+// Helper function to handle structural class and border adjustments
+function executeThemeClassToggle(isDark) {
+    const metaThemeColor = document.getElementById("pwaThemeColorMeta");
+    
     if (isDark) {
         document.body.classList.add("dark-mode");
         document.getElementById("btnDarkMode").style.border = "2px solid var(--brand-green)";
         document.getElementById("btnLightMode").style.border = "1px solid #475569";
+        
+        // 🚨 Unifies phone notification bar + native bottom navigation background with app dark-mode color
+        if(metaThemeColor) metaThemeColor.setAttribute("content", "#0f172a"); // Matches your true dark background color
     } else {
         document.body.classList.remove("dark-mode");
         document.getElementById("btnLightMode").style.border = "2px solid var(--brand-green)";
         document.getElementById("btnDarkMode").style.border = "1px solid #cbd5e1";
+        
+        // 🚨 Unifies phone notification bar + native bottom navigation background with app light-mode color
+        if(metaThemeColor) metaThemeColor.setAttribute("content", "#ffffff"); // Matches your light mode white background profile
     }
     localStorage.setItem("adhyora_principal_theme", isDark ? "dark" : "light");
 }
@@ -712,7 +736,7 @@ function RC_ExecuteAction() {
         let deptID2 = "DEPT_" + name2.replace(/\s+/g, '');
         const batch = writeBatch(db); 
         batch.set(doc(db, "colleges", currentCollegeID, "departments", deptID1), { linkedDepartments: [deptID2] }, { merge: true }); 
-        batch.set(doc(db, "colleges", currentCollegeID, "departments", deptID2), { linkedDepartments: [deptID1] }, { merge: true }); 
+        batch.set(doc(db, "colleges", currentCollegeID, "departments", deptID2), { linkedDepartments: [linkedDepartments], linkedDepartments: [deptID1] }, { merge: true }); 
         batch.commit().then(() => showRcToast("Departments Combined!"));
     }
     else if (rcCurrentAction === "DATA_UPLOAD") {
@@ -738,28 +762,70 @@ function RC_ExecuteAction() {
     else if (rcCurrentAction === "PUBLISH_FEE_STRUCTURE") {
         document.getElementById("pinOverlay").classList.remove("active");
         
-        let targetDept = document.getElementById("feeDeptDrop").value;
-        let batchYear = document.getElementById("feeBatchYearDrop").value;
-        let semNum = document.getElementById("feeSemesterDrop").value;
-        let feeAmt = parseFloat(document.getElementById("feeAmountInput").value);
+        let applyAll = document.getElementById("feeApplyAllCheck").checked;
+        let singleTargetDeptID = document.getElementById("feeDeptDrop").value;
+        let relativeYear = document.getElementById("feeYearLevelDrop").value;
+        let targetSemester = document.getElementById("feeSemesterDrop").value;
+        let inputAmount = parseFloat(document.getElementById("feeAmountInput").value);
 
-        showRcToast("Publishing fee template rule...");
+        showRcToast("Publishing semester fee templates...");
 
-        // Format unique, predictable identifier strings to keep your data footprint clean
-        let cleanDeptStr = targetDept.replace(/\s+/g, '');
-        let templateID = `FEE_${cleanDeptStr}_Batch${batchYear}_Sem${semNum}`;
+        let transactionBatch = writeBatch(db);
+        let collectionRef = collection(db, "colleges", currentCollegeID, "fee_structures");
 
-        setDoc(doc(db, "colleges", currentCollegeID, "fee_templates", templateID), {
-            departmentName: targetDept,
-            batchYear: batchYear,
-            semesterNumber: parseInt(semNum),
-            tuitionFee: feeAmt,
-            lastConfiguredBy: currentUserID,
-            updatedAt: serverTimestamp()
-        }, { merge: true }).then(() => {
-            showRcToast(`✅ Fee of ₹${feeAmt.toLocaleString('en-IN')} published for ${targetDept}!`);
+        let excludedDeptIDs = new Set();
+        if (applyAll) {
+            document.querySelectorAll(".fee-exclusion-checkbox:checked").forEach(cb => {
+                excludedDeptIDs.add(cb.value);
+            });
+        }
+
+        let operationalTargetsList = [];
+        if (applyAll) {
+            operationalTargetsList = rcCachedDepts.filter(d => !excludedDeptIDs.has(d.id));
+        } else {
+            operationalTargetsList = rcCachedDepts.filter(d => d.id === singleTargetDeptID);
+        }
+
+        let totalRecordsSavedCount = 0;
+
+        operationalTargetsList.forEach(dept => {
+            let maxCourseSemestersCeiling = dept.maxYears * 2;
+            if (parseInt(targetSemester) > maxCourseSemestersCeiling) {
+                return; // Skip cleanly if semester is physically impossible for this course track
+            }
+
+            let documentKeyID = `SEM_${targetSemester}_${dept.id}`;
+            let activeDocReference = doc(collectionRef, documentKeyID);
+
+            // Add the dueDate tracking field directly inside your active loop transaction call
+            transactionBatch.set(activeDocReference, {
+                departmentID: dept.id,
+                departmentName: dept.name,
+                targetSemester: parseInt(targetSemester),
+                relativeYear: parseInt(relativeYear),
+                semesterFee: inputAmount,
+                dueDate: document.getElementById("feeDueDateInput").value, // 🚨 SAVING THE DATE STAMP HERE
+                lastUpdatedBy: currentUserID,
+                updatedAt: serverTimestamp()
+            }, { merge: true });
+            
+            totalRecordsSavedCount++;
+        });
+
+        if (totalRecordsSavedCount === 0) {
+            showRcToast("⚠️ Operation completed. No matching departments were eligible.");
+            return;
+        }
+
+        transactionBatch.commit().then(() => {
+            let logSummary = applyAll ? `Bulk Batch (${totalRecordsSavedCount} Depts)` : "Single Department Profile";
+            showRcToast(`✅ Fees published for ${logSummary} (Sem ${targetSemester})!`);
+            
+            // 🚀 CHAIN RESPONSE: Auto refresh the roster viewer on the right side instantly
+            FetchLiveFeeStructuresRoster();
         }).catch(err => {
-            showRcToast("❌ Database write error.");
+            showRcToast("❌ Database write error pipeline sync failure.");
         });
     }
 }
@@ -1063,14 +1129,29 @@ async function fetchGlobalSubjects() {
     } catch(e) {}
 }
 
+let currentActiveDashboardStudentID = "";
+let currentActiveDashboardStudentName = "";
+let currentActiveDashboardStudentDept = "";
+let currentActiveDashboardStudentFeeCacheMap = {};
+
 window.SL_OpenDashboard = async (sID) => {
     sdCurrentStudentID = sID;
+    currentActiveDashboardStudentID = sID;
     switchView(views.studentDashboard);
     
-    document.getElementById("sdNameText").innerText = "Loading..."; document.getElementById("sdRollText").innerText = ""; document.getElementById("sdStatusBadge").innerText = "..."; document.getElementById("sdSemesterTitle").innerText = "Loading...";
-    SD_UpdateWaveUI(0); ["sdStatAtt", "sdStatAbs", "sdStatTot", "sdStatPAtt", "sdStatPAbs", "sdStatPTot"].forEach(id => document.getElementById(id).innerText = "0");
-    document.getElementById("sdSubjectList").innerHTML = ""; document.getElementById("sdEnrolledList").innerHTML = "<i>Loading subjects...</i>";
+    document.getElementById("sdNameText").innerText = "Loading..."; 
+    document.getElementById("sdRollText").innerText = ""; 
+    document.getElementById("sdStatusBadge").innerText = "..."; 
+    document.getElementById("sdSemesterTitle").innerText = "Loading...";
+    SD_UpdateWaveUI(0); 
+    ["sdStatAtt", "sdStatAbs", "sdStatTot", "sdStatPAtt", "sdStatPAbs", "sdStatPTot"].forEach(id => document.getElementById(id).innerText = "0");
+    document.getElementById("sdSubjectList").innerHTML = ""; 
+    document.getElementById("sdEnrolledList").innerHTML = "<i>Loading subjects...</i>";
     
+    // Clear ledger out during profile shifts
+    document.getElementById("pdFeesLedgerContainer").innerHTML = "<i>Syncing account metrics...</i>";
+    currentActiveDashboardStudentFeeCacheMap = {};
+
     if(sdWorkingDays.size === 0) {
         let displayYear = new Date().getFullYear(); let displayMonth = new Date().getMonth() + 1; 
         let aYear = (displayMonth >= 6) ? `${displayYear}-${displayYear + 1}` : `${displayYear - 1}-${displayYear}`;
@@ -1085,22 +1166,34 @@ window.SL_OpenDashboard = async (sID) => {
         const snap = await getDoc(doc(db, "colleges", currentCollegeID, "students", sID));
         if(snap.exists()) {
             sdStudentData = snap.data();
-            document.getElementById("sdNameText").innerText = sdStudentData.Name || "Unknown"; document.getElementById("sdRollText").innerText = `Roll No: ${sdStudentData.RollNumber || "N/A"}`;
-            let status = sdStudentData.status || "Approved"; let badge = document.getElementById("sdStatusBadge"); badge.innerText = status; badge.style.color = status==="Approved" ? "#166534" : "#b91c1c"; badge.style.backgroundColor = status==="Approved" ? "#f0fdf4" : "#fef2f2"; badge.style.borderColor = status==="Approved" ? "#86efac" : "#fca5a5";
+            currentActiveDashboardStudentName = sdStudentData.Name || "Unknown";
+            currentActiveDashboardStudentDept = sdStudentData.Department || "General";
+
+            document.getElementById("sdNameText").innerText = currentActiveDashboardStudentName; 
+            document.getElementById("sdRollText").innerText = `Roll No: ${sdStudentData.RollNumber || "N/A"}`;
+            let status = sdStudentData.status || "Approved"; 
+            let badge = document.getElementById("sdStatusBadge"); 
+            badge.innerText = status; 
+            badge.style.color = status==="Approved" ? "#166534" : "#b91c1c"; 
+            badge.style.backgroundColor = status==="Approved" ? "#f0fdf4" : "#fef2f2"; 
+            badge.style.borderColor = status==="Approved" ? "#86efac" : "#fca5a5";
 
             sdSemKeys = []; for(let i=1; i<=8; i++) sdSemKeys.push(`Semester_${i}`);
             let yearStr = (sdStudentData.Year || "1").toString().replace(/[^0-9]/g, ''); 
             let studentYear = parseInt(yearStr) || 1; 
             
-            // 🚨 THE FIX: Perfectly matches your Unity SemesterManager math!
             let currentSemNum = (collegeSemesterType === "Odd") ? (studentYear * 2) - 1 : (studentYear * 2);
-            
             sdCurrentSemIndex = Math.max(0, Math.min(7, currentSemNum - 1));
             
             document.getElementById("sdDateFilter").value = "";
             document.getElementById("sdBtnAllTime").click(); 
+
+            // 🚀 Ingress Fee Ledger collection pipelines seamlessly
+            FetchAndRenderStudentFeesLedger(sdStudentData);
         }
-    } catch(e) { }
+    } catch (e) {
+        console.error(e);
+    }
 };
 
 document.getElementById("sdBtnNextSem").addEventListener("click", () => { if(sdCurrentSemIndex < 7) { sdCurrentSemIndex++; SD_BuildUI(); } });
@@ -2360,37 +2453,268 @@ document.getElementById("btnOpenExport").addEventListener("click", async () => {
     ExpFilterDepts(1);
 });
 
+// ==========================================
+// 💳 ADHYORA DYNAMIC FEE INTERFACE ENGINE (DUAL-PANEL VERSION)
+// ==========================================
+
 document.getElementById("btnOpenFeeConfig").addEventListener("click", async () => {
     document.getElementById("feeConfigOverlay").classList.add("active");
     document.getElementById("feeAmountInput").value = "";
+    document.getElementById("feeApplyAllCheck").checked = false;
+    document.getElementById("feeDeptSelectContainer").style.display = "block";
+    document.getElementById("feeExclusionsContainer").style.display = "none";
+    document.getElementById("feeDiscoveryStatus").innerText = "";
     
-    // Fallback if department cache isn't built out yet
+    // Build out the dynamic filtering roster lookups select block
+    let filterSemDrop = document.getElementById("feeViewerSemFilter");
+    filterSemDrop.innerHTML = Array.from({length: 8}, (_, i) => `<option value="${i+1}">Sem ${i+1}</option>`).join('');
+    filterSemDrop.removeEventListener("change", FetchLiveFeeStructuresRoster);
+    filterSemDrop.addEventListener("change", FetchLiveFeeStructuresRoster);
+
     if (rcCachedDepts.length === 0) {
         try {
             const deptQuery = await getDocs(collection(db, "colleges", currentCollegeID, "departments"));
             rcCachedDepts = []; 
-            deptQuery.forEach(d => rcCachedDepts.push({ name: d.data().name || d.id, maxYears: d.data().maxYears || 4 }));
+            deptQuery.forEach(d => {
+                let dName = d.data().name || d.id.replace("DEPT_", "");
+                let dYears = parseInt(d.data().maxYears) || 3;
+                rcCachedDepts.push({ id: d.id, name: dName, maxYears: dYears });
+            });
         } catch(e) {}
     }
     
     let deptDrop = document.getElementById("feeDeptDrop");
-    deptDrop.innerHTML = rcCachedDepts.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
+    deptDrop.innerHTML = rcCachedDepts.map(d => `<option value="${d.id}" data-years="${d.maxYears}">${d.name}</option>`).join('');
+    
+    let exclusionsContainer = document.getElementById("feeExclusionsList");
+    exclusionsContainer.innerHTML = rcCachedDepts.map(d => `
+        <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: #334155; font-weight: 600; cursor: pointer; padding: 4px 0;">
+            <input type="checkbox" class="fee-exclusion-checkbox" value="${d.id}" style="accent-color: #ef4444; width:16px; height:16px;"> ${d.name}
+        </label>
+    `).join('');
+    
+    UpdateFeeYearDropdownOptions();
 });
 
-// 🚀 PUBLISH BUTTON LOGIC WITH SECURITY PIN HOOK
+document.getElementById("feeApplyAllCheck").addEventListener("change", (e) => {
+    let isChecked = e.target.checked;
+    document.getElementById("feeDeptSelectContainer").style.display = isChecked ? "none" : "block";
+    document.getElementById("feeExclusionsContainer").style.display = isChecked ? "block" : "none";
+    UpdateFeeYearDropdownOptions();
+});
+
+document.getElementById("feeDeptDrop").addEventListener("change", UpdateFeeYearDropdownOptions);
+document.getElementById("feeYearLevelDrop").addEventListener("change", UpdateFeeSemesterDropdownOptions);
+
 document.getElementById("btnSaveFeeStructure").addEventListener("click", () => {
     let amt = document.getElementById("feeAmountInput").value.trim();
+    let dateVal = document.getElementById("feeDueDateInput").value;
+
     if (!amt || isNaN(parseFloat(amt)) || parseFloat(amt) < 0) {
-        showRcToast("⚠️ Please enter a valid tuition fee amount.");
+        showRcToast("⚠️ Please enter a valid semester fee amount.");
+        return;
+    }
+
+    if (!dateVal) {
+        showRcToast("⚠️ Please pick a valid payment due date deadline calendar metric.");
         return;
     }
     
-    // Hand over control to your safe standalone Security PIN overlay logic
+    // Hand over control cleanly to your safe standalone Security PIN overlay logic
     document.getElementById("feeConfigOverlay").classList.remove("active");
     document.getElementById("pinInput").value = "";
     document.getElementById("pinOverlay").classList.add("active");
     rcCurrentAction = "PUBLISH_FEE_STRUCTURE"; 
 });
+
+function UpdateFeeYearDropdownOptions() {
+    let applyAll = document.getElementById("feeApplyAllCheck").checked;
+    let yearDrop = document.getElementById("feeYearLevelDrop");
+    let currentSelectedYear = yearDrop.value;
+    
+    let allowedMaxYears = 4; 
+    if (!applyAll) {
+        let deptDropEl = document.getElementById("feeDeptDrop");
+        if (deptDropEl.selectedIndex >= 0) {
+            let activeOption = deptDropEl.options[deptDropEl.selectedIndex];
+            allowedMaxYears = parseInt(activeOption.getAttribute("data-years")) || 3;
+        }
+    }
+
+    let optionsHtml = "";
+    for (let i = 1; i <= allowedMaxYears; i++) {
+        optionsHtml += `<option value="${i}">Year ${i}</option>`;
+    }
+    yearDrop.innerHTML = optionsHtml;
+    
+    if (currentSelectedYear && parseInt(currentSelectedYear) <= allowedMaxYears) {
+        yearDrop.value = currentSelectedYear;
+    }
+    
+    UpdateFeeSemesterDropdownOptions();
+}
+
+function UpdateFeeSemesterDropdownOptions() {
+    let targetYear = parseInt(document.getElementById("feeYearLevelDrop").value) || 1;
+    let semDrop = document.getElementById("feeSemesterDrop");
+    
+    // Calculate accurate relative semester vectors based on target year level
+    let oddSem = (targetYear * 2) - 1;
+    let evenSem = targetYear * 2;
+    
+    semDrop.innerHTML = `
+        <option value="${oddSem}">Semester ${oddSem}</option>
+        <option value="${evenSem}">Semester ${evenSem}</option>
+    `;
+    
+    // Sync the master viewer filter drop selection with our setup parameters automatically
+    let activeSemSelection = semDrop.value;
+    document.getElementById("feeViewerSemFilter").value = activeSemSelection;
+    
+    DiscoverExistingSemesterFee();
+    FetchLiveFeeStructuresRoster();
+
+    // 🚀 FIXED: AUTO-CALCULATE 30-DAY DUE DATE FROM ACADEMIC CALENDAR CACHE
+    let currentDisplayYear = new Date().getFullYear();
+    let academicYearString = (parseInt(activeSemSelection) % 2 !== 0) ? `${currentDisplayYear}-${currentDisplayYear + 1}` : `${currentDisplayYear - 1}-${currentDisplayYear}`;
+    
+    getDoc(doc(db, "colleges", currentCollegeID, "semesters", academicYearString)).then(semRangeSnap => {
+        let dateField = document.getElementById("feeDueDateInput");
+        if (!dateField) return; // Prevent break drops if overlay state cycles fast
+        
+        if (semRangeSnap.exists()) {
+            let semData = semRangeSnap.data();
+            let targetTypeString = (parseInt(activeSemSelection) % 2 !== 0) ? "oddSemester" : "evenSemester";
+            
+            if (semData[targetTypeString] && semData[targetTypeString].startDate) {
+                let semStartDate = new Date(semData[targetTypeString].startDate);
+                
+                // Add exactly 30 days safely matching academic grace periods
+                semStartDate.setDate(semStartDate.getDate() + 30);
+                
+                // Format directly into standard HTML Date Input value format (YYYY-MM-DD)
+                dateField.value = semStartDate.toISOString().split('T')[0];
+                return;
+            }
+        }
+        // Fallback default if calendar master timeline record isn't uploaded yet
+        let fallbackDate = new Date();
+        fallbackDate.setDate(fallbackDate.getDate() + 30);
+        dateField.value = fallbackDate.toISOString().split('T')[0];
+    }).catch(err => console.warn("Date discovery bypassed:", err));
+}
+
+async function DiscoverExistingSemesterFee() {
+    let applyAll = document.getElementById("feeApplyAllCheck").checked;
+    let inputAmtField = document.getElementById("feeAmountInput");
+    let statusLabel = document.getElementById("feeDiscoveryStatus");
+    let semNum = document.getElementById("feeSemesterDrop").value;
+    let deptID = document.getElementById("feeDeptDrop").value;
+
+    inputAmtField.value = "";
+    statusLabel.innerText = "";
+
+    if (applyAll) {
+        statusLabel.innerText = "ℹ️ Bulk Mode active.";
+        return;
+    }
+    if (!deptID || !semNum) return;
+
+    try {
+        let targetDocPath = `SEM_${semNum}_${deptID}`;
+        const snap = await getDoc(doc(db, "colleges", currentCollegeID, "fee_structures", targetDocPath));
+        if (snap.exists() && snap.data().semesterFee !== undefined) {
+            inputAmtField.value = snap.data().semesterFee;
+            statusLabel.innerText = "📈 Found existing fee value.";
+            statusLabel.style.color = "#166534";
+        } else {
+            statusLabel.innerText = "🍃 No fee structure configured yet.";
+            statusLabel.style.color = "#64748b";
+        }
+    } catch (e) {}
+}
+
+// 🚀 LIVE LEDGER RECOVERY SNAPSHOT QUERY (FIXED TYPE-SAFETY)
+async function FetchLiveFeeStructuresRoster() {
+    let gridContainer = document.getElementById("feeLiveStructureGrid");
+    let selectedViewerSem = document.getElementById("feeViewerSemFilter").value;
+    
+    gridContainer.innerHTML = `<div style="text-align:center; padding:20px; color:#64748b; font-size:12px;"><i class="fas fa-circle-notch fa-spin"></i> Reading collection matrix...</div>`;
+    
+    if (!selectedViewerSem) return;
+
+    try {
+        let semNumInt = parseInt(selectedViewerSem) || 1;
+
+        const snap = await getDocs(query(
+            collection(db, "colleges", currentCollegeID, "fee_structures"), 
+            where("targetSemester", "==", semNumInt)
+        ));
+
+        if (snap.empty) {
+            gridContainer.innerHTML = `<div class="no-data-text" style="margin-top:40px;">No fees published for Semester ${semNumInt}.</div>`;
+            return;
+        }
+
+        // Map data to department ID
+        let existingFeesMap = {};
+        snap.forEach(d => { 
+            let data = d.data();
+            existingFeesMap[data.departmentID] = { 
+                fee: data.semesterFee, 
+                due: data.dueDate // 🚨 Extracting the new due date field
+            }; 
+        });
+
+        let rowsHtml = rcCachedDepts.map(dept => {
+            let maxCourseSemestersCeiling = (parseInt(dept.maxYears) || 3) * 2;
+            if (semNumInt > maxCourseSemestersCeiling) return ""; 
+
+            let feeData = existingFeesMap[dept.id];
+            let isConfigured = feeData !== undefined;
+            
+            // Format Display
+            let displayPriceText = isConfigured ? `₹${feeData.fee.toLocaleString('en-IN')}` : "Not Configured";
+            let displayDueDate = "--";
+            if (isConfigured && feeData.due) {
+                // Create a date object from the YYYY-MM-DD string
+                let dateObj = new Date(feeData.due); 
+                // Format to "Jun 22, 2026" (or change to {month: 'long', day: 'numeric'})
+                let formattedDate = dateObj.toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric', 
+                    year: 'numeric' 
+                });
+                displayDueDate = `<i class="fas fa-calendar-day"></i> Due: ${formattedDate}`;
+            }
+            
+            let priceColor = isConfigured ? "var(--text-green)" : "#94a3b8";
+            let statusBadge = isConfigured ? `<span style="background:#dcfce7; color:#15803d; font-size:10px; padding:2px 8px; border-radius:10px; font-weight:bold;">Active</span>` : `<span style="background:#f1f5f9; color:#64748b; font-size:10px; padding:2px 8px; border-radius:10px; font-weight:bold;">Missing</span>`;
+
+            return `
+                <div style="background:white; border:1px solid #e2e8f0; border-radius:10px; padding:12px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 3px rgba(0,0,0,0.01); flex-shrink:0;">
+                    <div style="flex:1;">
+                        <div style="font-weight:bold; font-size:13px; color:#334155;">${dept.name}</div>
+                        <div style="margin-top:3px; display:flex; align-items:center; gap:8px;">
+                            ${statusBadge}
+                            <span style="font-size: 11px; color: #64748b; font-weight: 600;">${displayDueDate}</span>
+                        </div>
+                    </div>
+                    <div style="font-weight:700; font-size:14px; color:${priceColor};">${displayPriceText}</div>
+                </div>`;
+        }).join('');
+
+        gridContainer.innerHTML = rowsHtml || `<div class="no-data-text">No eligible departments for this semester filter.</div>`;
+    } catch (e) {
+        console.error("Roster rendering failed: ", e);
+        gridContainer.innerHTML = `<div class="no-data-text" style="color:#ef4444;">Error syncing record tables.</div>`;
+    }
+}
+
+
+
+
+
 
 document.getElementById("expYearDrop").addEventListener("change", (e) => {
     ExpFilterDepts(parseInt(e.target.value));
@@ -4397,4 +4721,188 @@ window.addEventListener('popstate', () => {
     if (confirm("Are you sure you want to sign out?")) {
         handlePrincipalSignOut();
     }
+});
+
+// ==========================================
+// 💳 CENTRAL CLEARINGHOUSE ACCOUNTING LOGIC
+// ==========================================
+async function FetchAndRenderStudentFeesLedger(studentData) {
+    let container = document.getElementById("pdFeesLedgerContainer");
+    let cleanDeptStr = studentData.Department.replace("DEPT_", "").replace(/\s+/g, '');
+    let resolvedDepartmentKeyID = "DEPT_" + cleanDeptStr;
+
+    try {
+        let masterStructureMap = {};
+        let totalInstitutionalDue = 0;
+        let totalInstitutionalPaid = 0;
+        
+        // 1. Recover matching billing templates from parent rules matrix
+        const structureSnap = await getDocs(collection(db, "colleges", currentCollegeID, "fee_structures"));
+        structureSnap.forEach(d => {
+            let data = d.data();
+            if (data.departmentID === resolvedDepartmentKeyID || data.departmentID === "General") {
+                masterStructureMap[data.targetSemester] = {
+                    billingRate: data.semesterFee || 0,
+                    deadline: data.dueDate || "N/A",
+                    collected: 0,
+                    clearanceDate: "Unpaid",
+                    paymentType: "None"
+                };
+                totalInstitutionalDue += (data.semesterFee || 0);
+            }
+        });
+
+        // 2. Aggregate confirmed transactions from target student data route directory
+        const collectionRoutePointer = collection(db, "colleges", currentCollegeID, "students", currentActiveDashboardStudentID, "payments");
+        const paymentReceiptsSnap = await getDocs(collectionRoutePointer);
+        
+        paymentReceiptsSnap.forEach(receiptDoc => {
+            let log = receiptDoc.data();
+            let targetSemInt = parseInt(log.semester);
+            if (masterStructureMap[targetSemInt]) {
+                masterStructureMap[targetSemInt].collected += (log.amount || 0);
+                totalInstitutionalPaid += (log.amount || 0);
+                masterStructureMap[targetSemInt].clearanceDate = log.date || "N/A";
+                masterStructureMap[targetSemInt].paymentType = log.method || "Online";
+            }
+        });
+
+        // Cache mapped data straight into RAM for instant print calls
+        currentActiveDashboardStudentFeeCacheMap = masterStructureMap;
+
+        let rawKeys = Object.keys(masterStructureMap).sort((a,b) => a-b);
+        if (rawKeys.length === 0) {
+            container.innerHTML = `<div class="no-data-text" style="text-align:center; padding:15px;">No active fee structures configured for ${studentData.Department}.</div>`;
+            return;
+        }
+
+        let summaryHeaderHTML = `
+            <div style="background: rgba(74, 222, 128, 0.05); border: 1px dashed var(--brand-green); border-radius: 12px; padding: 12px; font-size:12px; display:grid; grid-template-columns: repeat(3, 1fr); text-align:center; gap:10px;">
+                <div><span style="color:#64748b; display:block; margin-bottom:2px;">Total Due</span><strong>₹${totalInstitutionalDue.toLocaleString('en-IN')}</strong></div>
+                <div><span style="color:#64748b; display:block; margin-bottom:2px;">Total Paid</span><strong style="color:var(--brand-green);">₹${totalInstitutionalPaid.toLocaleString('en-IN')}</strong></div>
+                <div><span style="color:#64748b; display:block; margin-bottom:2px;">Remaining</span><strong style="color:#ef4444;">₹${(totalInstitutionalDue - totalInstitutionalPaid).toLocaleString('en-IN')}</strong></div>
+            </div>
+        `;
+
+        //  PASTE this clean block right here:
+        let innerGridRowsHTML = rawKeys.map(sem => {
+            let record = masterStructureMap[sem];
+            let statusText = "Pending"; // Default is now a clean "Pending" state
+            let statusColor = "#64748b"; // Soft neutral slate gray
+            let statusBg = "#f1f5f9";
+
+            if (record.collected >= record.billingRate) {
+                statusText = "Paid"; 
+                statusColor = "#166534"; 
+                statusBg = "#f0fdf4";
+            } else if (record.collected > 0) {
+                statusText = "Partial"; 
+                statusColor = "#b45309"; 
+                statusBg = "#fffbeb";
+            } else if (record.deadline !== "N/A") {
+                // Dynamic Date Assessment Engine
+                let today = new Date();
+                today.setHours(0,0,0,0); // Clear timestamp discrepancies smoothly
+                let deadlineDate = new Date(record.deadline);
+                
+                // If the due date has completed, explicitly flip status text to "Unpaid" in red color
+                if (today > deadlineDate) {
+                    statusText = "Unpaid";
+                    statusColor = "#ef4444"; 
+                    statusBg = "#fef2f2";
+                }
+            }
+
+            return `
+                <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 10px; padding: 10px; display: flex; justify-content:space-between; align-items:center; flex-shrink:0; box-sizing: border-box; width:100%;">
+                    <div style="width:100%;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                            <span style="font-weight:700; font-size:12px; color:var(--text-green);">Semester ${sem}</span>
+                            <span style="background:${statusBg}; color:${statusColor}; font-size:9px; font-weight:700; padding:1px 6px; border-radius:4px; border:1px solid currentColor; text-transform:uppercase;">${statusText}</span>
+                        </div>
+                        <div style="font-size:11px; opacity:0.85; display:flex; justify-content:space-between; margin-bottom: 2px;">
+                            <span>Rate: <b>₹${record.billingRate.toLocaleString('en-IN')}</b></span>
+                            <span>Paid: <b style="color:var(--brand-green);">₹${record.collected.toLocaleString('en-IN')}</b></span>
+                        </div>
+                        <div style="font-size:9px; color:#94a3b8; display:flex; justify-content:space-between; align-items:center;">
+                            <span>Due Limit: ${record.deadline}</span>
+                            <span>Cleared: ${record.clearanceDate}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = summaryHeaderHTML + innerGridRowsHTML;
+
+    } catch (err) {
+        console.error(err);
+        container.innerHTML = `<div class="no-data-text" style="color:#ef4444; text-align:center;">Failed to resolve student payments record pipeline.</div>`;
+    }
+}
+
+// Hook printing data compiler loop to generate clean CSV logs for Microsoft Excel
+document.getElementById("btnPrintStudentFees").addEventListener("click", () => {
+    let keys = Object.keys(currentActiveDashboardStudentFeeCacheMap);
+    if (!currentActiveDashboardStudentID || keys.length === 0) {
+        alert("Please select a student profile containing active accounting transaction logs before downloading an export trace.");
+        return;
+    }
+
+    // 1. Initialize the variable exactly once
+    let csvContent = "\uFEFF"; 
+    csvContent += "ADHYORA ACADEMIC MANAGEMENT SYSTEM - FEES BALANCE STATEMENT\n";
+    csvContent += `Institution ID,${currentCollegeID}\n`;
+    csvContent += `Student Name,${currentActiveDashboardStudentName}\n`;
+    csvContent += `Roll Number,${currentActiveDashboardStudentID}\n`;
+    csvContent += `Department Track,${currentActiveDashboardStudentDept}\n`;
+    csvContent += `Statement Generated Date,${new Date().toLocaleDateString()}\n\n`;
+    
+    // 2. Add Headers
+    csvContent += "Semester Index,Target Cost Rate (INR),Collected Amount (INR),Remaining Outstanding Balance (INR),Grace Expiry Deadline,Settlement Clearing Date,Payment Mode,Status\n";
+
+    // 3. Process Rows
+    keys.sort((a,b) => a-b).forEach(sem => {
+        let node = currentActiveDashboardStudentFeeCacheMap[sem];
+        let balanceOutstanding = node.billingRate - node.collected;
+        
+        // Logical Status Check
+        let status = "Pending"; 
+        if (node.collected >= node.billingRate) {
+            status = "Paid";
+        } else if (node.collected > 0) {
+            status = "Partial";
+        } else if (node.deadline !== "N/A") {
+            let today = new Date();
+            today.setHours(0,0,0,0);
+            let deadlineDate = new Date(node.deadline);
+            
+            // Only "Unpaid" if today is past the deadline, otherwise "Pending"
+            if (today > deadlineDate) {
+                status = "Unpaid"; 
+            } else {
+                status = "Pending";
+            }
+        }
+
+        // Add to csvContent (Using the same variable name consistently)
+        csvContent += `Sem ${sem},${node.billingRate},${node.collected},${balanceOutstanding},"${node.deadline}","${node.clearanceDate}",${node.paymentType},${status}\n`;
+    });
+
+    // 4. Generate Blob
+    let processingBlobContainer = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    let virtualAnchorNodeElement = document.createElement("a");
+    let resolvedObjectURLRoute = URL.createObjectURL(processingBlobContainer);
+    
+    let sanitizedFileTitle = `${currentActiveDashboardStudentID}_LedgerStatement.csv`;
+    
+    virtualAnchorNodeElement.setAttribute("href", resolvedObjectURLRoute);
+    virtualAnchorNodeElement.setAttribute("download", sanitizedFileTitle);
+    virtualAnchorNodeElement.style.visibility = "hidden";
+    
+    document.body.appendChild(virtualAnchorNodeElement);
+    virtualAnchorNodeElement.click();
+    document.body.removeChild(virtualAnchorNodeElement);
+    
+    showRcToast("📊 Spreadsheet Statement Downloaded Successfully!");
 });
