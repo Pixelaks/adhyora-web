@@ -1,6 +1,37 @@
 @import url('https://fonts.googleapis.com/css2?family=Yatra+One&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
 
+/* =======================================================
+   💧 LIQUID SLIDING WAVE EFFECT (VIEW TRANSITIONS)
+   ======================================================= */
+::view-transition-old(root) {
+    animation: none;
+    z-index: 1;
+}
+
+::view-transition-new(root) {
+    animation: liquidWaveSwipe 0.65s cubic-bezier(0.25, 1, 0.5, 1) both;
+    z-index: 9999;
+    clip-path: polygon(0 0, 0 0, 0 100%, 0% 100%);
+}
+
+@keyframes liquidWaveSwipe {
+    0% {
+        clip-path: polygon(0 0, 0 0, 0 100%, 0% 100%);
+    }
+    50% {
+        /* Introduces an organic curvature wave drag right down the center vertical */
+        clip-path: polygon(0 0, 65% 0, 45% 100%, 0 100%);
+    }
+    100% {
+        clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+    }
+}
+
+::view-transition-group(root) {
+    animation-duration: 0.65s;
+}
+
 /* =========================================
    🚀 DOM VIRTUALIZATION (SCROLL OPTIMIZATION)
    ========================================= */
@@ -551,140 +582,319 @@ body {
 .attd-empty { color: #cbd5e1; font-weight: normal; } /* No class assigned */
 
 /* =========================================
-   🌙 DARK MODE OVERRIDES (ULTIMATE FIX)
+   🌙 DARK MODE OVERRIDES (ULTIMATE V8 - FIXED)
    ========================================= */
 body.dark-mode {
-    --bg-base: #0f172a;
-    --text-green: #4ade80;
+    --bg-base: #0f172a;         /* Deep slate background */
+    --bg-surface: #1e293b;      /* Lighter slate for cards and surfaces */
+    --brand-green: #16a34a;     /* Deepened crisp green for functional actions */
+    --text-green: #4ade80;      /* Eye-friendly light neon green text */
     --text-light-green: #86efac;
+    --text-dark: #94a3b8;       /* Soft Slate-400 to remove pure white glare */
+    --text-muted: #64748b;      /* Slate-500 secondary text */
     --bg-grid-color: rgba(74, 222, 128, 0.05);
-    --card-bg: #1e293b;
-    --border-color: #334155;
+    --card-bg: #1e293b;        
+    --border-color: #334155;    /* Slate-700 structural border lines */
     color: #f8fafc;
+    color-scheme: dark;         /* Forces browser inputs, scrolls, and system widgets dark */
 }
 
-/* 1. Fix the "Welcome" Box */
+/* 🚨 1. GLOBAL & SCROLLBAR OVERRIDES */
+body.dark-mode *::-webkit-scrollbar-track { background: var(--bg-base) !important; }
+body.dark-mode *::-webkit-scrollbar-thumb { background: #475569 !important; border-radius: 10px; }
+body.dark-mode *::-webkit-scrollbar-thumb:hover { background: var(--text-green) !important; }
+
+/* 🚨 2. TOP & MOBILE BOTTOM NAV PILL FIXES */
+body.dark-mode .icon-nav-container { background: transparent !important; }
+body.dark-mode .icon-nav {
+    background: var(--bg-surface) !important; 
+    border: 1px solid var(--border-color) !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5) !important;
+}
+body.dark-mode .nav-icon-btn { color: var(--text-muted) !important; }
+body.dark-mode .nav-icon-btn:hover,
+body.dark-mode .nav-icon-btn.active-nav { color: var(--text-green) !important; }
+
+/* 🚨 3. WELCOME DASHBOARD HEADER BLOCK */
+body.dark-mode .welcome-card { background-color: var(--bg-surface) !important; }
 body.dark-mode .welcome-text {
+    color: var(--text-green) !important;
     background: transparent !important;
-    text-shadow: 0 0 15px rgba(74, 222, 128, 0.3) !important;
+    text-shadow: 0 0 15px rgba(74, 222, 128, 0.2) !important;
 }
 
-/* 2. Fix the White & Colored Cards (Timetable, Assign, Data Uploads) */
+/* 🚨 4. FIXED: ULTIMATE CATCH-ALL EXCEPTING EVENT AND ACTION CONTAINERS */
 body.dark-mode .data-card, 
 body.dark-mode .compose-modal, 
 body.dark-mode .settings-drawer,
 body.dark-mode .sub-card,
-body.dark-mode .evt-card,
 body.dark-mode .asn-card,
 body.dark-mode .tt-card,
-body.dark-mode .welcome-card,
 body.dark-mode .calendar-container,
-body.dark-mode .data-upload-card {
-    background-color: #1e293b !important;
-    border-color: #334155 !important;
-    box-shadow: 0 8px 25px rgba(0,0,0,0.4) !important; /* Adds depth so cards don't look boring */
+body.dark-mode .data-upload-card,
+body.dark-mode [style*="background: white"]:not(.evt-card),
+body.dark-mode [style*="background:white"]:not(.evt-card),
+body.dark-mode [style*="background: #ffffff"]:not(.evt-card),
+body.dark-mode [style*="background:#ffffff"]:not(.evt-card),
+body.dark-mode [style*="background-color: white"]:not(.evt-card),
+body.dark-mode [style*="background-color:white"]:not(.evt-card),
+body.dark-mode [style*="background-color: #ffffff"]:not(.evt-card),
+body.dark-mode [style*="background-color:#ffffff"]:not(.evt-card),
+body.dark-mode [style*="background: var(--bg-base)"] {
+    background-color: var(--bg-surface) !important;
+    color: #f8fafc !important;
+    border-top: 1px solid var(--border-color) !important;
+    border-right: 1px solid var(--border-color) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.4) !important;
 }
 
-/* 3. Fix the "Assign Classes" Outer Wrapper */
-body.dark-mode .asn-period-wrapper {
-    background-color: #0f172a !important;
-    border-color: #334155 !important;
+/* 🚨 5. FIXED: EVENT CARD HOVER WHITE INJECTION AND TRANSITIONS */
+body.dark-mode .evt-card {
+    background-color: var(--bg-surface) !important;
+    border: 1px solid var(--border-color) !important;
+}
+body.dark-mode .evt-card * {
+    background-color: transparent !important; /* Forces components inside card to stay dark */
+}
+body.dark-mode .evt-header:hover,
+body.dark-mode .evt-card:hover {
+    background-color: rgba(255, 255, 255, 0.02) !important; /* Replaces bright white hover */
+}
+body.dark-mode .evt-status.accepted {
+    background-color: rgba(34, 197, 94, 0.15) !important;
+    color: #4ade80 !important;
+    border: 1px solid rgba(74, 222, 128, 0.3) !important;
+}
+body.dark-mode .evt-status.pending {
+    background-color: rgba(245, 158, 11, 0.15) !important;
+    color: #fbbf24 !important;
+    border: 1px solid rgba(245, 158, 11, 0.3) !important;
 }
 
-/* 4. Fix Inputs, Selects, and Dropdowns */
+/* 🚨 6. FIXED: ROOM CODES ACTION TOP BUTTONS (Combine, Regen All) */
+body.dark-mode #roomCodeViewBtnContainer button,
+body.dark-mode .dashboard-view button[style*="background: white"],
+body.dark-mode .dashboard-view button[style*="background:#ffffff"],
+body.dark-mode .dashboard-view .btn-monthly,
+body.dark-mode button:has(i.fa-share-alt) {
+    background-color: var(--bg-surface) !important;
+    color: var(--text-dark) !important;
+    border: 1px solid var(--border-color) !important;
+}
+body.dark-mode #roomCodeViewBtnContainer button:hover {
+    background-color: var(--border-color) !important;
+    color: #ffffff !important;
+}
+
+/* 🚨 7. ATTENDANCE TRACKER ROW & TEACHER TEXT INVISIBILITY */
+body.dark-mode .attd-row {
+    background-color: transparent !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}
+body.dark-mode .attd-row:hover {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+}
+body.dark-mode .attd-teacher-name {
+    color: #ffffff !important;
+}
+body.dark-mode .attd-teacher-dept {
+    color: var(--text-dark) !important;
+}
+
+/* Catch soft light gray/green contextual rows */
+body.dark-mode .wavy-row,
+body.dark-mode [style*="background: #f8fafc"],
+body.dark-mode [style*="background:#f8fafc"],
+body.dark-mode [style*="background: #f1f5f9"],
+body.dark-mode [style*="background:#f1f5f9"] {
+    background-color: var(--bg-base) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* 🚨 8. DATA CARD LOG MESSAGES TYPES */
+body.dark-mode .msg-principal { background-color: rgba(34, 197, 94, 0.1) !important; border-left-color: #22c55e !important; }
+body.dark-mode .msg-teacher { background-color: rgba(245, 158, 11, 0.1) !important; border-left-color: #f59e0b !important; }
+body.dark-mode .msg-student { background-color: rgba(59, 130, 246, 0.1) !important; border-left-color: #3b82f6 !important; }
+
+/* 🚨 9. CALENDAR ENGINE MATRICES OVERRIDES */
+body.dark-mode .cal-cell.normal { color: var(--text-dark) !important; }
+body.dark-mode .cal-cell.normal:hover { background: var(--border-color) !important; color: #ffffff !important; }
+body.dark-mode .cal-cell.today { 
+    background: #16a34a !important; 
+    color: #ffffff !important; 
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4) !important;
+    border: 2px solid var(--text-green) !important; 
+}
+body.dark-mode .cal-cell.holiday { color: #fca5a5 !important; background: rgba(239, 68, 68, 0.15) !important; }
+body.dark-mode .cal-cell.semester { color: #93c5fd !important; background: rgba(59, 130, 246, 0.15) !important; }
+
+/* 🚨 10. TIMETABLE & ASSIGN CLASSES TRACKER */
+body.dark-mode .asn-period-wrapper { background-color: var(--bg-base) !important; border-color: var(--border-color) !important; }
+body.dark-mode .tt-node { background-color: var(--bg-surface) !important; color: #f8fafc !important; border-color: var(--text-green) !important; }
+body.dark-mode .tt-line-bg { background: var(--border-color) !important; }
+body.dark-mode .asn-day-btn, body.dark-mode .tt-day-btn { background-color: var(--bg-base) !important; color: var(--text-dark) !important; border-color: var(--border-color) !important; }
+body.dark-mode .asn-day-btn.active, body.dark-mode .tt-day-btn.active { background-color: rgba(74, 222, 128, 0.15) !important; color: var(--text-green) !important; border-color: var(--text-green) !important; }
+body.dark-mode .tt-select-pill, body.dark-mode .asn-select-pill { background-color: rgba(74, 222, 128, 0.1) !important; border-color: var(--text-green) !important; color: var(--text-green) !important; }
+body.dark-mode .asn-card.split { background-color: rgba(251, 191, 36, 0.08) !important; border-color: rgba(251, 191, 36, 0.3) !important; }
+
+/* 🚨 11. FIXED: TIMETABLE & ASSIGN DROPDOWN HARSH TEXT AND BACKGROUNDS */
 body.dark-mode input, 
 body.dark-mode select, 
-body.dark-mode textarea,
-body.dark-mode .asn-input,
-body.dark-mode .tt-input-field {
-    background-color: #0f172a !important;
-    color: #f8fafc !important;
-    border-color: #334155 !important;
+body.dark-mode textarea, 
+body.dark-mode .asn-input, 
+body.dark-mode .tt-input-field,
+body.dark-mode select.asn-input,
+body.dark-mode select.tt-input-field { 
+    background-color: var(--bg-base) !important; 
+    color: #cbd5e1 !important; /* Muted soft slate-200 instead of piercing white */
+    border: 1px solid var(--border-color) !important; 
 }
-
-body.dark-mode .asn-input:disabled,
-body.dark-mode .tt-input-field:disabled {
-    background-color: #1e293b !important;
-    color: #94a3b8 !important;
-}
-
-/* 5. Fix Text & Headings */
-body.dark-mode .card-title,
-body.dark-mode .sub-title,
-body.dark-mode .evt-title,
-body.dark-mode .btn-text,
-body.dark-mode .stat-value,
-body.dark-mode .tt-day,
-body.dark-mode .tt-header,
-body.dark-mode .asn-period-header,
-body.dark-mode h4 {
-    color: #f8fafc !important;
-}
-
-body.dark-mode .card-body,
-body.dark-mode .sub-code,
-body.dark-mode .evt-meta,
-body.dark-mode .stat-label,
-body.dark-mode p {
+body.dark-mode select option,
+body.dark-mode .asn-input option,
+body.dark-mode .tt-input-field option {
+    background-color: var(--bg-base) !important;
     color: #cbd5e1 !important;
 }
+body.dark-mode .asn-input:disabled, body.dark-mode .tt-input-field:disabled { background-color: var(--bg-surface) !important; color: var(--text-muted) !important; }
+body.dark-mode .action-icon-btn { background-color: var(--bg-base) !important; color: var(--text-dark) !important; border: 1px solid var(--border-color) !important; }
+body.dark-mode .action-icon-btn:hover { background-color: var(--border-color) !important; color: var(--text-green) !important; }
+body.dark-mode .up-icon { background-color: var(--bg-base) !important; }
 
-/* 6. Fix Sidebar */
-body.dark-mode .sidebar {
-    background-color: #0f172a;
+/* 🚨 12. FIXED: MOVE SELECTED & GREEN ACTION BUTTONS CONTRAST FIX */
+body.dark-mode .asn-split-btn,
+body.dark-mode [class*="-btn"],
+body.dark-mode .asn-save-btn,
+body.dark-mode .tt-action-btn,
+body.dark-mode [style*="background: #86efac"],
+body.dark-mode [style*="background:#86efac"],
+body.dark-mode button[style*="background-color: rgb(74, 222, 128)"] {
+    background-color: #16a34a !important;
+    color: #ffffff !important; 
+    border-color: #16a34a !important;
 }
 
-body.dark-mode .menu-btn {
-    background-color: #1e293b;
-    border-color: #334155;
+/* 🚨 13. STRUCTURAL TEXT VARIANT OVERRIDES */
+body.dark-mode .card-title, body.dark-mode .sub-title, body.dark-mode .evt-title, body.dark-mode .btn-text, body.dark-mode .stat-value, body.dark-mode .tt-day, body.dark-mode .tt-header, body.dark-mode .asn-period-header, body.dark-mode h4, body.dark-mode h3 { color: #f8fafc !important; }
+body.dark-mode .card-body, body.dark-mode .sub-code, body.dark-mode .evt-meta, body.dark-mode .stat-label, body.dark-mode p { color: #cbd5e1 !important; }
+body.dark-mode .sidebar { background-color: var(--bg-base) !important; border-right: 1px solid var(--border-color) !important; }
+body.dark-mode .menu-btn { background-color: var(--bg-surface) !important; border-color: var(--border-color) !important; }
+body.dark-mode .menu-btn:hover { background-color: rgba(74, 222, 128, 0.08) !important; border-color: rgba(74, 222, 128, 0.2) !important; }
+
+/* 🚨 14. STATUS ACCENTS, BADGES, AND GRAPHICS WAVES */
+body.dark-mode .circle-wave-wrap { background: var(--bg-base) !important; border-color: var(--border-color) !important; }
+body.dark-mode .circle-wave-text { color: #ffffff !important; text-shadow: 0 0 10px rgba(0,0,0,0.8) !important; }
+body.dark-mode .wavy-text { color: #ffffff !important; text-shadow: 0 0 5px rgba(0,0,0,0.8) !important; }
+body.dark-mode .status-pending { background-color: rgba(180, 83, 9, 0.2) !important; color: #fcd34d !important; border-color: #92400e !important; }
+body.dark-mode .status-approved { background-color: rgba(22, 101, 52, 0.2) !important; color: #86efac !important; border-color: #14532d !important; }
+body.dark-mode .status-declined { background-color: rgba(220, 38, 38, 0.2) !important; color: #fca5a5 !important; border-color: #7f1d1d !important; }
+body.dark-mode .hod-badge { background-color: rgba(29, 78, 216, 0.2) !important; color: #93c5fd !important; border-color: #1e3a8a !important; }
+body.dark-mode .stat-row { border-bottom-color: var(--border-color) !important; }
+
+/* 🚨 15. INSTITUTIONAL FEE MANAGEMENT UTILITIES */
+body.dark-mode #feeConfigOverlay .compose-modal { background-color: #1e293b !important; border-color: #334155 !important; }
+body.dark-mode #feeExclusionsContainer { background-color: #0f172a !important; border-color: #334155 !important; }
+body.dark-mode .scrollable-card { background-color: #1e293b !important; border-color: #334155 !important; }
+body.dark-mode .fee-exclusion-checkbox { accent-color: var(--text-green) !important; }
+body.dark-mode #feeLiveStructureGrid > div { background-color: #0f172a !important; border-color: #334155 !important; }
+body.dark-mode #feeLiveStructureGrid span { background-color: rgba(74, 222, 128, 0.15) !important; color: var(--text-green) !important; }
+
+/* 🚨 FIX: Remove accidental block backgrounds behind top nav icons */
+body.dark-mode .icon-nav-container .nav-icon-btn,
+body.dark-mode .icon-nav .nav-icon-btn,
+body.dark-mode .nav-icon-btn.active-nav,
+body.dark-mode .nav-icon-btn {
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 
-body.dark-mode .nav-icon-btn { color: #94a3b8; }
-body.dark-mode .nav-icon-btn.active-nav { color: var(--brand-green); }
-
-/* 7. Fix Action Buttons (Share, Edit, Delete) */
-body.dark-mode .action-icon-btn {
-    background-color: #0f172a !important;
-    color: #cbd5e1 !important;
-    border: 1px solid #334155 !important;
-}
-body.dark-mode .action-icon-btn:hover {
-    background-color: #334155 !important;
-    color: var(--brand-green) !important;
+/* =======================================================
+   🚨 FIXED: SETTINGS DRAWER BUTTON BACKGROUND RESET
+   ======================================================= */
+body.dark-mode .settings-drawer,
+body.dark-mode #settingsOverlay .settings-drawer {
+    background-color: var(--bg-surface) !important;
+    border-left: 1px solid var(--border-color) !important;
 }
 
-/* 8. Fix Timetable Circular Nodes and Weekday Buttons */
-body.dark-mode .tt-node {
-    background-color: #1e293b !important;
-    color: #f8fafc !important;
-    border-color: #4ade80 !important;
+/* Force settings buttons back to clean slate blocks or transparent containers */
+body.dark-mode .settings-menu .settings-btn,
+body.dark-mode #settingsOverlay .settings-btn,
+body.dark-mode .settings-drawer button:not(.logout-btn) {
+    background-color: var(--bg-base) !important; 
+    color: #cbd5e1 !important; /* Soft premium readable text */
+    border: 1px solid var(--border-color) !important;
 }
 
-body.dark-mode .asn-day-btn,
-body.dark-mode .tt-day-btn {
-    background-color: #0f172a !important;
-    color: #cbd5e1 !important;
-    border-color: #334155 !important;
+/* Beautiful target hover state without the harsh color blocks */
+body.dark-mode .settings-menu .settings-btn:hover,
+body.dark-mode #settingsOverlay .settings-btn:hover {
+    background-color: var(--border-color) !important;
+    border-color: var(--text-green) !important;
+    color: #ffffff !important;
 }
 
-body.dark-mode .asn-day-btn.active,
-body.dark-mode .tt-day-btn.active {
-    background-color: rgba(74, 222, 128, 0.15) !important;
-    color: var(--brand-green) !important;
-    border-color: var(--brand-green) !important;
+/* Ensure the internal icon primitives match our functional accent green tint */
+body.dark-mode .settings-btn i,
+body.dark-mode #settingsOverlay .settings-btn i {
+    color: var(--text-green) !important;
 }
 
-/* 9. Fix Top Select Pills */
-body.dark-mode .tt-select-pill,
-body.dark-mode .asn-select-pill {
-    background-color: rgba(74, 222, 128, 0.1) !important;
-    border-color: var(--brand-green) !important;
-    color: var(--brand-green) !important;
+/* Keep the Logout button distinct, safe, and red */
+body.dark-mode .settings-menu .logout-btn,
+body.dark-mode #settingsOverlay .logout-btn {
+    background: rgba(220, 38, 38, 0.15) !important;
+    border-color: rgba(220, 38, 38, 0.3) !important;
+    color: #fca5a5 !important;
 }
 
-/* 10. Fix Data Upload Icons Backgrounds */
-body.dark-mode .up-icon {
-    background-color: #0f172a !important;
+body.dark-mode .settings-menu .logout-btn i,
+body.dark-mode #settingsOverlay .logout-btn i {
+    color: #ef4444 !important;
+}
+
+body.dark-mode .settings-menu .logout-btn:hover,
+body.dark-mode #settingsOverlay .logout-btn:hover {
+    background: #b91c1c !important;
+    color: #ffffff !important;
+    border-color: #b91c1c !important;
+}
+
+/* =======================================================
+   🚨 FINAL AUTHORITY: NUKE MODAL CLOSE CONTAINER BACKGROUNDS
+   ======================================================= */
+html body.dark-mode button.close-settings,
+html body.dark-mode .close-settings,
+html body.dark-mode i.close-settings,
+html body.dark-mode [id*="close"],
+html body.dark-mode [id*="Close"],
+html body.dark-mode button[id*="close"],
+html body.dark-mode .modal-overlay button[class*="close"],
+html body.dark-mode .modal-overlay [id*="close"] {
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* Ensure the inside icon glyph color keeps a premium slate contrast tint */
+html body.dark-mode button.close-settings:hover,
+html body.dark-mode [id*="close"]:hover {
+    background: transparent !important;
+    background-color: transparent !important;
+    color: var(--text-green) !important;
+    transform: scale(1.1);
+}
+
+/* 🚨 16. FLOATING SYSTEM DRAWER PANEL DESKTOP/MOBILE RESCUES */
+@media (max-width: 900px) {
+    body.dark-mode .icon-nav-container { background: transparent !important; }
+    body.dark-mode .main-content { background-color: var(--bg-base) !important; }
 }
 
 /* =========================================
@@ -873,3 +1083,160 @@ body.dark-mode #successExpiryDate { color: #94a3b8 !important; }
         padding: 4px !important;
     }
 }
+
+/* =======================================================
+   💎 INSTITUTIONAL FEE MANAGEMENT CENTER SPLIT GRID
+   ======================================================= */
+
+/* Force clean layout spacing on larger desktop monitors */
+.fee-center-split-wrapper {
+    display: flex;
+    gap: 30px;
+    width: 100%;
+    box-sizing: border-box;
+    align-items: stretch;
+}
+
+/* Ensure the scrollable list on the right doesn't clip past the footer borders */
+.scrollable-card {
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+
+/* 🌙 DARK MODE COMPATIBILITY INJECTS */
+body.dark-mode #feeConfigOverlay .compose-modal {
+    background-color: #1e293b !important;
+    border-color: #334155 !important;
+}
+
+body.dark-mode #feeExclusionsContainer {
+    background-color: #0f172a !important;
+    border-color: #334155 !important;
+}
+
+body.dark-mode .scrollable-card {
+    background-color: #1e293b !important;
+    border-color: #334155 !important;
+}
+
+body.dark-mode .fee-exclusion-checkbox {
+    accent-color: #f87171 !important;
+}
+
+body.dark-mode #feeLiveStructureGrid > div {
+    background-color: #0f172a !important;
+    border-color: #334155 !important;
+}
+
+body.dark-mode #feeLiveStructureGrid span {
+    background-color: rgba(239, 68, 68, 0.15) !important;
+    color: #f87171 !important;
+}
+
+/* =======================================================
+   📱 MOBILE RESPONSIVE MEDIA QUERY MATRICES (UNDER 900px)
+   ======================================================= */
+@media (max-width: 900px) {
+    /* 1. Force vertical stacking with no illegal side-margins */
+    .fee-center-split-wrapper {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 20px !important;
+        width: 100% !important;
+    }
+
+    /* 2. Format parent popup drawer wrapper bounds safely */
+    #feeConfigOverlay .compose-modal {
+        width: 92% !important;
+        max-width: 420px !important;
+        padding: 20px 15px !important;
+        max-height: 82vh !important;
+        overflow-y: auto !important;
+        box-sizing: border-box !important;
+    }
+
+    /* 3. Strip away the hardcoded minimum widths causing the horizontal stretch loop */
+    #feeConfigOverlay .fee-center-split-wrapper > div {
+        width: 100% !important;
+        min-width: 0 !important; 
+        box-sizing: border-box !important;
+    }
+
+    /* 4. Optimize the live record viewer box height & padding attributes */
+    #feeConfigOverlay .scrollable-card {
+        padding: 15px 12px !important;
+    }
+
+    #feeLiveStructureGrid {
+        max-height: 200px !important;
+        width: 100% !important;
+    }
+
+    /* 5. Scale dropdown selects and headings slightly for mobile display cards */
+    #feeConfigOverlay h3 {
+        font-size: 17px !important;
+        margin-bottom: 12px !important;
+    }
+    
+    #feeConfigOverlay .input-field, 
+    #feeConfigOverlay #feeAmountInput {
+        padding: 10px !important;
+        font-size: 13px !important;
+    }
+
+    /* 🚨 ADDED HERE: ASSIGN CLASSES MOBILE OVERHAUL */
+    .asn-periods-grid {
+        grid-template-columns: 1fr !important;
+        gap: 15px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    .asn-period-wrapper {
+        padding: 12px !important;
+        border-radius: 12px !important;
+        gap: 10px !important;
+    }
+
+    .asn-period-header {
+        font-size: 14px !important;
+        margin-bottom: 2px !important;
+    }
+
+    .asn-grid {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 8px !important;
+        margin-bottom: 8px !important;
+    }
+
+    .asn-input {
+        padding: 6px 10px !important;
+        font-size: 11px !important;
+        border-radius: 6px !important;
+    }
+
+    .asn-batch-badge {
+        font-size: 9px !important;
+        padding: 2px 10px !important;
+        top: -10px !important;
+        left: 10px !important;
+    }
+
+    .asn-split-btn {
+        padding: 6px !important;
+        font-size: 12px !important;
+        border-radius: 6px !important;
+    }
+
+    .main-content > div:first-child h2 {
+        font-size: 18px !important;
+        width: 100% !important;
+        text-align: center !important;
+    }
+
+    .main-content > div:first-child {
+        justify-content: center !important;
+        gap: 10px !important;
+    }
+} /* 🚨 This closing brace closes the entire @media query! */
