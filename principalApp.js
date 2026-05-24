@@ -99,7 +99,7 @@ if (!currentCollegeID) {
         }
     });
 }
-el.versionText.innerText = "Version 1.0.0 (Web Admin)";
+//el.versionText.innerText = "Version 1.0.0 (Web Admin)";
 
 // ==========================================
 // 🚨 PROFILE, SESSIONS & THEME ENGINE
