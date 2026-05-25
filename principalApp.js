@@ -124,8 +124,8 @@ async function fetchPrincipalProfile() {
             
             registerWebSession();
             startSessionListener();
-            requestPushPermissions();
-            // 🚨 Replaced Subscription with PIN check. Pin check will trigger Subscription upon success.
+            // 🚨 PASS 'true' TO RUN IT SILENTLY ON BOOT
+            requestPushPermissions(true);
             CheckSecurityPin(); 
         } else {
             el.principalName.innerText = "Profile Not Found"; el.principalEmail.innerText = "";
@@ -3824,7 +3824,7 @@ function updateNotificationToggleUI() {
 }
 
 // 2. Request Permissions & Subscribe to Principal Topics
-async function requestPushPermissions() {
+async function requestPushPermissions(isSilent = false) {
     try {
         console.log("🚀 STEP 1: Requesting Browser Permission...");
         const permission = await Notification.requestPermission();
@@ -3882,7 +3882,10 @@ async function requestPushPermissions() {
                 }).then(() => {
                     console.log("✅ ALL STEPS COMPLETE!");
                     updateNotificationToggleUI();
-                    showRcToast("✅ Notifications Enabled!");
+                    // 🚨 ADD THIS IF STATEMENT SO IT ONLY SHOWS WHEN MANUALLY CLICKED
+                    if (!isSilent) {
+                        showRcToast("✅ Notifications Enabled!");
+                    }
                 });
             } else {
                 console.error("❌ Token generation failed: Firebase returned null.");
@@ -3925,7 +3928,8 @@ document.getElementById("btnToggleNotifications").addEventListener("click", asyn
         if (confirm("Disable notifications for this browser?")) await unsubscribePushNotifications();
     } else {
         toggle.style.opacity = "0.5";
-        await requestPushPermissions();
+        // 🚨 PASS 'false' SO THE TOAST SHOWS WHEN THEY MANUALLY CLICK IT
+        await requestPushPermissions(false);
         toggle.style.opacity = "1";
     }
 });
