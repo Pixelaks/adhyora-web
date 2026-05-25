@@ -338,10 +338,12 @@
                         <button id="btnOpenBatchMove" class="nav-icon-btn" style="background: var(--brand-green); color: white; padding: 10px 20px; border-radius: 12px; font-size: 14px; font-weight: bold; box-shadow: 0 4px 10px rgba(74, 222, 128, 0.4);" disabled><i class="fas fa-exchange-alt" style="margin-right: 8px;"></i> Move Selected</button>
                     </div>
 
-                    <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-                        <select id="bchSemDrop" class="input-field" style="flex: 1; min-width: 150px; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green);"></select>
-                        <select id="bchCatDrop" class="input-field" style="flex: 1; min-width: 150px; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green);"></select>
-                        <select id="bchSubDrop" class="input-field" style="flex: 2; min-width: 200px; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green);"></select>
+                    <div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: nowrap;">
+                        <select id="bchSemDrop" class="input-field" style="flex: 1; min-width: 0; padding: 10px 5px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green); font-size: 12px; text-overflow: ellipsis;"></select>
+                        
+                        <select id="bchCatDrop" class="input-field" style="flex: 1; min-width: 0; padding: 10px 5px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green); font-size: 12px; text-overflow: ellipsis;"></select>
+                        
+                        <select id="bchSubDrop" class="input-field" style="flex: 1.5; min-width: 0; padding: 10px 5px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green); font-size: 12px; text-overflow: ellipsis;"></select>
                     </div>
 
                     <div id="bchListContainer" class="scrollable-list" style="flex: 1; overflow-y: auto; padding-right: 10px;">
@@ -413,7 +415,7 @@
                         <button id="btnAsnSave" class="asn-save-btn">Save Timetable</button>
                     </div>
 
-                    <div style="background: white; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); margin-bottom: 15px; align-items: center; flex-shrink: 0;">
+                    <div style="background: rgba(255, 255, 255, 0.305); padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); margin-bottom: 15px; align-items: center; flex-shrink: 0;">
                         <div class="asn-days-container" id="asnDaysContainer">
                             <button class="asn-day-btn" data-day="Monday">Mon</button>
                             <button class="asn-day-btn" data-day="Tuesday">Tue</button>
@@ -440,7 +442,7 @@
                             <div class="up-icon" style="color: #ef4444; background: #fee2e2;"><i class="fas fa-credit-card"></i></div>
                             <h4 style="color: #991b1b;">Semester Fee Settings</h4>
                             <p>Configure the dynamic core tuition fee structure rules for active academic years.</p>
-                            <button id="btnOpenFeeConfig" style="background: #ef4444; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2);">Open Fee Setup</button>
+                            <button id="btnOpenFeeConfig" style="background: #ef4444; box-shadow: 0 4px 10px rgb(239 68 68 / 79%);">Open Fee Setup</button>
                         </div>
 
                         <div class="data-upload-card" style="border-color: #6ee7b7; background: #f0fdf4;">
@@ -448,7 +450,7 @@
                             <h4 style="color: #047857;">Students Roster</h4>
                             <p>Upload a CSV containing Roll Numbers, Names, and Departments.</p>
                             <input type="file" id="fileStudents" accept=".csv" style="display: none;">
-                            <button onclick="document.getElementById('fileStudents').click()" style="background: #10b981; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2);">Select File</button>
+                            <button onclick="document.getElementById('fileStudents').click()" style="background: #10b981; box-shadow: 0 4px 10px rgb(16 185 129 / 79%);">Select File</button>
                         </div>
 
                         <div class="data-upload-card">
@@ -456,7 +458,7 @@
                             <h4>Subject Master</h4>
                             <p>Upload a CSV mapping Subject Codes to Departments and Semesters.</p>
                             <input type="file" id="fileSubjects" accept=".csv" style="display: none;">
-                            <button onclick="document.getElementById('fileSubjects').click()" style="background: #3b82f6;">Select File</button>
+                            <button onclick="document.getElementById('fileSubjects').click()" style="background: #3b82f6; box-shadow: 0 4px 10px rgb(59 130 246 / 79%);;">Select File</button>
                         </div>
 
                         <div class="data-upload-card">
@@ -464,21 +466,21 @@
                             <h4>Academic Calendar</h4>
                             <p>Upload a CSV detailing Working Days, Holidays, and Semester limits.</p>
                             <input type="file" id="fileCalendar" accept=".csv" style="display: none;">
-                            <button onclick="document.getElementById('fileCalendar').click()" style="background: #f59e0b;">Select File</button>
+                            <button onclick="document.getElementById('fileCalendar').click()" style="background: #f59e0b; box-shadow: 0 4px 10px rgb(245 158 11 / 79%);">Select File</button>
                         </div>
 
                         <div class="data-upload-card">
                             <div class="up-icon" style="color: #8b5cf6; background: #e0e7ff;"><i class="fas fa-file-download"></i></div>
                             <h4>Export Data</h4>
                             <p>Download Marks, Attendance Stats, and Daily Logs as CSV files.</p>
-                            <button id="btnOpenExport" style="background: #8b5cf6;">Open Exporter</button>
+                            <button id="btnOpenExport" style="background: #8b5cf6; box-shadow: 0 4px 10px rgb(139 92 246 / 79%);">Open Exporter</button>
                         </div>
 
                         <div class="data-upload-card" style="border-color: #fca5a5; background: #fff5f5;">
                             <div class="up-icon" style="color: #ef4444; background: #fee2e2;"><i class="fas fa-level-up-alt"></i></div>
                             <h4 style="color: #991b1b;">Promote Students</h4>
                             <p style="color: #b91c1c;">Advance all students to the next semester or graduate them.</p>
-                            <button id="btnOpenPromote" style="background: #ef4444; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2);">Promote Semester</button>
+                            <button id="btnOpenPromote" style="background: #ef4444; box-shadow: 0 4px 10px rgb(239 68 68 / 79%);">Promote Semester</button>
                         </div>
                     </div>
                 </div>
@@ -566,10 +568,12 @@
                         <button id="btnOpenStuSubMove" class="nav-icon-btn" style="background: var(--brand-green); color: white; padding: 10px 20px; border-radius: 12px; font-size: 14px; font-weight: bold; box-shadow: 0 4px 10px rgba(74, 222, 128, 0.4);" disabled><i class="fas fa-exchange-alt" style="margin-right: 8px;"></i> Move Selected</button>
                     </div>
 
-                    <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-                        <select id="ssSemDrop" class="input-field" style="flex: 1; min-width: 150px; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green);"></select>
-                        <select id="ssCatDrop" class="input-field" style="flex: 1; min-width: 150px; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green);"></select>
-                        <select id="ssSubDrop" class="input-field" style="flex: 2; min-width: 200px; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green);"></select>
+                    <div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: nowrap;">
+                        <select id="ssSemDrop" class="input-field" style="flex: 1; min-width: 0; padding: 10px 5px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green); font-size: 12px; text-overflow: ellipsis;"></select>
+                        
+                        <select id="ssCatDrop" class="input-field" style="flex: 1; min-width: 0; padding: 10px 5px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green); font-size: 12px; text-overflow: ellipsis;"></select>
+                        
+                        <select id="ssSubDrop" class="input-field" style="flex: 1.5; min-width: 0; padding: 10px 5px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-weight: bold; color: var(--text-green); font-size: 12px; text-overflow: ellipsis;"></select>
                     </div>
 
                     <div id="ssListContainer" class="scrollable-list" style="flex: 1; overflow-y: auto; padding-right: 10px;">
@@ -603,25 +607,28 @@
 
                     <input type="text" id="attdSearchInput" placeholder="Search teacher, department, or subject..." class="asn-input" style="margin-bottom: 15px; font-size: 14px; padding: 12px 15px;">
                     
-                <div style="background: white; border-radius: 12px; border: 1px solid var(--border-color); flex: 1; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.03);">
-                    
-                    <div class="attd-mobile-scroll">
-                
-                        <div class="attd-header-row" style="display: grid; grid-template-columns: 2fr repeat(6, 1fr); background: var(--bg-grid-color); padding: 12px 15px; font-weight: bold; color: var(--text-green); font-size: 13px; text-align: center; border-bottom: 1px solid var(--border-color);">
-                            <div style="text-align: left;">TEACHER</div>
-                            <div>P1</div><div>P2</div><div>P3</div><div>P4</div><div>P5</div><div>P6</div>
+                    <div style="background: white; border-radius: 12px; border: 1px solid var(--border-color); flex: 1; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.03);">
+    
+                        <div class="attd-mobile-scroll scrollable-list" style="flex: 1; overflow: auto; position: relative;">
+                            
+                            <div style="min-width: 600px; width: 100%; display: flex; flex-direction: column;">
+                                
+                                <div class="attd-row" style="position: sticky; top: 0; z-index: 10; background: var(--bg-grid-color) !important; color: var(--text-green); border-bottom: 2px solid var(--border-color);">
+                                    <div style="text-align: left;">TEACHER</div>
+                                    <div>P1</div><div>P2</div><div>P3</div><div>P4</div><div>P5</div><div>P6</div>
+                                </div>
+                                
+                                <div id="attdListContainer" style="display: flex; flex-direction: column; padding-bottom: 20px;">
+                                    <div class="no-data-text">Loading Attendance...</div>
+                                </div>
+
+                            </div>
+
                         </div>
-                        
-                        <div id="attdListContainer" class="scrollable-list" style="flex: 1; overflow-y: auto; padding: 10px 0;">
-                            <div class="no-data-text">Loading Attendance...</div>
-                        </div>
-                
                     </div>
-                </div>
 
-                <div id="attdTooltip" style="position: fixed; display: none; background: #1e293b; color: white; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; pointer-events: none; z-index: 10000; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">Subject Name</div>
-
-            </div> </main>
+                    <div id="attdTooltip" style="position: fixed; display: none; background: #1e293b; color: white; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; pointer-events: none; z-index: 10000; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">Subject Name</div>
+                </div> </main>
     </div>
 
     <div class="modal-overlay" id="settingsOverlay">
