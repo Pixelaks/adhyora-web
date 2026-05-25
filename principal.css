@@ -425,24 +425,150 @@ body {
 .stat-value { font-weight: bold; color: #334155; }
 
 @media (max-width: 900px) {
-    .dashboard-wrapper { flex-direction: column; }
-    .main-content { display: none; padding: 15px; padding-bottom: 90px; height: 100%; overflow: hidden; flex: 1; }
-    .main-content.mobile-active { display: flex; } 
-    .sidebar { width: 100%; flex: 1; border-right: none; padding: 20px; justify-content: center; padding-bottom: 100px; transition: all 0.3s ease; }
-    .sidebar.mobile-hidden { display: none !important; } 
-    .logo-container { margin-bottom: 15px; }
-    .nav-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; max-width: 500px; margin: 0 auto; }
-    .menu-btn { flex-direction: row-reverse; justify-content: center; gap: 10px; padding: 25px 10px; text-align: center; }
-    
-    /* 👇 FIX IS APPLIED HERE: Added env(safe-area-inset-bottom) */
-    .icon-nav-container { position: fixed; top: auto; bottom: 0; left: 0; right: 0; background: white; padding: 15px 15px calc(15px + env(safe-area-inset-bottom)) 15px; box-shadow: 0 -4px 15px rgba(0,0,0,0.05); z-index: 10; display: flex; justify-content: center; }
-    
-    .icon-nav { width: 100%; max-width: 400px; justify-content: space-between; border: 2px solid var(--border-color); background-color: var(--card-bg); background-image: linear-gradient(var(--bg-grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--bg-grid-color) 1px, transparent 1px); background-size: 15px 15px; }
-    .calendar-container { padding: 15px !important; margin: 0 auto !important; }
-    .calendar-grid { gap: 4px !important; }
-    .cal-cell { font-size: 12px; border-radius: 8px; }
-    .calendar-header h3 { font-size: 16px !important; }
-    #calendarView { padding: 10px !important; }
+
+    html {
+        height: -webkit-fill-available;
+    }
+
+    body {
+        min-height: 100vh !important;
+        height: -webkit-fill-available !important;
+        overflow: hidden !important;
+    }
+
+    .dashboard-wrapper {
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .main-content {
+        display: none;
+        flex: 1;
+        min-height: 0;
+
+        padding: 15px;
+        padding-bottom: 110px;
+
+        overflow: visible;
+        box-sizing: border-box;
+    }
+
+    .main-content.mobile-active {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .welcome-card {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden !important;
+    }
+
+    .dashboard-view {
+        flex: 1 !important;
+        min-height: 0 !important;
+
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+
+        -webkit-overflow-scrolling: touch !important;
+
+        padding-bottom: 80px !important;
+    }
+
+    .sidebar {
+        width: 100%;
+        flex: 1;
+        border-right: none;
+        padding: 20px;
+        justify-content: center;
+        padding-bottom: 110px;
+        transition: all 0.3s ease;
+        min-height: 0;
+    }
+
+    .sidebar.mobile-hidden {
+        display: none !important;
+    }
+
+    .logo-container {
+        margin-bottom: 15px;
+    }
+
+    .nav-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        width: 100%;
+        max-width: 500px;
+        margin: 0 auto;
+    }
+
+    .menu-btn {
+        flex-direction: row-reverse;
+        justify-content: center;
+        gap: 10px;
+        padding: 25px 10px;
+        text-align: center;
+    }
+
+    .icon-nav-container {
+        position: fixed;
+        top: auto;
+        bottom: 0;
+        left: 0;
+        right: 0;
+
+        background: white;
+
+        padding: 15px;
+
+        box-shadow: 0 -4px 15px rgba(0,0,0,0.05);
+
+        z-index: 999;
+
+        display: flex;
+        justify-content: center;
+    }
+
+    .icon-nav {
+        width: 100%;
+        max-width: 400px;
+
+        justify-content: space-between;
+
+        border: 2px solid var(--border-color);
+
+        background-color: var(--card-bg);
+
+        background-image:
+            linear-gradient(var(--bg-grid-color) 1px, transparent 1px),
+            linear-gradient(90deg, var(--bg-grid-color) 1px, transparent 1px);
+
+        background-size: 15px 15px;
+    }
+
+    .calendar-container {
+        padding: 15px !important;
+        margin: 0 auto !important;
+    }
+
+    .calendar-grid {
+        gap: 4px !important;
+    }
+
+    .cal-cell {
+        font-size: 12px;
+        border-radius: 8px;
+    }
+
+    .calendar-header h3 {
+        font-size: 16px !important;
+    }
+
+    #calendarView {
+        padding: 10px !important;
+    }
 }
 
 /* 🚨 TIMETABLE DASHBOARD */
