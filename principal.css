@@ -424,27 +424,6 @@ body {
 .stat-label { width: 120px; font-weight: 600; }
 .stat-value { font-weight: bold; color: #334155; }
 
-@media (max-width: 900px) {
-    .dashboard-wrapper { flex-direction: column; }
-    .main-content { display: none; padding: 15px; padding-bottom: 90px; height: 100%; overflow: hidden; flex: 1; }
-    .main-content.mobile-active { display: flex; } 
-    .sidebar { width: 100%; flex: 1; border-right: none; padding: 20px; justify-content: center; padding-bottom: 100px; transition: all 0.3s ease; }
-    .sidebar.mobile-hidden { display: none !important; } 
-    .logo-container { margin-bottom: 15px; }
-    .nav-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; max-width: 500px; margin: 0 auto; }
-    .menu-btn { flex-direction: row-reverse; justify-content: center; gap: 10px; padding: 25px 10px; text-align: center; }
-    
-    /* 👇 FIX IS APPLIED HERE: Added env(safe-area-inset-bottom) */
-    .icon-nav-container { position: fixed; top: auto; bottom: 0; left: 0; right: 0; background: white; padding: 15px 15px calc(15px + env(safe-area-inset-bottom)) 15px; box-shadow: 0 -4px 15px rgba(0,0,0,0.05); z-index: 10; display: flex; justify-content: center; }
-    
-    .icon-nav { width: 100%; max-width: 400px; justify-content: space-between; border: 2px solid var(--border-color); background-color: var(--card-bg); background-image: linear-gradient(var(--bg-grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--bg-grid-color) 1px, transparent 1px); background-size: 15px 15px; }
-    .calendar-container { padding: 15px !important; margin: 0 auto !important; }
-    .calendar-grid { gap: 4px !important; }
-    .cal-cell { font-size: 12px; border-radius: 8px; }
-    .calendar-header h3 { font-size: 16px !important; }
-    #calendarView { padding: 10px !important; }
-}
-
 /* 🚨 TIMETABLE DASHBOARD */
 .tt-select-pill { background: #bbf7d0; color: #166534; border: 1px solid #86efac; padding: 8px 20px; border-radius: 20px; font-weight: 700; font-size: 14px; outline: none; cursor: pointer; font-family: 'Poppins', sans-serif; box-shadow: 0 2px 10px rgba(74, 222, 128, 0.2); }
 .tt-days-container { display: flex; gap: 8px; }
@@ -894,12 +873,6 @@ html body.dark-mode [id*="close"]:hover {
     transform: scale(1.1);
 }
 
-/* 🚨 16. FLOATING SYSTEM DRAWER PANEL DESKTOP/MOBILE RESCUES */
-@media (max-width: 900px) {
-    body.dark-mode .icon-nav-container { background: transparent !important; }
-    body.dark-mode .main-content { background-color: var(--bg-base) !important; }
-}
-
 /* =========================================
    💎 PREMIUM SUBSCRIPTION UI (WEBSITE STYLE)
    ========================================= */
@@ -992,105 +965,6 @@ body.dark-mode #successExpiryDate { color: #94a3b8 !important; }
     }
 }
 
-/* =========================================
-   📱 MOBILE POLISH & GRID CUT-OFF FIX
-   ========================================= */
-@media (max-width: 900px) {
-    
-    body {
-        height: 100dvh !important;
-        overflow: hidden !important;
-    }
-
-    /* 1. 🚨 THE FIX: Margin pushes the physical box up. Grid will NOT go behind the nav! */
-    /* 1. 🚨 THE FIX: Use padding-bottom instead of margin to force the inner card to shrink! */
-    .main-content {
-        flex: 1 !important; 
-        height: 100% !important; /* Forces it to respect the 100dvh limit */
-        margin-bottom: 0 !important; /* Removes the buggy flexbox margin overflow */
-        
-        /* 👇 Applies the exact size of the bottom bar as internal padding, creating a physical gap */
-        padding: 15px 15px calc(85px + env(safe-area-inset-bottom)) 15px !important; 
-        
-        box-sizing: border-box !important;
-        overflow: hidden !important;
-    }
-
-    /* 2. Normal scroll settings inside the shorter box */
-    .dashboard-view {
-        height: 100% !important;
-        overflow-y: auto !important;
-        overflow-x: auto !important; /* 🚨 CHANGED: Allows horizontal scrolling! */
-        -webkit-overflow-scrolling: touch !important;
-        padding-bottom: 10px !important; 
-    }
-
-    /* 3. Fix Teacher/Student Cards Cut-off */
-    .data-card {
-        flex-direction: column !important;
-        align-items: flex-start !important;
-        gap: 15px !important;
-    }
-
-   /* 🚨 NEW: Forces the touch target to span the whole screen width on mobile */
-    .data-card > div:first-child {
-        width: 100% !important;
-    }
-    .data-card > div:nth-child(2) {
-        width: 100%;
-        justify-content: flex-start !important;
-        flex-wrap: wrap; 
-        gap: 12px;
-    }
-
-    /* 4. 🚨 THE UNIFIED SPREADSHEET SCROLL FIX */
-    
-    /* Revert the main view to stop the whole page from swiping */
-    .dashboard-view {
-        overflow-x: hidden !important; 
-    }
-
-    /* Make ONLY the table scroll sideways */
-    .attd-mobile-scroll {
-        width: 100%;
-        overflow-x: auto !important;
-        -webkit-overflow-scrolling: touch !important;
-        padding-bottom: 10px;
-        /* Hides the ugly scrollbar but keeps the swipe functionality */
-        scrollbar-width: none; 
-    }
-    .attd-mobile-scroll::-webkit-scrollbar { 
-        display: none; 
-    }
-
-    /* Force BOTH the Header and the Rows to have the exact same width and columns! */
-    .attd-header-row,
-    .attd-row {
-        min-width: 550px !important;
-        grid-template-columns: 1.8fr repeat(6, 1fr) !important; 
-    }
-    
-    .attd-row {
-        padding: 12px 10px !important;
-        gap: 5px !important;
-    }
-    
-    .attd-teacher-col { 
-        overflow: visible !important; 
-    }
-    
-    .attd-teacher-name {
-        font-size: 13px !important; 
-        white-space: normal !important;
-        display: block;
-    }
-    
-    .attd-slot {
-        font-size: 12px !important; 
-        padding: 4px !important;
-    }
-}
-
 /* =======================================================
    💎 INSTITUTIONAL FEE MANAGEMENT CENTER SPLIT GRID
    ======================================================= */
@@ -1141,136 +1015,78 @@ body.dark-mode #feeLiveStructureGrid span {
     color: #f87171 !important;
 }
 
-/* =======================================================
-   📱 MOBILE RESPONSIVE MEDIA QUERY MATRICES (UNDER 900px)
-   ======================================================= */
+/* ==========================================================================
+   MASTER MOBILE OVERRIDES (Everything under 900px consolidated)
+   ========================================================================== */
 @media (max-width: 900px) {
-    /* 1. Force vertical stacking with no illegal side-margins */
-    .fee-center-split-wrapper {
-        flex-direction: column !important;
-        align-items: stretch !important;
-        gap: 20px !important;
-        width: 100% !important;
-    }
-
-    /* 2. Format parent popup drawer wrapper bounds safely */
-    #feeConfigOverlay .compose-modal {
-        width: 92% !important;
-        max-width: 420px !important;
-        padding: 20px 15px !important;
-        max-height: 82vh !important;
-        overflow-y: auto !important;
-        box-sizing: border-box !important;
-    }
-
-    /* 3. Strip away the hardcoded minimum widths causing the horizontal stretch loop */
-    #feeConfigOverlay .fee-center-split-wrapper > div {
-        width: 100% !important;
-        min-width: 0 !important; 
-        box-sizing: border-box !important;
-    }
-
-    /* 4. Optimize the live record viewer box height & padding attributes */
-    #feeConfigOverlay .scrollable-card {
-        padding: 15px 12px !important;
-    }
-
-    #feeLiveStructureGrid {
-        max-height: 200px !important;
-        width: 100% !important;
-    }
-
-    /* 5. Scale dropdown selects and headings slightly for mobile display cards */
-    #feeConfigOverlay h3 {
-        font-size: 17px !important;
-        margin-bottom: 12px !important;
-    }
+    /* 1. LAYOUT & SIDEBAR */
+    .dashboard-wrapper { flex-direction: column !important; }
     
-    #feeConfigOverlay .input-field, 
-    #feeConfigOverlay #feeAmountInput {
-        padding: 10px !important;
-        font-size: 13px !important;
+    .sidebar { 
+        width: 100% !important; 
+        flex: 1 !important; 
+        border-right: none !important; 
+        padding: 20px !important; 
+        justify-content: center !important; 
+        padding-bottom: 100px !important; 
+        transition: all 0.3s ease !important; 
     }
+    .sidebar.mobile-hidden { display: none !important; } 
+    
+    .logo-container { margin-bottom: 15px; }
+    .nav-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; max-width: 500px; margin: 0 auto; }
+    .menu-btn { flex-direction: row-reverse; justify-content: center; gap: 10px; padding: 25px 10px; text-align: center; }
 
-    /* 🚨 ADDED HERE: ASSIGN CLASSES MOBILE OVERHAUL */
-    .asn-periods-grid {
-        grid-template-columns: 1fr !important;
-        gap: 15px !important;
-        width: 100% !important;
-        box-sizing: border-box !important;
-    }
-
-    .asn-period-wrapper {
-        padding: 12px !important;
-        border-radius: 12px !important;
-        gap: 10px !important;
-    }
-
-    .asn-period-header {
-        font-size: 14px !important;
-        margin-bottom: 2px !important;
-    }
-
-    .asn-grid {
-        grid-template-columns: 1fr 1fr !important;
-        gap: 8px !important;
-        margin-bottom: 8px !important;
-    }
-
-    .asn-input {
-        padding: 6px 10px !important;
-        font-size: 11px !important;
-        border-radius: 6px !important;
-    }
-
-    .asn-batch-badge {
-        font-size: 9px !important;
-        padding: 2px 10px !important;
-        top: -10px !important;
-        left: 10px !important;
-    }
-
-    .asn-split-btn {
-        padding: 6px !important;
-        font-size: 12px !important;
-        border-radius: 6px !important;
-    }
-
-    .main-content > div:first-child h2 {
-        font-size: 18px !important;
-        width: 100% !important;
-        text-align: center !important;
-    }
-
-    .main-content > div:first-child {
-        justify-content: center !important;
-        gap: 10px !important;
-    }
-} /* 🚨 This closing brace closes the entire @media query! */
-
-/* =========================================
-   🚨 ULTIMATE MOBILE BOTTOM BAR COLLISION FIX
-   ========================================= */
-@media (max-width: 900px) {
-    /* 1. Allow the main flex wrapper to shrink dynamically */
-    .dashboard-wrapper {
-        min-height: 0 !important;
-    }
-
-    /* 2. Strip 'height: 100%' so Flexbox calculates bounds, respecting your bottom padding */
+    /* 2. THE MAIN CONTENT (The Fix for Bottom Bar Collision) */
     .main-content {
+        display: none; 
         flex: 1 1 0% !important;
         height: auto !important; 
         min-height: 0 !important; 
         padding: 15px 15px calc(85px + env(safe-area-inset-bottom)) 15px !important;
         box-sizing: border-box !important;
+        overflow-y: auto !important; /* Enable scrolling in the content area */
     }
+    .main-content.mobile-active { display: flex !important; }
 
-    /* 3. Stop the inner green box from expanding into the parent's bottom padding */
     .welcome-card {
         flex: 1 1 0% !important;
         height: auto !important; 
         min-height: 0 !important; 
         margin: 0 !important;
     }
+
+    /* 3. NAVIGATION */
+    .icon-nav-container { 
+        position: fixed !important; top: auto !important; bottom: 0 !important; left: 0 !important; right: 0 !important; 
+        background: white !important; padding: 15px 15px calc(15px + env(safe-area-inset-bottom)) 15px !important; 
+        box-shadow: 0 -4px 15px rgba(0,0,0,0.05) !important; z-index: 1000 !important; display: flex !important; justify-content: center !important; 
+    }
+    .icon-nav { width: 100%; max-width: 400px; justify-content: space-between; }
+
+    /* 4. COMPONENTS */
+    .calendar-container { padding: 15px !important; margin: 0 auto !important; }
+    .calendar-grid { gap: 4px !important; }
+    .cal-cell { font-size: 12px; border-radius: 8px; }
+    .calendar-header h3 { font-size: 16px !important; }
+    #calendarView { padding: 10px !important; }
+    
+    .data-card { flex-direction: column !important; align-items: flex-start !important; gap: 15px !important; }
+    .data-card > div:first-child { width: 100% !important; }
+    
+    /* 5. SPREADSHEET FIXES */
+    .dashboard-view { height: 100% !important; overflow-y: auto !important; }
+    .attd-mobile-scroll { width: 100%; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; padding-bottom: 10px; scrollbar-width: none; }
+    .attd-mobile-scroll::-webkit-scrollbar { display: none; }
+    .attd-header-row, .attd-row { min-width: 550px !important; grid-template-columns: 1.8fr repeat(6, 1fr) !important; padding: 12px 10px !important; gap: 5px !important; }
+    .attd-teacher-name { font-size: 13px !important; white-space: normal !important; display: block; }
+
+    /* 6. FEE & ASSIGNMENT GRIDS */
+    .fee-center-split-wrapper { flex-direction: column !important; align-items: stretch !important; gap: 20px !important; }
+    #feeConfigOverlay .compose-modal { width: 92% !important; max-width: 420px !important; padding: 20px 15px !important; max-height: 82vh !important; }
+    .asn-periods-grid { grid-template-columns: 1fr !important; }
+
+    /* 7. DARK MODE OVERRIDES (Mobile specific) */
+    body.dark-mode .icon-nav-container { background: transparent !important; }
+    body.dark-mode .main-content { background-color: var(--bg-base) !important; }
 }
