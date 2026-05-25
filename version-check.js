@@ -20,7 +20,7 @@ remoteConfig.settings = {
 // ==========================================
 // 🚨 CHANGE ONLY THIS VERSION
 // ==========================================
-const LOCAL_VERSION = "1.0.27";
+const LOCAL_VERSION = "1.0.28";
 
 // ==========================================
 // SHOW VERSION TEXT
