@@ -997,21 +997,25 @@ body.dark-mode #successExpiryDate { color: #94a3b8 !important; }
    ========================================= */
 @media (max-width: 900px) {
     
+    html {
+        height: -webkit-fill-available;
+    }
+
     body {
-        height: 100dvh !important;
+        min-height: 100vh !important;
+        height: -webkit-fill-available !important;
         overflow: hidden !important;
     }
 
     /* 1. 🚨 THE FIX: Force strict bounds so it can't stretch behind the nav */
     .main-content {
         display: none; /* CRITICAL: Must be none by default so the grid shows! */
-        flex: 1 !important; 
-        height: 100% !important; /* 🚨 Back to 100% so it respects the screen height */
+        flex: 1 !important;
         min-height: 0 !important; /* 🚨 MAGIC RULE: Forces Flexbox to scroll instead of stretch! */
-        margin-bottom: 0 !important; 
+        margin-bottom: 0 !important;
         
         /* This padding holds it perfectly above the nav bar */
-        padding: 15px 15px calc(85px + env(safe-area-inset-bottom)) 15px !important; 
+        padding: 15px 15px calc(85px + env(safe-area-inset-bottom)) 15px !important;
         
         box-sizing: border-box !important;
         overflow: hidden !important;
@@ -1025,42 +1029,43 @@ body.dark-mode #successExpiryDate { color: #94a3b8 !important; }
 
     /* 3. Force the inner card to also strictly respect the bounds */
     .welcome-card {
-        flex: 1 !important; 
-        height: 100% !important; /* 🚨 Must be 100% to fill the padded area */
+        flex: 1 !important;
         min-height: 0 !important; /* 🚨 Magic flexbox rule again */
     }
-    /* 2. Normal scroll settings inside the shorter box */
+
+    /* 4. Normal scroll settings inside the shorter box */
     .dashboard-view {
         height: 100% !important;
         overflow-y: auto !important;
-        overflow-x: auto !important; /* 🚨 CHANGED: Allows horizontal scrolling! */
+        overflow-x: auto !important;
         -webkit-overflow-scrolling: touch !important;
-        padding-bottom: 10px !important; 
+        padding-bottom: 10px !important;
     }
 
-    /* 3. Fix Teacher/Student Cards Cut-off */
+    /* 5. Fix Teacher/Student Cards Cut-off */
     .data-card {
         flex-direction: column !important;
         align-items: flex-start !important;
         gap: 15px !important;
     }
 
-   /* 🚨 NEW: Forces the touch target to span the whole screen width on mobile */
+    /* 🚨 NEW: Forces the touch target to span the whole screen width on mobile */
     .data-card > div:first-child {
         width: 100% !important;
     }
+
     .data-card > div:nth-child(2) {
         width: 100%;
         justify-content: flex-start !important;
-        flex-wrap: wrap; 
+        flex-wrap: wrap;
         gap: 12px;
     }
 
-    /* 4. 🚨 THE UNIFIED SPREADSHEET SCROLL FIX */
-    
+    /* 6. 🚨 THE UNIFIED SPREADSHEET SCROLL FIX */
+
     /* Revert the main view to stop the whole page from swiping */
     .dashboard-view {
-        overflow-x: hidden !important; 
+        overflow-x: hidden !important;
     }
 
     /* Make ONLY the table scroll sideways */
@@ -1069,37 +1074,39 @@ body.dark-mode #successExpiryDate { color: #94a3b8 !important; }
         overflow-x: auto !important;
         -webkit-overflow-scrolling: touch !important;
         padding-bottom: 10px;
+
         /* Hides the ugly scrollbar but keeps the swipe functionality */
-        scrollbar-width: none; 
+        scrollbar-width: none;
     }
-    .attd-mobile-scroll::-webkit-scrollbar { 
-        display: none; 
+
+    .attd-mobile-scroll::-webkit-scrollbar {
+        display: none;
     }
 
     /* Force BOTH the Header and the Rows to have the exact same width and columns! */
     .attd-header-row,
     .attd-row {
         min-width: 550px !important;
-        grid-template-columns: 1.8fr repeat(6, 1fr) !important; 
+        grid-template-columns: 1.8fr repeat(6, 1fr) !important;
     }
-    
+
     .attd-row {
         padding: 12px 10px !important;
         gap: 5px !important;
     }
-    
-    .attd-teacher-col { 
-        overflow: visible !important; 
+
+    .attd-teacher-col {
+        overflow: visible !important;
     }
-    
+
     .attd-teacher-name {
-        font-size: 13px !important; 
+        font-size: 13px !important;
         white-space: normal !important;
         display: block;
     }
-    
+
     .attd-slot {
-        font-size: 12px !important; 
+        font-size: 12px !important;
         padding: 4px !important;
     }
 }
