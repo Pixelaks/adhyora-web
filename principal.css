@@ -155,19 +155,24 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
 
-/* 🚨 FIX: Force HTML background so the PWA bottom nav bar detects it */
+/* 🚨 FIX: Force the background to draw underneath the system navigation bar */
 html {
     background-color: var(--bg-base, #ffffff);
-    height: 100%;
+    min-height: 100vh;
+    min-height: -webkit-fill-available; /* iOS/Android edge-to-edge trick */
 }
 
 body {
     background-color: var(--bg-base);
     color: var(--text-green);
-    height: 100vh;
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    /* This ensures your actual content doesn't hide behind the nav bar, 
+       but the background color continues to paint underneath it! */
+    padding-bottom: env(safe-area-inset-bottom);
 }
 
 .dashboard-wrapper {
@@ -1091,16 +1096,15 @@ body.dark-mode #feeLiveStructureGrid span {
     /* 1. ROOT LAYOUT */
     html,
     body {
-        height: 100%;
+        min-height: 100vh;
+        min-height: -webkit-fill-available;
         overflow: hidden !important;
     }
 
     .dashboard-wrapper {
         flex-direction: column !important;
-
-        height: 100dvh !important;
-        max-height: 100dvh !important;
-
+        flex: 1 !important; /* Let it stretch naturally */
+        height: 100% !important;
         overflow: hidden !important;
     }
 
