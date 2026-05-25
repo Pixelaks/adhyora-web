@@ -1176,8 +1176,11 @@ body.dark-mode #feeLiveStructureGrid span {
     }
 
     .icon-nav {
-        width: 100%;
+        width: 90%;
         max-width: 400px;
+
+       /* Ensure it remains centered if the width is less than 100% */
+        margin: 0 auto;
 
         justify-content: space-between;
     }
