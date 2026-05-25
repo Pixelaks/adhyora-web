@@ -4688,104 +4688,244 @@ document.onkeydown = function(e) {
 // 🚨 HARDWARE BACK BUTTON / ROUTING MANAGER
 // ==========================================
 
-// 🚀 THE FIX: Force a unique state object so Android ALWAYS registers a new history layer!
-function trapBackButton() {
-    window.history.pushState({ trap: Date.now() }, "", window.location.href);
-}
-
-// Push the first trap slightly after load to ensure the browser honors it
-window.addEventListener('load', () => {
-    setTimeout(trapBackButton, 500);
-});
-
 let lastBackPressTime = 0;
 
-window.addEventListener('popstate', (e) => {
-    
-    // 1. Security Check (Block back button if locked or paywalled)
-    if (elLock.screen && elLock.screen.style.display === "flex") {
-        trapBackButton();
-        return;
-    }
-    const subBlock = document.getElementById("subBlockPanel");
-    if (subBlock && subBlock.style.display === "flex") {
-        trapBackButton();
-        return;
-    }
+// Prevent duplicate handling
+let isHandlingBack = false;
 
-    // 2. Modals & Overlays (Close the top-most active popup)
-    const closableOverlays = [
-        "pinOverlay", "confirmOverlay", "durationOverlay", "addDeptOverlay", "combineOverlay",
-        "moveBatchOverlay", "deptSplitOverlay", "promoteWarningOverlay", "exportOverlay",
-        "subjectEditOverlay", "studentAdminOverlay", "composeOverlay", "settingsOverlay",
-        "themesModal", "sessionsModal", "reAuthOverlay", "subSuccessPanel", "feeConfigOverlay"
-    ];
-    
-    for (let id of closableOverlays) {
-        let el = document.getElementById(id);
-        if (el && el.classList.contains("active")) {
-            el.classList.remove("active");
-            
-            // Clean up specific inputs
-            if (id === "pinOverlay" && document.getElementById("pinInput")) {
-                document.getElementById("pinInput").value = "";
-            }
-            if (id === "reAuthOverlay") {
-                elLock.reAuthPass.value = "";
-                elLock.reAuthStatus.innerText = "";
-            }
-            
-            trapBackButton(); // 🚨 Re-trap so the NEXT back press doesn't exit!
-            return; 
-        }
-    }
+// Push unique history state
+function pushNavState(type = "view") {
+    history.pushState({
+        navType: type,
+        time: Date.now()
+    }, "", location.href);
+}
 
-    // 3. Deep Sub-Views (Profiles, Timetable Assign, etc)
-    if (views.teacherDashboard && !views.teacherDashboard.classList.contains("hidden-view")) {
-        switchView(views.teacherList);
-        trapBackButton(); // 🚨 Re-trap!
-        return;
-    }
-    if (views.studentDashboard && !views.studentDashboard.classList.contains("hidden-view")) {
-        switchView(views.studentList);
-        trapBackButton(); // 🚨 Re-trap!
-        return;
-    }
-    if (views.assign && !views.assign.classList.contains("hidden-view")) {
-        switchView(views.timetable);
-        trapBackButton(); // 🚨 Re-trap!
-        return;
-    }
+// Initial trap
+window.addEventListener("load", () => {
+    setTimeout(() => {
+        pushNavState("root");
+    }, 300);
+});
 
-    // 4. Are we on the Home Screen?
-    let isHome = false;
+// ==========================================
+// PANEL / POPUP HELPERS
+// ==========================================
+
+// Call this whenever opening ANY popup
+function registerPopupOpen() {
+    pushNavState("popup");
+}
+
+// Call this whenever opening ANY panel/view
+function registerPanelOpen() {
+    pushNavState("panel");
+}
+
+// ==========================================
+// BACK BUTTON HANDLER
+// ==========================================
+
+window.addEventListener("popstate", async () => {
+
+    if (isHandlingBack) return;
+    isHandlingBack = true;
+
     try {
-        if (window.innerWidth > 900) {
-            isHome = views.welcome && !views.welcome.classList.contains("hidden-view");
-        } else {
-            isHome = sidebar && !sidebar.classList.contains("mobile-hidden") && mainContent && !mainContent.classList.contains("mobile-active");
+
+        // ==========================================
+        // 1. SECURITY BLOCKS
+        // ==========================================
+
+        if (elLock.screen &&
+            elLock.screen.style.display === "flex") {
+
+            pushNavState("locked");
+            return;
         }
-    } catch(err) { 
-        isHome = false; 
-    }
 
-    if (!isHome) {
-        // We are inside a sidebar menu item (like Roomcode). Go back to HOME.
-        switchView("HOME");
-        trapBackButton(); // 🚨 Re-trap!
-        return;
-    }
+        const subBlock = document.getElementById("subBlockPanel");
 
-    // 5. We are on the Home Screen with zero popups open. Prompt Double-Tap Exit!
-    let currentTime = Date.now();
-    if (currentTime - lastBackPressTime < 2000) {
-        // Double-tapped within 2 seconds! Trigger the actual exit.
-        window.history.back(); 
-    } else {
-        // First tap
-        lastBackPressTime = currentTime;
-        showRcToast("Press back again to exit");
-        trapBackButton(); // Trap it one more time so they can tap again!
+        if (subBlock &&
+            subBlock.style.display === "flex") {
+
+            pushNavState("subblock");
+            return;
+        }
+
+        // ==========================================
+        // 2. CLOSE ACTIVE POPUPS FIRST
+        // ==========================================
+
+        const closableOverlays = [
+            "pinOverlay",
+            "confirmOverlay",
+            "durationOverlay",
+            "addDeptOverlay",
+            "combineOverlay",
+            "moveBatchOverlay",
+            "deptSplitOverlay",
+            "promoteWarningOverlay",
+            "exportOverlay",
+            "subjectEditOverlay",
+            "studentAdminOverlay",
+            "composeOverlay",
+            "settingsOverlay",
+            "themesModal",
+            "sessionsModal",
+            "reAuthOverlay",
+            "subSuccessPanel",
+            "feeConfigOverlay"
+        ];
+
+        for (let id of closableOverlays) {
+
+            let el = document.getElementById(id);
+
+            if (
+                el &&
+                (
+                    el.classList.contains("active") ||
+                    el.style.display === "flex" ||
+                    el.style.display === "block"
+                )
+            ) {
+
+                el.classList.remove("active");
+                el.style.display = "none";
+
+                // Cleanup
+                if (id === "pinOverlay") {
+                    const pinInput =
+                        document.getElementById("pinInput");
+
+                    if (pinInput) {
+                        pinInput.value = "";
+                    }
+                }
+
+                if (id === "reAuthOverlay") {
+
+                    if (elLock.reAuthPass) {
+                        elLock.reAuthPass.value = "";
+                    }
+
+                    if (elLock.reAuthStatus) {
+                        elLock.reAuthStatus.innerText = "";
+                    }
+                }
+
+                // IMPORTANT:
+                // Recreate state for underlying panel
+                pushNavState("panel");
+
+                return;
+            }
+        }
+
+        // ==========================================
+        // 3. DEEP SUB VIEWS
+        // ==========================================
+
+        if (
+            views.teacherDashboard &&
+            !views.teacherDashboard.classList.contains("hidden-view")
+        ) {
+            switchView(views.teacherList);
+
+            pushNavState("panel");
+            return;
+        }
+
+        if (
+            views.studentDashboard &&
+            !views.studentDashboard.classList.contains("hidden-view")
+        ) {
+            switchView(views.studentList);
+
+            pushNavState("panel");
+            return;
+        }
+
+        if (
+            views.assign &&
+            !views.assign.classList.contains("hidden-view")
+        ) {
+            switchView(views.timetable);
+
+            pushNavState("panel");
+            return;
+        }
+
+        // ==========================================
+        // 4. CHECK HOME SCREEN
+        // ==========================================
+
+        let isHome = false;
+
+        try {
+
+            if (window.innerWidth > 900) {
+
+                isHome =
+                    views.welcome &&
+                    !views.welcome.classList.contains("hidden-view");
+
+            } else {
+
+                isHome =
+                    sidebar &&
+                    !sidebar.classList.contains("mobile-hidden") &&
+                    mainContent &&
+                    !mainContent.classList.contains("mobile-active");
+            }
+
+        } catch (err) {
+            isHome = false;
+        }
+
+        // ==========================================
+        // 5. IF INSIDE PANEL -> GO HOME
+        // ==========================================
+
+        if (!isHome) {
+
+            switchView("HOME");
+
+            pushNavState("home");
+
+            return;
+        }
+
+        // ==========================================
+        // 6. DOUBLE TAP EXIT
+        // ==========================================
+
+        let currentTime = Date.now();
+
+        if (currentTime - lastBackPressTime < 2000) {
+
+            // DO NOT CALL history.back()
+            // DO NOT REDIRECT
+            // DO NOT SIGNOUT
+
+            // Allow Android native exit naturally
+            return;
+
+        } else {
+
+            lastBackPressTime = currentTime;
+
+            showRcToast("Press back again to exit");
+
+            pushNavState("home");
+        }
+
+    } finally {
+
+        setTimeout(() => {
+            isHandlingBack = false;
+        }, 100);
     }
 });
 
