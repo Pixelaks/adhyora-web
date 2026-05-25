@@ -1137,7 +1137,7 @@ body.dark-mode #feeLiveStructureGrid span {
     flex: 1 1 0px !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch !important;
-    padding-bottom: 120px !important;       /* breathing room lives here now */
+    padding-bottom: 20px !important;       /* Fixed: Reduced massive dead space */
 }
 
 /* Views that scroll themselves (no inner scrollable-list) */
@@ -1146,7 +1146,7 @@ body.dark-mode #feeLiveStructureGrid span {
 #teacherDashboardView,
 #dataView {
     overflow-y: auto !important;
-    padding-bottom: 120px !important;
+    padding-bottom: 20px !important;       /* Fixed: Reduced massive dead space */
 }
 
     /* 6. BOTTOM NAVIGATION */
