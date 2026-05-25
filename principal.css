@@ -68,6 +68,7 @@
     position: fixed;
     inset: 0;
     background-color: #0b111e; /* Dark navy */
+    padding-bottom: env(safe-area-inset-bottom); /* 🚨 FIX: Extend into safe area */
     
     /* Subtle Grid Background Pattern */
     background-image: 
@@ -153,6 +154,12 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+
+/* 🚨 FIX: Force HTML background so the PWA bottom nav bar detects it */
+html {
+    background-color: var(--bg-base, #ffffff);
+    height: 100%;
+}
 
 body {
     background-color: var(--bg-base);
@@ -332,7 +339,7 @@ body {
 }
 .settings-header h3 { color: var(--text-green); font-size: 18px; margin-bottom: 5px; }
 .settings-header p { color: #64748b; font-size: 13px; margin-bottom: 10px; }
-.role-badge { display: inline-block; background: var(--text-green); color: white; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; }
+.role-badge { display: inline-block; background: #5aad51; color: white; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; }
 
 .settings-menu { display: flex; flex-direction: column; gap: 10px; flex: 1; overflow-y: auto; padding-right: 5px;}
 .settings-menu::-webkit-scrollbar { width: 4px; }
@@ -429,14 +436,38 @@ body {
 .tt-days-container { display: flex; gap: 8px; }
 .tt-day-btn { background: rgba(187, 247, 208, 0.4); color: #475569; border: 1px dashed #86efac; padding: 6px 15px; border-radius: 12px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; }
 .tt-day-btn.active { background: #86efac; color: #166534; border-style: solid; box-shadow: 0 2px 8px rgba(74, 222, 128, 0.4); }
-.tt-main-wrapper { display: flex; flex-direction: column; padding-left: 10px; padding-top: 10px; }
-.tt-row { display: flex; gap: 20px; position: relative; margin-bottom: 20px; }
-.tt-timeline-col { width: 40px; display: flex; flex-direction: column; align-items: center; position: relative; z-index: 2; }
+.tt-main-wrapper { 
+    display: flex; 
+    flex-direction: column; 
+    padding-left: 0px; /* 🚨 FIX: Removed the 10px extra left padding */
+    padding-top: 10px; 
+}
+
+.tt-row { 
+    display: flex; 
+    gap: 12px; /* 🚨 FIX: Reduced from 20px to pull the cards closer to the line */
+    position: relative; 
+    margin-bottom: 20px; 
+}
+
+.tt-timeline-col { 
+    width: 32px; /* 🚨 FIX: Tightened from 40px so it perfectly hugs the circle width */
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    position: relative; 
+    z-index: 2; 
+}
 .tt-node { width: 32px; height: 32px; background: white; border: 2px solid #333; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 14px; color: #333; z-index: 3; transition: background 0.3s, color 0.3s; }
 .tt-line-bg { position: absolute; top: 32px; bottom: -20px; width: 6px; background: #e2e8f0; z-index: 1; }
 .tt-line-fill { position: absolute; top: 0; left: 0; width: 100%; background: var(--brand-green); height: 0%; transition: height 0.5s ease; }
 .tt-card { flex: 1; background: white; border: 1.5px solid #333; border-radius: 20px; padding: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; transition: background-color 0.3s ease; min-height: 100px; }
-.tt-split-card { border-style: dashed; margin-top: -10px; margin-left: 60px; }
+/* 🚨 CRITICAL FIX: Because we shrunk the gap and column, we must also update the split-card offset! (32px col + 12px gap = 44px) */
+.tt-split-card { 
+    border-style: dashed; 
+    margin-top: -10px; 
+    margin-left: 44px; /* 🚨 FIX: Reduced from 60px so split classes still align perfectly */
+}
 .tt-input-field { width: 100%; padding: 10px 15px; border: 1px dashed #cbd5e1; border-radius: 20px; background: #f8fafc; font-size: 12px; font-weight: 600; color: #475569; outline: none; font-family: 'Poppins', sans-serif; appearance: none; }
 .tt-input-field:disabled { background: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
 .tt-input-field.select { background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 10px center; background-size: 1em; padding-right: 30px; }
@@ -446,7 +477,19 @@ body {
    🚨 ASSIGN PANEL DASHBOARD (COMPACT GRID)
    ========================================= */
 .asn-select-pill { background: #bbf7d0; color: #166534; border: 1px solid #86efac; padding: 6px 20px; border-radius: 20px; font-weight: 700; font-size: 13px; outline: none; cursor: pointer; font-family: 'Poppins', sans-serif; box-shadow: 0 2px 8px rgba(74, 222, 128, 0.2); }
-.asn-days-container { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.asn-days-container { 
+    display: flex; 
+    gap: 8px; 
+    flex-wrap: nowrap; /* 🚨 FIX: Forces all buttons onto one single line */
+    justify-content: center; 
+    overflow-x: auto; /* Safety net: allows horizontal swipe on very tiny phones without breaking layout */
+    scrollbar-width: none; /* Firefox: hides the scrollbar for a clean look */
+}
+
+/* Chrome/Safari/Edge: hides the scrollbar for a clean look */
+.asn-days-container::-webkit-scrollbar { 
+    display: none; 
+}
 .asn-day-btn { background: white; color: #475569; border: 1px solid #cbd5e1; padding: 6px 15px; border-radius: 15px; font-weight: 600; font-size: 12px; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
 .asn-day-btn.active { background: #86efac; color: #166534; border-color: #4ade80; box-shadow: 0 2px 8px rgba(74, 222, 128, 0.3); transform: translateY(-1px); }
 
@@ -506,7 +549,7 @@ body {
 .asn-split-btn.del { background: #fca5a5; }
 .asn-split-btn.del:hover { background: #f87171; }
 
-.asn-save-btn { background: white; color: #4ade80; border: 2px solid #4ade80; padding: 8px 25px; border-radius: 20px; font-weight: bold; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+.asn-save-btn { background: #4ade80; color: white; border: 2px solid #4ade80; padding: 8px 25px; border-radius: 20px; font-weight: bold; font-size: 13px; cursor: pointer; transition: all 0.2s; }
 .asn-save-btn:hover { background: #4ade80; color: white; }
 
 /* =========================================
@@ -571,7 +614,7 @@ body.dark-mode {
     --bg-surface: #1e293b;      /* Lighter slate for cards and surfaces */
     --brand-green: #16a34a;     /* Deepened crisp green for functional actions */
     --text-green: #4ade80;      /* Eye-friendly light neon green text */
-    --text-light-green: #86efac;
+    --text-light-green: #4ade80;
     --text-dark: #94a3b8;       /* Soft Slate-400 to remove pure white glare */
     --text-muted: #64748b;      /* Slate-500 secondary text */
     --bg-grid-color: rgba(74, 222, 128, 0.05);
@@ -580,6 +623,8 @@ body.dark-mode {
     color: #f8fafc;
     color-scheme: dark;         /* Forces browser inputs, scrolls, and system widgets dark */
 }
+
+
 
 /* 🚨 1. GLOBAL & SCROLLBAR OVERRIDES */
 body.dark-mode *::-webkit-scrollbar-track { background: var(--bg-base) !important; }
@@ -594,6 +639,19 @@ body.dark-mode .icon-nav {
     box-shadow: 0 4px 15px rgba(0,0,0,0.5) !important;
 }
 body.dark-mode .nav-icon-btn { color: var(--text-muted) !important; }
+
+/* 🚨 KEEP ROOMCODE TOP BUTTON TEXT COLORS IN DARK MODE */
+body.dark-mode #btnOpenCombine {
+    color: #334155 !important;
+}
+
+body.dark-mode #btnRegenAll {
+    color: #ef4444 !important;
+}
+
+body.dark-mode #btnOpenAddDept {
+    color: white !important;
+}
 body.dark-mode .nav-icon-btn:hover,
 body.dark-mode .nav-icon-btn.active-nav { color: var(--text-green) !important; }
 
@@ -623,12 +681,12 @@ body.dark-mode [style*="background-color:white"]:not(.evt-card),
 body.dark-mode [style*="background-color: #ffffff"]:not(.evt-card),
 body.dark-mode [style*="background-color:#ffffff"]:not(.evt-card),
 body.dark-mode [style*="background: var(--bg-base)"] {
-    background-color: var(--bg-surface) !important;
+    background-color: #1e293b !important;
     color: #f8fafc !important;
-    border-top: 1px solid var(--border-color) !important;
-    border-right: 1px solid var(--border-color) !important;
-    border-bottom: 1px solid var(--border-color) !important;
-    box-shadow: 0 8px 25px rgba(0,0,0,0.4) !important;
+    border-top: 1px solid #33415500 !important;
+    border-right: 1px solid #33415500 !important;
+    border-bottom: 1px solid #33415500 !important;
+    box-shadow: 0 8px 25px rgb(0 0 0 / 34%) !important;
 }
 
 /* 🚨 5. FIXED: EVENT CARD HOVER WHITE INJECTION AND TRANSITIONS */
@@ -678,7 +736,7 @@ body.dark-mode .attd-row:hover {
     background-color: rgba(255, 255, 255, 0.02) !important;
 }
 body.dark-mode .attd-teacher-name {
-    color: #ffffff !important;
+    color: #c7c7c7 !important;
 }
 body.dark-mode .attd-teacher-dept {
     color: var(--text-dark) !important;
@@ -729,14 +787,14 @@ body.dark-mode .tt-input-field,
 body.dark-mode select.asn-input,
 body.dark-mode select.tt-input-field { 
     background-color: var(--bg-base) !important; 
-    color: #cbd5e1 !important; /* Muted soft slate-200 instead of piercing white */
+    color: #afafaf  !important; /* Muted soft slate-200 instead of piercing white */
     border: 1px solid var(--border-color) !important; 
 }
 body.dark-mode select option,
 body.dark-mode .asn-input option,
 body.dark-mode .tt-input-field option {
     background-color: var(--bg-base) !important;
-    color: #cbd5e1 !important;
+    color: #afafaf  !important;
 }
 body.dark-mode .asn-input:disabled, body.dark-mode .tt-input-field:disabled { background-color: var(--bg-surface) !important; color: var(--text-muted) !important; }
 body.dark-mode .action-icon-btn { background-color: var(--bg-base) !important; color: var(--text-dark) !important; border: 1px solid var(--border-color) !important; }
@@ -751,17 +809,27 @@ body.dark-mode .tt-action-btn,
 body.dark-mode [style*="background: #86efac"],
 body.dark-mode [style*="background:#86efac"],
 body.dark-mode button[style*="background-color: rgb(74, 222, 128)"] {
-    background-color: #16a34a !important;
-    color: #ffffff !important; 
+    background-color: #16a34a0d !important;
+    color: #41bb72 !important;
     border-color: #16a34a !important;
 }
 
+body.dark-mode #sdSemesterTitle {
+    color: #cbd5e1 !important;
+}
+
 /* 🚨 13. STRUCTURAL TEXT VARIANT OVERRIDES */
-body.dark-mode .card-title, body.dark-mode .sub-title, body.dark-mode .evt-title, body.dark-mode .btn-text, body.dark-mode .stat-value, body.dark-mode .tt-day, body.dark-mode .tt-header, body.dark-mode .asn-period-header, body.dark-mode h4, body.dark-mode h3 { color: #f8fafc !important; }
+body.dark-mode .card-title, body.dark-mode .sub-title, body.dark-mode .evt-title, body.dark-mode .stat-value, body.dark-mode .tt-day, body.dark-mode .tt-header, body.dark-mode .asn-period-header, body.dark-mode h4, body.dark-mode h3 { color: #c2c2c2 !important; }
+body.dark-mode h3 {
+    color: #5aad51 !important;
+}
 body.dark-mode .card-body, body.dark-mode .sub-code, body.dark-mode .evt-meta, body.dark-mode .stat-label, body.dark-mode p { color: #cbd5e1 !important; }
 body.dark-mode .sidebar { background-color: var(--bg-base) !important; border-right: 1px solid var(--border-color) !important; }
 body.dark-mode .menu-btn { background-color: var(--bg-surface) !important; border-color: var(--border-color) !important; }
 body.dark-mode .menu-btn:hover { background-color: rgba(74, 222, 128, 0.08) !important; border-color: rgba(74, 222, 128, 0.2) !important; }
+body.dark-mode .btn-text {
+    color: #abadab !important;
+}
 
 /* 🚨 14. STATUS ACCENTS, BADGES, AND GRAPHICS WAVES */
 body.dark-mode .circle-wave-wrap { background: var(--bg-base) !important; border-color: var(--border-color) !important; }
@@ -788,7 +856,7 @@ body.dark-mode .nav-icon-btn.active-nav,
 body.dark-mode .nav-icon-btn {
     background: transparent !important;
     background-color: transparent !important;
-    border: none !important;
+    border-color: var(--text-green) !important;
     box-shadow: none !important;
 }
 
