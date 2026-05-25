@@ -1120,6 +1120,10 @@ body.dark-mode #feeLiveStructureGrid span {
         flex-direction: column !important;
     }
 
+   .logo-text {
+        font-size: 3.5rem; 
+    }
+
     /* 5. ACTUAL SCROLL AREA */
 .dashboard-view {
     flex: 1 1 0px !important;
