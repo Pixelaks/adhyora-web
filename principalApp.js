@@ -4687,22 +4687,29 @@ document.onkeydown = function(e) {
 // ==========================================
 // 🚨 HARDWARE BACK BUTTON / ROUTING MANAGER
 // ==========================================
-// Push an initial state to trap the back button the moment the app loads
-history.pushState(null, null, location.href);
 
-// 🚨 NEW: Variable to track the double-tap timing for exiting
+// 🚀 THE FIX: Force a unique state object so Android ALWAYS registers a new history layer!
+function trapBackButton() {
+    window.history.pushState({ trap: Date.now() }, "", window.location.href);
+}
+
+// Push the first trap slightly after load to ensure the browser honors it
+window.addEventListener('load', () => {
+    setTimeout(trapBackButton, 500);
+});
+
 let lastBackPressTime = 0;
 
-window.addEventListener('popstate', () => {
+window.addEventListener('popstate', (e) => {
     
     // 1. Security Check (Block back button if locked or paywalled)
     if (elLock.screen && elLock.screen.style.display === "flex") {
-        history.pushState(null, null, location.href);
+        trapBackButton();
         return;
     }
     const subBlock = document.getElementById("subBlockPanel");
     if (subBlock && subBlock.style.display === "flex") {
-        history.pushState(null, null, location.href);
+        trapBackButton();
         return;
     }
 
@@ -4719,59 +4726,66 @@ window.addEventListener('popstate', () => {
         if (el && el.classList.contains("active")) {
             el.classList.remove("active");
             
-            // Clean up specific inputs if they used back button to cancel
-            if(id === "pinOverlay" && document.getElementById("pinInput")) {
+            // Clean up specific inputs
+            if (id === "pinOverlay" && document.getElementById("pinInput")) {
                 document.getElementById("pinInput").value = "";
             }
-            if(id === "reAuthOverlay") {
+            if (id === "reAuthOverlay") {
                 elLock.reAuthPass.value = "";
                 elLock.reAuthStatus.innerText = "";
             }
             
-            // 🚨 CRITICAL FIX: Push state again so the NEXT back press doesn't exit the app!
-            history.pushState(null, null, location.href);
-            return; // Stop here! We only want to close one layer at a time.
+            trapBackButton(); // 🚨 Re-trap so the NEXT back press doesn't exit!
+            return; 
         }
     }
 
-    // 3. Deep Sub-Views (e.g., looking at a specific teacher/student profile)
+    // 3. Deep Sub-Views (Profiles, Timetable Assign, etc)
     if (views.teacherDashboard && !views.teacherDashboard.classList.contains("hidden-view")) {
         switchView(views.teacherList);
-        history.pushState(null, null, location.href); // 🚨 Re-trap!
+        trapBackButton(); // 🚨 Re-trap!
         return;
     }
     if (views.studentDashboard && !views.studentDashboard.classList.contains("hidden-view")) {
         switchView(views.studentList);
-        history.pushState(null, null, location.href); // 🚨 Re-trap!
+        trapBackButton(); // 🚨 Re-trap!
+        return;
+    }
+    if (views.assign && !views.assign.classList.contains("hidden-view")) {
+        switchView(views.timetable);
+        trapBackButton(); // 🚨 Re-trap!
         return;
     }
 
     // 4. Are we on the Home Screen?
     let isHome = false;
-    if (window.innerWidth > 900) {
-        isHome = views.welcome && !views.welcome.classList.contains("hidden-view");
-    } else {
-        isHome = sidebar && !sidebar.classList.contains("mobile-hidden") && !mainContent.classList.contains("mobile-active");
+    try {
+        if (window.innerWidth > 900) {
+            isHome = views.welcome && !views.welcome.classList.contains("hidden-view");
+        } else {
+            isHome = sidebar && !sidebar.classList.contains("mobile-hidden") && mainContent && !mainContent.classList.contains("mobile-active");
+        }
+    } catch(err) { 
+        isHome = false; 
     }
 
     if (!isHome) {
         // We are inside a sidebar menu item (like Roomcode). Go back to HOME.
         switchView("HOME");
-        history.pushState(null, null, location.href); // 🚨 Re-trap!
+        trapBackButton(); // 🚨 Re-trap!
         return;
     }
 
     // 5. We are on the Home Screen with zero popups open. Prompt Double-Tap Exit!
     let currentTime = Date.now();
     if (currentTime - lastBackPressTime < 2000) {
-        // Double-tapped within 2 seconds! Let the app naturally exit.
-        // Do NOT push state here. The browser will close the app/tab.
-        return; 
+        // Double-tapped within 2 seconds! Trigger the actual exit.
+        window.history.back(); 
     } else {
         // First tap
         lastBackPressTime = currentTime;
         showRcToast("Press back again to exit");
-        history.pushState(null, null, location.href); // Trap it one more time so they can tap again!
+        trapBackButton(); // Trap it one more time so they can tap again!
     }
 });
 
