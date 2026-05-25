@@ -4685,21 +4685,26 @@ document.onkeydown = function(e) {
 };
 
 // ==========================================
-// 🚨 HARDWARE BACK BUTTON / ROUTING MANAGER
+// 🚨 HARDWARE BACK BUTTON / ROUTING MANAGER (PREMIUM FIX)
 // ==========================================
-// Push an initial state to trap the back button the moment the app loads
-history.pushState(null, null, location.href);
+
+// 1. Push an initial state, then another to create a solid "trap" buffer
+history.pushState({ page: 'adhyora_base' }, null, location.href);
+history.pushState({ page: 'adhyora_active' }, null, location.href);
+
+let lastBackPressTime = 0;
+const doubleTapTime = 2000; // 2 seconds, matching your C# Exit Settings
 
 window.addEventListener('popstate', () => {
-    // 1. Immediately push another state to stay trapped inside the app
-    history.pushState(null, null, location.href);
+    // 2. Immediately re-push the state to maintain the trap inside the app
+    history.pushState({ page: 'adhyora_active' }, null, location.href);
 
-    // 2. Security Check (Block back button if locked or paywalled)
-    if (elLock.screen && elLock.screen.style.display === "flex") return;
+    // 3. Security Check (Block back button if locked or paywalled)
+    if (typeof elLock !== 'undefined' && elLock.screen && elLock.screen.style.display === "flex") return;
     const subBlock = document.getElementById("subBlockPanel");
     if (subBlock && subBlock.style.display === "flex") return;
 
-    // 3. Modals & Overlays (Close the top-most active popup)
+    // 4. Modals & Overlays (Close the top-most active popup with CSS Fade)
     const closableOverlays = [
         "pinOverlay", "confirmOverlay", "durationOverlay", "addDeptOverlay", "combineOverlay",
         "moveBatchOverlay", "deptSplitOverlay", "promoteWarningOverlay", "exportOverlay",
@@ -4713,28 +4718,30 @@ window.addEventListener('popstate', () => {
             el.classList.remove("active");
             
             // Clean up specific inputs if they used back button to cancel
-            if(id === "pinOverlay" && document.getElementById("pinInput")) {
-                document.getElementById("pinInput").value = "";
-            }
+            if(id === "pinOverlay" && document.getElementById("pinInput")) document.getElementById("pinInput").value = "";
             if(id === "reAuthOverlay") {
-                elLock.reAuthPass.value = "";
-                elLock.reAuthStatus.innerText = "";
+                if(elLock.reAuthPass) elLock.reAuthPass.value = "";
+                if(elLock.reAuthStatus) elLock.reAuthStatus.innerText = "";
             }
-            return; // Stop here! We only want to close one layer at a time.
+            return; // Stop here! We only closed ONE popup layer. Do not go further back.
         }
     }
 
-    // 4. Deep Sub-Views (e.g., looking at a specific teacher/student profile)
+    // 5. Deep Sub-Views (Slide out of profiles back to lists)
     if (views.teacherDashboard && !views.teacherDashboard.classList.contains("hidden-view")) {
-        switchView(views.teacherList);
+        animatePanelOut(views.teacherDashboard, views.teacherList);
         return;
     }
     if (views.studentDashboard && !views.studentDashboard.classList.contains("hidden-view")) {
-        switchView(views.studentList);
+        animatePanelOut(views.studentDashboard, views.studentList);
+        return;
+    }
+    if (views.assign && !views.assign.classList.contains("hidden-view")) {
+        animatePanelOut(views.assign, views.timetable);
         return;
     }
 
-    // 5. Are we on the Home Screen?
+    // 6. Are we on the Home Screen?
     let isHome = false;
     if (window.innerWidth > 900) {
         isHome = views.welcome && !views.welcome.classList.contains("hidden-view");
@@ -4743,16 +4750,62 @@ window.addEventListener('popstate', () => {
     }
 
     if (!isHome) {
-        // We are inside a sidebar menu item. Go back to HOME.
-        switchView("HOME");
+        // We are inside a sidebar panel (like Roomcode). Animate back to HOME!
+        animateBackToHome();
         return;
     }
 
-    // 6. We are on the Home Screen with zero popups open. Prompt Sign Out!
-    if (confirm("Are you sure you want to sign out?")) {
-        handlePrincipalSignOut();
+    // 7. 🚨 DOUBLE-TAP TO EXIT LOGIC (Only triggers if on HOME with NO popups open)
+    let currentTime = new Date().getTime();
+    if (currentTime - lastBackPressTime < doubleTapTime) {
+        // Double tap confirmed! Bypass our trap and let the OS close the app.
+        window.history.go(-3); 
+    } else {
+        lastBackPressTime = currentTime;
+        showRcToast("Press back again to exit Adhyora");
     }
 });
+
+// ==========================================
+// 🚀 KINETIC SLIDE ANIMATION ENGINE (C# Coroutine Equivalent)
+// ==========================================
+
+function animateBackToHome() {
+    const mainContent = document.querySelector(".main-content");
+    
+    // Only animate if we are actually in the mobile view
+    if (window.innerWidth <= 900 && mainContent.classList.contains("mobile-active")) {
+        // Apply cubic ease-in slide out (Mimics your C# math)
+        mainContent.style.transition = "transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease";
+        mainContent.style.transform = "translateX(100%)";
+        mainContent.style.opacity = "0";
+
+        // Wait for animation, then actually hide it via your switchView logic
+        setTimeout(() => {
+            switchView("HOME");
+            // Reset inline styles for the next time it opens
+            mainContent.style.transform = "";
+            mainContent.style.opacity = "";
+            mainContent.style.transition = "";
+        }, 280);
+    } else {
+        switchView("HOME");
+    }
+}
+
+function animatePanelOut(currentView, targetView) {
+    // Mimic the C# ScreenSlideOut logic
+    currentView.style.transition = "transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease";
+    currentView.style.transform = "translateX(100%)";
+    currentView.style.opacity = "0";
+
+    setTimeout(() => {
+        switchView(targetView);
+        currentView.style.transform = "";
+        currentView.style.opacity = "";
+        currentView.style.transition = "";
+    }, 280);
+}
 
 // ==========================================
 // 💳 CENTRAL CLEARINGHOUSE ACCOUNTING LOGIC
