@@ -424,6 +424,27 @@ body {
 .stat-label { width: 120px; font-weight: 600; }
 .stat-value { font-weight: bold; color: #334155; }
 
+@media (max-width: 900px) {
+    .dashboard-wrapper { flex-direction: column; }
+    .main-content { display: none; padding: 15px; padding-bottom: 90px; height: 100%; overflow: hidden; flex: 1; }
+    .main-content.mobile-active { display: flex; } 
+    .sidebar { width: 100%; flex: 1; border-right: none; padding: 20px; justify-content: center; padding-bottom: 100px; transition: all 0.3s ease; }
+    .sidebar.mobile-hidden { display: none !important; } 
+    .logo-container { margin-bottom: 15px; }
+    .nav-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; max-width: 500px; margin: 0 auto; }
+    .menu-btn { flex-direction: row-reverse; justify-content: center; gap: 10px; padding: 25px 10px; text-align: center; }
+    
+    /* 👇 FIX IS APPLIED HERE: Added env(safe-area-inset-bottom) */
+    .icon-nav-container { position: fixed; top: auto; bottom: 0; left: 0; right: 0; background: white; padding: 15px 15px calc(15px + env(safe-area-inset-bottom)) 15px; box-shadow: 0 -4px 15px rgba(0,0,0,0.05); z-index: 10; display: flex; justify-content: center; }
+    
+    .icon-nav { width: 100%; max-width: 400px; justify-content: space-between; border: 2px solid var(--border-color); background-color: var(--card-bg); background-image: linear-gradient(var(--bg-grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--bg-grid-color) 1px, transparent 1px); background-size: 15px 15px; }
+    .calendar-container { padding: 15px !important; margin: 0 auto !important; }
+    .calendar-grid { gap: 4px !important; }
+    .cal-cell { font-size: 12px; border-radius: 8px; }
+    .calendar-header h3 { font-size: 16px !important; }
+    #calendarView { padding: 10px !important; }
+}
+
 /* 🚨 TIMETABLE DASHBOARD */
 .tt-select-pill { background: #bbf7d0; color: #166534; border: 1px solid #86efac; padding: 8px 20px; border-radius: 20px; font-weight: 700; font-size: 14px; outline: none; cursor: pointer; font-family: 'Poppins', sans-serif; box-shadow: 0 2px 10px rgba(74, 222, 128, 0.2); }
 .tt-days-container { display: flex; gap: 8px; }
@@ -975,238 +996,98 @@ body.dark-mode #successExpiryDate { color: #94a3b8 !important; }
    📱 MOBILE POLISH & GRID CUT-OFF FIX
    ========================================= */
 @media (max-width: 900px) {
-
-    html {
-        height: -webkit-fill-available;
-    }
-
+    
     body {
-        min-height: 100vh !important;
-        height: -webkit-fill-available !important;
+        height: 100dvh !important;
         overflow: hidden !important;
     }
 
-    .dashboard-wrapper {
-        flex-direction: column;
-        min-height: 0;
-        overflow: hidden;
-    }
-
-    /* MAIN CONTENT */
+    /* 1. 🚨 THE FIX: Margin pushes the physical box up. Grid will NOT go behind the nav! */
+    /* 1. 🚨 THE FIX: Use padding-bottom instead of margin to force the inner card to shrink! */
     .main-content {
-    display: none;
-
-    flex: 1 !important;
-    flex-direction: column;
-
-    min-height: 0 !important;
-
-    padding: 15px;
-    padding-bottom: 120px !important;
-
-    overflow: hidden !important;
-    box-sizing: border-box !important;
-}
-
-    .main-content.mobile-active {
-        display: flex !important;
-    }
-
-    /* INNER CARD */
-    .welcome-card {
-        flex: 1;
-        min-height: 0;
+        flex: 1 !important; 
+        height: 100% !important; /* Forces it to respect the 100dvh limit */
+        margin-bottom: 0 !important; /* Removes the buggy flexbox margin overflow */
+        
+        /* 👇 Applies the exact size of the bottom bar as internal padding, creating a physical gap */
+        padding: 15px 15px calc(85px + env(safe-area-inset-bottom)) 15px !important; 
+        
+        box-sizing: border-box !important;
         overflow: hidden !important;
-
-        display: flex;
-        flex-direction: column;
     }
 
-    /* SCROLL AREA */
+    /* 2. Normal scroll settings inside the shorter box */
     .dashboard-view {
-        flex: 1 !important;
-        min-height: 0 !important;
-
+        height: 100% !important;
         overflow-y: auto !important;
-        overflow-x: hidden !important;
-
+        overflow-x: auto !important; /* 🚨 CHANGED: Allows horizontal scrolling! */
         -webkit-overflow-scrolling: touch !important;
-
-        padding-bottom: 100px !important;
-
-        box-sizing: border-box;
+        padding-bottom: 10px !important; 
     }
 
-    /* SIDEBAR */
-    .sidebar {
-        width: 100%;
-        flex: 1;
-        min-height: 0;
-
-        border-right: none;
-
-        padding: 20px;
-        padding-bottom: 120px;
-
-        justify-content: center;
-
-        transition: all 0.3s ease;
-    }
-
-    .sidebar.mobile-hidden {
-        display: none !important;
-    }
-
-    .logo-container {
-        margin-bottom: 15px;
-    }
-
-    .nav-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 15px;
-
-        width: 100%;
-        max-width: 500px;
-
-        margin: 0 auto;
-    }
-
-    .menu-btn {
-        flex-direction: row-reverse;
-        justify-content: center;
-        gap: 10px;
-
-        padding: 25px 10px;
-
-        text-align: center;
-    }
-
-    /* BOTTOM NAV */
-    .icon-nav-container {
-        position: fixed;
-
-        left: 0;
-        right: 0;
-        bottom: 0;
-
-        top: auto;
-
-        background: white;
-
-        padding: 15px;
-
-        padding-bottom: calc(15px + env(safe-area-inset-bottom));
-
-        box-shadow: 0 -4px 15px rgba(0,0,0,0.05);
-
-        z-index: 9999;
-
-        display: flex;
-        justify-content: center;
-    }
-
-    .icon-nav {
-        width: 100%;
-        max-width: 400px;
-
-        justify-content: space-between;
-
-        border: 2px solid var(--border-color);
-
-        background-color: var(--card-bg);
-
-        background-image:
-            linear-gradient(var(--bg-grid-color) 1px, transparent 1px),
-            linear-gradient(90deg, var(--bg-grid-color) 1px, transparent 1px);
-
-        background-size: 15px 15px;
-    }
-
-    /* DATA CARDS */
+    /* 3. Fix Teacher/Student Cards Cut-off */
     .data-card {
         flex-direction: column !important;
         align-items: flex-start !important;
         gap: 15px !important;
     }
 
+   /* 🚨 NEW: Forces the touch target to span the whole screen width on mobile */
     .data-card > div:first-child {
         width: 100% !important;
     }
-
     .data-card > div:nth-child(2) {
         width: 100%;
-
         justify-content: flex-start !important;
-        flex-wrap: wrap;
-
+        flex-wrap: wrap; 
         gap: 12px;
     }
 
-    /* ATTENDANCE SCROLL */
+    /* 4. 🚨 THE UNIFIED SPREADSHEET SCROLL FIX */
+    
+    /* Revert the main view to stop the whole page from swiping */
+    .dashboard-view {
+        overflow-x: hidden !important; 
+    }
+
+    /* Make ONLY the table scroll sideways */
     .attd-mobile-scroll {
         width: 100%;
-
         overflow-x: auto !important;
-
         -webkit-overflow-scrolling: touch !important;
-
         padding-bottom: 10px;
-
-        scrollbar-width: none;
+        /* Hides the ugly scrollbar but keeps the swipe functionality */
+        scrollbar-width: none; 
+    }
+    .attd-mobile-scroll::-webkit-scrollbar { 
+        display: none; 
     }
 
-    .attd-mobile-scroll::-webkit-scrollbar {
-        display: none;
-    }
-
+    /* Force BOTH the Header and the Rows to have the exact same width and columns! */
     .attd-header-row,
     .attd-row {
         min-width: 550px !important;
-        grid-template-columns: 1.8fr repeat(6, 1fr) !important;
+        grid-template-columns: 1.8fr repeat(6, 1fr) !important; 
     }
-
+    
     .attd-row {
         padding: 12px 10px !important;
         gap: 5px !important;
     }
-
-    .attd-teacher-col {
-        overflow: visible !important;
+    
+    .attd-teacher-col { 
+        overflow: visible !important; 
     }
-
+    
     .attd-teacher-name {
-        font-size: 13px !important;
+        font-size: 13px !important; 
         white-space: normal !important;
         display: block;
     }
-
+    
     .attd-slot {
-        font-size: 12px !important;
+        font-size: 12px !important; 
         padding: 4px !important;
-    }
-
-    /* CALENDAR */
-    .calendar-container {
-        padding: 15px !important;
-        margin: 0 auto !important;
-    }
-
-    .calendar-grid {
-        gap: 4px !important;
-    }
-
-    .cal-cell {
-        font-size: 12px;
-        border-radius: 8px;
-    }
-
-    .calendar-header h3 {
-        font-size: 16px !important;
-    }
-
-    #calendarView {
-        padding: 10px !important;
     }
 }
 
