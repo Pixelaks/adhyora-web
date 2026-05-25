@@ -74,7 +74,15 @@ function hideAppLoader() {
     if (loader && !loader.classList.contains("hidden")) {
         setTimeout(() => {
             loader.classList.add("hidden");
-        }, 800);
+            
+            // Re-sync the phone's status bar to the active UI theme
+            const metaThemeColor = document.getElementById("pwaThemeColorMeta");
+            if (metaThemeColor) {
+                const isDark = localStorage.getItem("adhyora_principal_theme") === "dark";
+                // Uses your exact dark mode (#0f172a) and light mode (#ffffff) hex codes
+                metaThemeColor.setAttribute("content", isDark ? "#0f172a" : "#ffffff");
+            }
+        }, 800); // Matches your fade-out timing
     }
 }
 
