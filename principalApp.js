@@ -4690,16 +4690,23 @@ document.onkeydown = function(e) {
 // Push an initial state to trap the back button the moment the app loads
 history.pushState(null, null, location.href);
 
+// 🚨 NEW: Variable to track the double-tap timing for exiting
+let lastBackPressTime = 0;
+
 window.addEventListener('popstate', () => {
-    // 1. Immediately push another state to stay trapped inside the app
-    history.pushState(null, null, location.href);
-
-    // 2. Security Check (Block back button if locked or paywalled)
-    if (elLock.screen && elLock.screen.style.display === "flex") return;
+    
+    // 1. Security Check (Block back button if locked or paywalled)
+    if (elLock.screen && elLock.screen.style.display === "flex") {
+        history.pushState(null, null, location.href);
+        return;
+    }
     const subBlock = document.getElementById("subBlockPanel");
-    if (subBlock && subBlock.style.display === "flex") return;
+    if (subBlock && subBlock.style.display === "flex") {
+        history.pushState(null, null, location.href);
+        return;
+    }
 
-    // 3. Modals & Overlays (Close the top-most active popup)
+    // 2. Modals & Overlays (Close the top-most active popup)
     const closableOverlays = [
         "pinOverlay", "confirmOverlay", "durationOverlay", "addDeptOverlay", "combineOverlay",
         "moveBatchOverlay", "deptSplitOverlay", "promoteWarningOverlay", "exportOverlay",
@@ -4720,21 +4727,26 @@ window.addEventListener('popstate', () => {
                 elLock.reAuthPass.value = "";
                 elLock.reAuthStatus.innerText = "";
             }
+            
+            // 🚨 CRITICAL FIX: Push state again so the NEXT back press doesn't exit the app!
+            history.pushState(null, null, location.href);
             return; // Stop here! We only want to close one layer at a time.
         }
     }
 
-    // 4. Deep Sub-Views (e.g., looking at a specific teacher/student profile)
+    // 3. Deep Sub-Views (e.g., looking at a specific teacher/student profile)
     if (views.teacherDashboard && !views.teacherDashboard.classList.contains("hidden-view")) {
         switchView(views.teacherList);
+        history.pushState(null, null, location.href); // 🚨 Re-trap!
         return;
     }
     if (views.studentDashboard && !views.studentDashboard.classList.contains("hidden-view")) {
         switchView(views.studentList);
+        history.pushState(null, null, location.href); // 🚨 Re-trap!
         return;
     }
 
-    // 5. Are we on the Home Screen?
+    // 4. Are we on the Home Screen?
     let isHome = false;
     if (window.innerWidth > 900) {
         isHome = views.welcome && !views.welcome.classList.contains("hidden-view");
@@ -4743,14 +4755,23 @@ window.addEventListener('popstate', () => {
     }
 
     if (!isHome) {
-        // We are inside a sidebar menu item. Go back to HOME.
+        // We are inside a sidebar menu item (like Roomcode). Go back to HOME.
         switchView("HOME");
+        history.pushState(null, null, location.href); // 🚨 Re-trap!
         return;
     }
 
-    // 6. We are on the Home Screen with zero popups open. Prompt Sign Out!
-    if (confirm("Are you sure you want to sign out?")) {
-        handlePrincipalSignOut();
+    // 5. We are on the Home Screen with zero popups open. Prompt Double-Tap Exit!
+    let currentTime = Date.now();
+    if (currentTime - lastBackPressTime < 2000) {
+        // Double-tapped within 2 seconds! Let the app naturally exit.
+        // Do NOT push state here. The browser will close the app/tab.
+        return; 
+    } else {
+        // First tap
+        lastBackPressTime = currentTime;
+        showRcToast("Press back again to exit");
+        history.pushState(null, null, location.href); // Trap it one more time so they can tap again!
     }
 });
 
