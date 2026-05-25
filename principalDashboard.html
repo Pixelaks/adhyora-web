@@ -50,7 +50,7 @@
             <h2 id="lockTitle" style="color:white; font-family:'Rajdhani', sans-serif; margin-bottom:10px; font-size:24px; letter-spacing:1px;">ENTER SECURE PIN</h2>
             <p id="lockStatus" style="color:#94a3b8; font-size:13px; margin-bottom:25px; line-height:1.5;">Please enter your 4-digit PIN.</p>
             
-            <input type="password" id="lockPinInput" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" maxlength="4" style="text-align:center; font-size:28px; letter-spacing:15px; padding:15px; width:200px; border-radius:12px; border:2px solid #475569; background:#0f172a; color:white; outline:none; margin-bottom:25px; transition:0.3s;" oninput="this.value=this.value.replace(/[^0-9]/g,'');">
+            <input type="password" id="lockPinInput" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" style="text-align:center; font-size:28px; letter-spacing:15px; padding:15px; width:200px; border-radius:12px; border:2px solid #475569; background:#0f172a; color:white; outline:none; margin-bottom:25px; transition:0.3s;" oninput="this.value=this.value.replace(/[^0-9]/g,'');">
             
             <button id="btnLockBiometrics" style="width:100%; background:transparent; border:2px solid var(--brand-green); color:var(--brand-green); font-weight:bold; padding:15px; border-radius:12px; cursor:pointer; font-size:16px; margin-bottom:15px; display:none; transition:0.3s; box-shadow: 0 0 15px rgba(74,222,128,0.1);">
                 <i class="fas fa-fingerprint" style="margin-right:8px; font-size:20px; vertical-align:middle;"></i> Use Biometrics
@@ -695,7 +695,7 @@
             <h3 style="color: #ef4444; margin-bottom: 15px;"><i class="fas fa-lock"></i> Security Check</h3>
             <p style="font-size: 13px; color: #64748b; margin-bottom: 20px;">Enter Admin PIN to confirm action.</p>
             
-            <input type="password" id="pinInput" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" placeholder="****" maxlength="4" style="width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-size: 20px; text-align: center; letter-spacing: 5px; margin-bottom: 20px;" oninput="this.value=this.value.replace(/[^0-9]/g,'');">
+            <input type="password" id="pinInput" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" placeholder="****" maxlength="4" style="width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #cbd5e1; outline: none; font-family: 'Poppins'; font-size: 20px; text-align: center; letter-spacing: 5px; margin-bottom: 20px;" oninput="this.value=this.value.replace(/[^0-9]/g,'');">
             
             <button id="btnVerifyPin" style="width: 100%; background: #ef4444; color: white; border: none; padding: 15px; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer;">Verify & Execute</button>
         </div>
