@@ -1002,31 +1002,32 @@ body.dark-mode #successExpiryDate { color: #94a3b8 !important; }
         overflow: hidden !important;
     }
 
-    /* 1. 🚨 THE FIX: Let JavaScript hide/show this, and stop Flexbox from overflowing */
+    /* 1. 🚨 THE FIX: Force strict bounds so it can't stretch behind the nav */
     .main-content {
         display: none; /* CRITICAL: Must be none by default so the grid shows! */
         flex: 1 !important; 
-        height: auto !important; /* 🚨 Removed 100% to stop it from breaking out */
+        height: 100% !important; /* 🚨 Back to 100% so it respects the screen height */
+        min-height: 0 !important; /* 🚨 MAGIC RULE: Forces Flexbox to scroll instead of stretch! */
         margin-bottom: 0 !important; 
         
-        /* This padding creates the physical gap above the nav bar */
+        /* This padding holds it perfectly above the nav bar */
         padding: 15px 15px calc(85px + env(safe-area-inset-bottom)) 15px !important; 
         
         box-sizing: border-box !important;
         overflow: hidden !important;
     }
 
-    /* 2. JavaScript adds this class to reveal the panel when a button is clicked */
+    /* 2. JavaScript adds this class to reveal the panel */
     .main-content.mobile-active {
         display: flex !important;
         flex-direction: column !important;
     }
 
-    /* 3. Forces the inner container to shrink into the padded space! */
+    /* 3. Force the inner card to also strictly respect the bounds */
     .welcome-card {
         flex: 1 !important; 
-        height: auto !important; 
-        min-height: 0 !important; 
+        height: 100% !important; /* 🚨 Must be 100% to fill the padded area */
+        min-height: 0 !important; /* 🚨 Magic flexbox rule again */
     }
     /* 2. Normal scroll settings inside the shorter box */
     .dashboard-view {
