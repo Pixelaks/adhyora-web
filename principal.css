@@ -1018,7 +1018,7 @@ body.dark-mode #successExpiryDate { color: #94a3b8 !important; }
         padding: 15px 15px calc(85px + env(safe-area-inset-bottom)) 15px !important;
         
         box-sizing: border-box !important;
-        overflow: hidden !important;
+        overflow: visible !important;
     }
 
     /* 2. JavaScript adds this class to reveal the panel */
@@ -1029,9 +1029,8 @@ body.dark-mode #successExpiryDate { color: #94a3b8 !important; }
 
     /* 3. Force the inner card to also strictly respect the bounds */
     .welcome-card {
-        flex: 1 !important;
-        min-height: 0 !important; /* 🚨 Magic flexbox rule again */
-    }
+    overflow: hidden !important;
+}
 
     /* 4. Normal scroll settings inside the shorter box */
     .dashboard-view {
@@ -1043,7 +1042,7 @@ body.dark-mode #successExpiryDate { color: #94a3b8 !important; }
 
     -webkit-overflow-scrolling: touch !important;
 
-    padding-bottom: 120px !important;
+    padding-bottom: 30px !important;
 }
 
     /* 5. Fix Teacher/Student Cards Cut-off */
