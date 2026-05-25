@@ -1039,22 +1039,34 @@ body.dark-mode #feeLiveStructureGrid span {
 
     /* 2. THE MAIN CONTENT (The Fix for Bottom Bar Collision) */
     .main-content {
-        display: none; 
-        flex: 1 1 0% !important;
-        height: auto !important; 
-        min-height: 0 !important; 
-        padding: 15px 15px calc(85px + env(safe-area-inset-bottom)) 15px !important;
-        box-sizing: border-box !important;
-        overflow-y: auto !important; /* Enable scrolling in the content area */
-    }
+    display: none;
+
+    flex: 1 1 0% !important;
+    flex-direction: column !important;
+
+    min-height: 0 !important;
+
+    padding: 15px 15px calc(100px + env(safe-area-inset-bottom)) 15px !important;
+
+    box-sizing: border-box !important;
+
+    overflow: hidden !important;
+}
     .main-content.mobile-active { display: flex !important; }
 
     .welcome-card {
-        flex: 1 1 0% !important;
-        height: auto !important; 
-        min-height: 0 !important; 
-        margin: 0 !important;
-    }
+    flex: 1 1 0% !important;
+
+    height: auto !important;
+    min-height: 0 !important;
+
+    margin: 0 !important;
+
+    overflow: hidden !important;
+
+    display: flex !important;
+    flex-direction: column !important;
+}
 
     /* 3. NAVIGATION */
     .icon-nav-container { 
@@ -1075,7 +1087,17 @@ body.dark-mode #feeLiveStructureGrid span {
     .data-card > div:first-child { width: 100% !important; }
     
     /* 5. SPREADSHEET FIXES */
-    .dashboard-view { height: 100% !important; overflow-y: auto !important; }
+    .dashboard-view {
+    flex: 1 !important;
+    min-height: 0 !important;
+
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+
+    padding-bottom: 40px !important;
+
+    -webkit-overflow-scrolling: touch !important;
+}
     .attd-mobile-scroll { width: 100%; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; padding-bottom: 10px; scrollbar-width: none; }
     .attd-mobile-scroll::-webkit-scrollbar { display: none; }
     .attd-header-row, .attd-row { min-width: 550px !important; grid-template-columns: 1.8fr repeat(6, 1fr) !important; padding: 12px 10px !important; gap: 5px !important; }
