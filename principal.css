@@ -1003,17 +1003,26 @@ body.dark-mode #successExpiryDate { color: #94a3b8 !important; }
     }
 
     /* 1. 🚨 THE FIX: Margin pushes the physical box up. Grid will NOT go behind the nav! */
-    /* 1. 🚨 THE FIX: Use padding-bottom instead of margin to force the inner card to shrink! */
+    /* 1. 🚨 THE FIX: Remove explicit heights to stop Flexbox from overflowing */
     .main-content {
+        display: flex !important;
+        flex-direction: column !important;
         flex: 1 !important; 
-        height: 100% !important; /* Forces it to respect the 100dvh limit */
-        margin-bottom: 0 !important; /* Removes the buggy flexbox margin overflow */
+        height: auto !important; /* 🚨 Removed 100% to stop it from breaking out */
+        margin-bottom: 0 !important; 
         
-        /* 👇 Applies the exact size of the bottom bar as internal padding, creating a physical gap */
+        /* This padding creates the physical gap above the nav bar */
         padding: 15px 15px calc(85px + env(safe-area-inset-bottom)) 15px !important; 
         
         box-sizing: border-box !important;
         overflow: hidden !important;
+    }
+
+    /* 2. 🚨 NEW: Force the inner container to shrink into the padded space! */
+    .welcome-card {
+        flex: 1 !important; /* Tells it to fill available space dynamically */
+        height: auto !important; /* Overrides the buggy height: 100% from desktop */
+        min-height: 0 !important; /* Crucial flexbox property to prevent scroll bleed */
     }
 
     /* 2. Normal scroll settings inside the shorter box */
