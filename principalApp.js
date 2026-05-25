@@ -4232,6 +4232,10 @@ function CheckSecurityPin() {
 
     const metaThemeColor = document.getElementById("pwaThemeColorMeta");
     if(metaThemeColor) metaThemeColor.setAttribute("content", "#0f172a");
+
+    // 🚨 NEW: Force the bottom nav bar to match the dark lockscreen
+    document.documentElement.style.backgroundColor = "#0f172a";
+    document.body.style.backgroundColor = "#0f172a";
     
     document.querySelector(".main-content").style.display = "none";
     document.getElementById("mainSidebar").style.display = "none";
