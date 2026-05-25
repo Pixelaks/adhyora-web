@@ -4661,13 +4661,19 @@ document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
         const isLocked = elLock.screen.style.display === "flex";
         
-        // 🚨 THE FIX: Look for cachedAdminPinHash instead of the old plain text pin!
+        // Look for cachedAdminPinHash instead of the old plain text pin!
         if (!isLocked && !isBiometricPromptActive && cachedAdminPinHash !== "") {
             // Lock the DOM instantly!
             document.querySelector(".main-content").style.display = "none";
             document.getElementById("mainSidebar").style.display = "none";
             elLock.screen.style.display = "flex";
             SetLockMode("LOGIN");
+
+            // 🚨 THE FIX: Force the phone's status bar to match the dark lock screen!
+            const metaThemeColor = document.getElementById("pwaThemeColorMeta");
+            if (metaThemeColor) {
+                metaThemeColor.setAttribute("content", "#0f172a");
+            }
         }
     }
 });
