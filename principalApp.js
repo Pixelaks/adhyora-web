@@ -230,20 +230,24 @@ function applyTheme(isDark) {
 function executeThemeClassToggle(isDark) {
     const metaThemeColor = document.getElementById("pwaThemeColorMeta");
     
+    // 🚨 NEW: Check if the loader is currently covering the screen
+    const loader = document.getElementById("initialAppLoader");
+    const isLoaderVisible = loader && !loader.classList.contains("hidden");
+    
     if (isDark) {
         document.body.classList.add("dark-mode");
         document.getElementById("btnDarkMode").style.border = "2px solid var(--brand-green)";
         document.getElementById("btnLightMode").style.border = "1px solid #475569";
         
-        // 🚨 Unifies phone notification bar + native bottom navigation background with app dark-mode color
-        if(metaThemeColor) metaThemeColor.setAttribute("content", "#0f172a"); // Matches your true dark background color
+        // ONLY update the bar if the loader is GONE
+        if(metaThemeColor && !isLoaderVisible) metaThemeColor.setAttribute("content", "#0f172a"); 
     } else {
         document.body.classList.remove("dark-mode");
         document.getElementById("btnLightMode").style.border = "2px solid var(--brand-green)";
         document.getElementById("btnDarkMode").style.border = "1px solid #cbd5e1";
         
-        // 🚨 Unifies phone notification bar + native bottom navigation background with app light-mode color
-        if(metaThemeColor) metaThemeColor.setAttribute("content", "#ffffff"); // Matches your light mode white background profile
+        // ONLY update the bar if the loader is GONE
+        if(metaThemeColor && !isLoaderVisible) metaThemeColor.setAttribute("content", "#ffffff"); 
     }
     localStorage.setItem("adhyora_principal_theme", isDark ? "dark" : "light");
 }
