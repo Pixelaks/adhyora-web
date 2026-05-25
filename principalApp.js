@@ -4689,75 +4689,102 @@ document.onkeydown = function(e) {
 // ==========================================
 
 let lastBackPressTime = 0;
-
-// Prevent duplicate handling
 let isHandlingBack = false;
 
-// Push unique history state
-function pushNavState(type = "view") {
-    history.pushState({
-        navType: type,
-        time: Date.now()
-    }, "", location.href);
+// ==========================================
+// HISTORY TRAP
+// ==========================================
+
+function pushHistoryTrap(type = "trap") {
+
+    history.pushState(
+        {
+            type: type,
+            time: Date.now()
+        },
+        "",
+        location.href
+    );
 }
 
-// Initial trap
+// ==========================================
+// INITIAL HISTORY STACK
+// ==========================================
+
 window.addEventListener("load", () => {
+
+    // Create multiple layers so Android PWA
+    // never exits on first press
+
+    pushHistoryTrap("root1");
+
     setTimeout(() => {
-        pushNavState("root");
-    }, 300);
+        pushHistoryTrap("root2");
+    }, 100);
+
+    setTimeout(() => {
+        pushHistoryTrap("root3");
+    }, 200);
+
 });
 
 // ==========================================
-// PANEL / POPUP HELPERS
+// OPEN HELPERS
 // ==========================================
 
-// Call this whenever opening ANY popup
+// Call this whenever opening a popup
 function registerPopupOpen() {
-    pushNavState("popup");
+    pushHistoryTrap("popup");
 }
 
-// Call this whenever opening ANY panel/view
+// Call this whenever opening a panel/view
 function registerPanelOpen() {
-    pushNavState("panel");
+    pushHistoryTrap("panel");
 }
 
 // ==========================================
 // BACK BUTTON HANDLER
 // ==========================================
 
-window.addEventListener("popstate", async () => {
+window.addEventListener("popstate", () => {
 
     if (isHandlingBack) return;
+
     isHandlingBack = true;
 
     try {
 
         // ==========================================
-        // 1. SECURITY BLOCKS
+        // 1. SECURITY LOCKS
         // ==========================================
 
-        if (elLock.screen &&
-            elLock.screen.style.display === "flex") {
+        if (
+            elLock.screen &&
+            elLock.screen.style.display === "flex"
+        ) {
 
-            pushNavState("locked");
+            pushHistoryTrap("locked");
             return;
         }
 
-        const subBlock = document.getElementById("subBlockPanel");
+        const subBlock =
+            document.getElementById("subBlockPanel");
 
-        if (subBlock &&
-            subBlock.style.display === "flex") {
+        if (
+            subBlock &&
+            subBlock.style.display === "flex"
+        ) {
 
-            pushNavState("subblock");
+            pushHistoryTrap("subblock");
             return;
         }
 
         // ==========================================
-        // 2. CLOSE ACTIVE POPUPS FIRST
+        // 2. CLOSE ACTIVE POPUPS
         // ==========================================
 
         const closableOverlays = [
+
             "pinOverlay",
             "confirmOverlay",
             "durationOverlay",
@@ -4776,11 +4803,12 @@ window.addEventListener("popstate", async () => {
             "reAuthOverlay",
             "subSuccessPanel",
             "feeConfigOverlay"
+
         ];
 
         for (let id of closableOverlays) {
 
-            let el = document.getElementById(id);
+            const el = document.getElementById(id);
 
             if (
                 el &&
@@ -4791,11 +4819,13 @@ window.addEventListener("popstate", async () => {
                 )
             ) {
 
+                // Close overlay
                 el.classList.remove("active");
                 el.style.display = "none";
 
                 // Cleanup
                 if (id === "pinOverlay") {
+
                     const pinInput =
                         document.getElementById("pinInput");
 
@@ -4815,9 +4845,8 @@ window.addEventListener("popstate", async () => {
                     }
                 }
 
-                // IMPORTANT:
-                // Recreate state for underlying panel
-                pushNavState("panel");
+                // Recreate trap
+                pushHistoryTrap("afterPopup");
 
                 return;
             }
@@ -4831,9 +4860,11 @@ window.addEventListener("popstate", async () => {
             views.teacherDashboard &&
             !views.teacherDashboard.classList.contains("hidden-view")
         ) {
+
             switchView(views.teacherList);
 
-            pushNavState("panel");
+            pushHistoryTrap("teacherList");
+
             return;
         }
 
@@ -4841,9 +4872,11 @@ window.addEventListener("popstate", async () => {
             views.studentDashboard &&
             !views.studentDashboard.classList.contains("hidden-view")
         ) {
+
             switchView(views.studentList);
 
-            pushNavState("panel");
+            pushHistoryTrap("studentList");
+
             return;
         }
 
@@ -4851,9 +4884,11 @@ window.addEventListener("popstate", async () => {
             views.assign &&
             !views.assign.classList.contains("hidden-view")
         ) {
+
             switchView(views.timetable);
 
-            pushNavState("panel");
+            pushHistoryTrap("timetable");
+
             return;
         }
 
@@ -4881,6 +4916,7 @@ window.addEventListener("popstate", async () => {
             }
 
         } catch (err) {
+
             isHome = false;
         }
 
@@ -4892,7 +4928,7 @@ window.addEventListener("popstate", async () => {
 
             switchView("HOME");
 
-            pushNavState("home");
+            pushHistoryTrap("home");
 
             return;
         }
@@ -4901,30 +4937,36 @@ window.addEventListener("popstate", async () => {
         // 6. DOUBLE TAP EXIT
         // ==========================================
 
-        let currentTime = Date.now();
+        const currentTime = Date.now();
 
         if (currentTime - lastBackPressTime < 2000) {
 
-            // DO NOT CALL history.back()
-            // DO NOT REDIRECT
-            // DO NOT SIGNOUT
+            // Second back press
+            // Allow Android to close naturally
 
-            // Allow Android native exit naturally
             return;
 
         } else {
+
+            // First back press
 
             lastBackPressTime = currentTime;
 
             showRcToast("Press back again to exit");
 
-            pushNavState("home");
+            // IMPORTANT:
+            // Recreate trap immediately
+            pushHistoryTrap("exitConfirm");
+
+            return;
         }
 
     } finally {
 
         setTimeout(() => {
+
             isHandlingBack = false;
+
         }, 100);
     }
 });
