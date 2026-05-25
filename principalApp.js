@@ -4998,3 +4998,57 @@ window.addEventListener('popstate', (e) => {
         history.pushState({ layer: 'home' }, '');
     }
 });
+
+// ==========================================
+// 🚀 ADHYORA LOGO GLITCH ENGINE
+// ==========================================
+const logoEl = document.querySelector('.logo-text');
+const finalText = "ADHYORA";
+
+const charMap = {
+    'A': 'अ', 'D': 'ड', 'H': 'ह', 'Y': 'य', 'O': 'ओ', 'R': 'र', 'A': 'अ'
+};
+const chaosChars = "अआइईउऊऋएऐओऔकखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसह";
+
+function startLogoAnimation() {
+    // 1. Intro Decode Animation
+    let iterations = 0;
+    const interval = setInterval(() => {
+        logoEl.innerText = finalText
+            .split("")
+            .map((letter, index) => {
+                if (index < iterations) return finalText[index];
+                return chaosChars[Math.floor(Math.random() * chaosChars.length)];
+            })
+            .join("");
+        
+        if (iterations >= finalText.length) {
+            clearInterval(interval);
+            logoEl.innerText = finalText;
+            // 2. Start Glitch Loop after intro
+            setTimeout(glitchLoop, 3000);
+        }
+        iterations += 1 / 3;
+    }, 50);
+}
+
+function glitchLoop() {
+    const randomIndex = Math.floor(Math.random() * finalText.length);
+    const originalChar = finalText[randomIndex];
+    const glitchChar = charMap[originalChar] || chaosChars[Math.floor(Math.random() * chaosChars.length)];
+
+    // Glitch
+    let textArr = finalText.split("");
+    textArr[randomIndex] = glitchChar;
+    logoEl.innerText = textArr.join("");
+
+    // Revert after 2 seconds
+    setTimeout(() => {
+        logoEl.innerText = finalText;
+        // Repeat after 3-6 seconds
+        setTimeout(glitchLoop, Math.random() * 3000 + 3000);
+    }, 2000);
+}
+
+// Kick it off!
+startLogoAnimation();
