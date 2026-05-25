@@ -1121,15 +1121,32 @@ body.dark-mode #feeLiveStructureGrid span {
     }
 
     /* 5. ACTUAL SCROLL AREA */
-    .dashboard-view {
-    flex: 1 1 0px !important;       /* changed from: flex: 1 */
-    height: 0 !important;           /* ← new line, this is the fix */
+.dashboard-view {
+    flex: 1 1 0px !important;
+    height: 0 !important;
     min-height: 0 !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    padding-bottom: 120px !important;
+    overflow: hidden !important;           /* changed from overflow-y: auto */
+    padding-bottom: 0 !important;          /* removed the 120px from here */
     -webkit-overflow-scrolling: touch !important;
     box-sizing: border-box !important;
+}
+
+/* Inner scroll lists: fill remaining flex space and handle their own scroll */
+.dashboard-view .scrollable-list {
+    min-height: 0 !important;
+    flex: 1 1 0px !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 120px !important;       /* breathing room lives here now */
+}
+
+/* Views that scroll themselves (no inner scrollable-list) */
+#calendarView,
+#studentDashboardView,
+#teacherDashboardView,
+#dataView {
+    overflow-y: auto !important;
+    padding-bottom: 120px !important;
 }
 
     /* 6. BOTTOM NAVIGATION */
