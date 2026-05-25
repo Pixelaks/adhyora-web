@@ -75,14 +75,19 @@ function hideAppLoader() {
         setTimeout(() => {
             loader.classList.add("hidden");
             
-            // Re-sync the phone's status bar to the active UI theme
             const metaThemeColor = document.getElementById("pwaThemeColorMeta");
+            const isDark = localStorage.getItem("adhyora_principal_theme") === "dark";
+            const activeHex = isDark ? "#0f172a" : "#ffffff";
+            
             if (metaThemeColor) {
-                const isDark = localStorage.getItem("adhyora_principal_theme") === "dark";
-                // Uses your exact dark mode (#0f172a) and light mode (#ffffff) hex codes
-                metaThemeColor.setAttribute("content", isDark ? "#0f172a" : "#ffffff");
+                metaThemeColor.setAttribute("content", activeHex);
             }
-        }, 800); // Matches your fade-out timing
+            
+            // 🚨 NEW: Clean up the loader's background color override
+            document.documentElement.style.backgroundColor = "";
+            document.body.style.backgroundColor = "";
+            
+        }, 800); 
     }
 }
 
@@ -4572,20 +4577,24 @@ elLock.btnSubmit.addEventListener("click", async () => {
 function UnlockSecurityWall() {
     elLock.screen.style.display = "none";
     
-    // Restore the DOM layout physically
     document.querySelector(".main-content").style.display = "";
     document.getElementById("mainSidebar").style.display = "";
     
     failedPinAttempts = 0;
 
-    // 🚨 FIX: Evaluate the active storage preference trace to re-sync status bar headers to your normal light/dark settings
     const savedThemeIsDark = localStorage.getItem("adhyora_principal_theme") === "dark";
     const metaThemeColor = document.getElementById("pwaThemeColorMeta");
+    
+    // 🚨 NEW: Revert the bottom nav bar to the user's active theme
+    const activeHex = savedThemeIsDark ? "#0f172a" : "#ffffff";
     if(metaThemeColor) {
-        metaThemeColor.setAttribute("content", savedThemeIsDark ? "#0f172a" : "#ffffff");
+        metaThemeColor.setAttribute("content", activeHex);
     }
     
-    // 🚨 CHAIN REACTION: Now that PIN is verified, check Subscription!
+    // 🚨 NEW: Remove inline overrides so your CSS variables take over again
+    document.documentElement.style.backgroundColor = "";
+    document.body.style.backgroundColor = "";
+    
     startSubscriptionListener(); 
 }
 
