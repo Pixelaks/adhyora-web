@@ -4867,3 +4867,79 @@ document.getElementById("btnPrintStudentFees").addEventListener("click", () => {
     
     showRcToast("📊 Spreadsheet Statement Downloaded Successfully!");
 });
+
+// ==========================================
+// 🚀 SMART BACK BUTTON NAVIGATION ENGINE
+// ==========================================
+let navActiveModals = [];
+let lastBackPressTime = 0;
+
+// 1. Initialize the History Buffer
+// This prevents the app from instantly closing on the first back press
+history.replaceState({ page: 'home' }, document.title, window.location.href);
+history.pushState({ page: 'buffer' }, document.title, window.location.href);
+
+// 2. Track the order of opened overlays using a MutationObserver
+// This automatically tracks any modal you open without needing to rewrite your existing code
+const modalObserver = new MutationObserver((mutations) => {
+    mutations.forEach(mutation => {
+        if (mutation.attributeName === 'class') {
+            const el = mutation.target;
+            const isActive = el.classList.contains('active');
+            const index = navActiveModals.indexOf(el);
+
+            if (isActive && index === -1) {
+                // Modal opened: Push to top of the stack
+                navActiveModals.push(el); 
+            } else if (!isActive && index !== -1) {
+                // Modal closed via "X" button or code: Remove from stack
+                navActiveModals.splice(index, 1); 
+            }
+        }
+    });
+});
+
+// Observe all elements with the 'modal-overlay' class
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    modalObserver.observe(overlay, { attributes: true, attributeFilter: ['class'] });
+});
+
+// 3. Catch the Hardware/Browser Back Button
+window.addEventListener('popstate', (e) => {
+    
+    // ACTION A: Are there any modals/overlays open?
+    if (navActiveModals.length > 0) {
+        // Pop the most recently opened modal and close it
+        const topModal = navActiveModals.pop();
+        topModal.classList.remove('active');
+
+        // Immediately restore the buffer state to catch the NEXT back press
+        history.pushState({ page: 'buffer' }, document.title, window.location.href);
+        return;
+    }
+
+    // ACTION B: Are we inside a Sidebar View? (Attendance, Settings, etc.)
+    const mainContent = document.querySelector(".main-content");
+    if (mainContent && mainContent.classList.contains("mobile-active")) {
+        // Trigger your existing Home button logic to smoothly transition back
+        document.getElementById("btnHome").click();
+
+        // Restore the buffer state
+        history.pushState({ page: 'buffer' }, document.title, window.location.href);
+        return;
+    }
+
+    // ACTION C: We are on the Main Home screen with nothing open.
+    const currentTime = Date.now();
+    if (currentTime - lastBackPressTime < 2000) {
+        // Double tap confirmed (< 2 seconds). Allow native exit.
+        history.back(); 
+    } else {
+        // First press -> show Toast and give them 2 seconds to press again
+        lastBackPressTime = currentTime;
+        showRcToast("Press back again to exit");
+        
+        // Restore buffer so the app doesn't close yet
+        history.pushState({ page: 'buffer' }, document.title, window.location.href);
+    }
+});
