@@ -1247,3 +1247,30 @@ body.dark-mode #feeLiveStructureGrid span {
         gap: 10px !important;
     }
 } /* 🚨 This closing brace closes the entire @media query! */
+
+/* =========================================
+   🚨 ULTIMATE MOBILE BOTTOM BAR COLLISION FIX
+   ========================================= */
+@media (max-width: 900px) {
+    /* 1. Allow the main flex wrapper to shrink dynamically */
+    .dashboard-wrapper {
+        min-height: 0 !important;
+    }
+
+    /* 2. Strip 'height: 100%' so Flexbox calculates bounds, respecting your bottom padding */
+    .main-content {
+        flex: 1 1 0% !important;
+        height: auto !important; 
+        min-height: 0 !important; 
+        padding: 15px 15px calc(85px + env(safe-area-inset-bottom)) 15px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* 3. Stop the inner green box from expanding into the parent's bottom padding */
+    .welcome-card {
+        flex: 1 1 0% !important;
+        height: auto !important; 
+        min-height: 0 !important; 
+        margin: 0 !important;
+    }
+}
