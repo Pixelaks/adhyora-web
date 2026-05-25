@@ -4869,15 +4869,16 @@ document.getElementById("btnPrintStudentFees").addEventListener("click", () => {
 });
 
 // ==========================================
-// 🚀 SMART BACK BUTTON NAVIGATION ENGINE v2
+// 🚀 SMART BACK BUTTON NAVIGATION ENGINE v3 (Double-Tap Exit)
 // ==========================================
 let navActiveModals = [];
 let isProgrammaticBack = false;
+let lastBackPressTime = 0;
 
-// 1. Initialize Base State
-if (!history.state || history.state.layer !== 'home') {
-    history.replaceState({ layer: 'home' }, '');
-}
+// 1. Initialize Base State with a Buffer for the Home Screen
+// We replace the initial load state, then push a "home" state so the first back press is caught.
+history.replaceState({ layer: 'base' }, '');
+history.pushState({ layer: 'home' }, '');
 
 // 2. Track Modals (Popups/Overlays) using Unique IDs
 const modalObserver = new MutationObserver((mutations) => {
@@ -4896,7 +4897,7 @@ const modalObserver = new MutationObserver((mutations) => {
                 // B) Modal Closed (via X button or code)
                 navActiveModals.splice(index, 1);
                 
-                // If the user manually clicked an "X" button, clean up the browser history
+                // Clean up the browser history if it was closed via UI buttons
                 if (history.state && history.state.id === el.id) {
                     isProgrammaticBack = true;
                     history.back();
@@ -4919,11 +4920,9 @@ const viewObserver = new MutationObserver((mutations) => {
             const isViewOpen = el.classList.contains('mobile-active');
             
             if (isViewOpen && (!history.state || history.state.layer !== 'view')) {
-                // View Opened: Push state
                 history.pushState({ layer: 'view' }, '');
             } 
             else if (!isViewOpen && history.state && history.state.layer === 'view') {
-                // View Closed (via Home button): Clean up history
                 isProgrammaticBack = true;
                 history.back();
             }
@@ -4946,7 +4945,7 @@ window.addEventListener('popstate', (e) => {
 
     // ACTION A: Are there any modals open? Close the top-most one.
     if (navActiveModals.length > 0) {
-        const topModal = navActiveModals[navActiveModals.length - 1]; // Don't .pop(), the observer handles the array
+        const topModal = navActiveModals[navActiveModals.length - 1]; // Don't .pop(), observer handles it
         topModal.classList.remove('active');
         return;
     }
@@ -4956,5 +4955,24 @@ window.addEventListener('popstate', (e) => {
         const btnHome = document.getElementById("btnHome");
         if (btnHome) btnHome.click();
         return;
+    }
+
+    // ACTION C: We are on the Main Page. Handle Double-Tap to Exit.
+    const currentTime = Date.now();
+    if (currentTime - lastBackPressTime < 2000) {
+        // It's a double tap (< 2 seconds). The state has already popped to 'base'.
+        // Go back one more time to exit the app natively.
+        history.back();
+    } else {
+        // First tap on the main page.
+        lastBackPressTime = currentTime;
+        
+        // Show your custom toast
+        if (typeof showRcToast === "function") {
+            showRcToast("Press back again to exit");
+        }
+        
+        // 🚨 CRITICAL: Push the 'home' state back into the buffer so the app doesn't exit yet!
+        history.pushState({ layer: 'home' }, '');
     }
 });
