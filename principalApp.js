@@ -4945,7 +4945,7 @@ window.addEventListener('popstate', (e) => {
 
     // ACTION A: Are there any modals open? Close the top-most one.
     if (navActiveModals.length > 0) {
-        const topModal = navActiveModals[navActiveModals.length - 1]; // Don't .pop(), observer handles it
+        const topModal = navActiveModals[navActiveModals.length - 1]; 
         topModal.classList.remove('active');
         return;
     }
@@ -4960,19 +4960,31 @@ window.addEventListener('popstate', (e) => {
     // ACTION C: We are on the Main Page. Handle Double-Tap to Exit.
     const currentTime = Date.now();
     if (currentTime - lastBackPressTime < 2000) {
-        // It's a double tap (< 2 seconds). The state has already popped to 'base'.
-        // Go back one more time to exit the app natively.
-        history.back();
+        // Double tap confirmed (< 2 seconds).
+        
+        // ENVIRONMENT SNIFFER: Are we in a PWA or a regular browser?
+        const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+        
+        if (isPWA) {
+            // In a PWA, popping the history natively closes the app.
+            history.back();
+        } else {
+            // In a browser, trap the history so they don't get kicked to index.html
+            if (typeof showRcToast === "function") {
+                showRcToast("Please close the browser tab to exit.");
+            }
+            // Push the home state back so they stay on the dashboard safely
+            history.pushState({ layer: 'home' }, '');
+        }
     } else {
         // First tap on the main page.
         lastBackPressTime = currentTime;
         
-        // Show your custom toast
         if (typeof showRcToast === "function") {
             showRcToast("Press back again to exit");
         }
         
-        // 🚨 CRITICAL: Push the 'home' state back into the buffer so the app doesn't exit yet!
+        // Push the 'home' state back into the buffer so the app doesn't navigate away yet!
         history.pushState({ layer: 'home' }, '');
     }
 });
