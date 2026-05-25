@@ -1003,12 +1003,15 @@ body.dark-mode #successExpiryDate { color: #94a3b8 !important; }
     }
 
     /* 1. 🚨 THE FIX: Margin pushes the physical box up. Grid will NOT go behind the nav! */
+    /* 1. 🚨 THE FIX: Use padding-bottom instead of margin to force the inner card to shrink! */
     .main-content {
         flex: 1 !important; 
-        height: auto !important;
-        /* 👇 FIX IS APPLIED HERE: Added env(safe-area-inset-bottom) */
-        margin-bottom: calc(85px + env(safe-area-inset-bottom)) !important; 
-        padding: 15px !important; 
+        height: 100% !important; /* Forces it to respect the 100dvh limit */
+        margin-bottom: 0 !important; /* Removes the buggy flexbox margin overflow */
+        
+        /* 👇 Applies the exact size of the bottom bar as internal padding, creating a physical gap */
+        padding: 15px 15px calc(85px + env(safe-area-inset-bottom)) 15px !important; 
+        
         box-sizing: border-box !important;
         overflow: hidden !important;
     }
