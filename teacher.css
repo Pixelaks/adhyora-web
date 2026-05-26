@@ -845,7 +845,7 @@ body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color
         min-height: 0 !important;
         margin: 0 !important;
         padding: 15px !important; 
-        padding-bottom: calc(90px + env(safe-area-inset-bottom)) !important; /* Forces the gap */
+        padding-bottom: calc(80px + env(safe-area-inset-bottom)) !important; /* Forces the gap */
         box-sizing: border-box !important; 
         overflow: hidden !important;
     }
@@ -862,10 +862,11 @@ body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color
 
     /* 🚨 3. STOP INNER VIEWS FROM INFINITELY STRETCHING */
     .dashboard-view {
-        flex: 1 1 0% !important;
+        flex: 1 1 0px !important;   /* 0px base = forces flex to control height */
+        height: 0 !important;       /* ← this is the key fix */
         min-height: 0 !important;
-        overflow: hidden !important;
-        box-sizing: border-box !important;
+        overflow-y: auto !important;
+        padding-bottom: 120px !important;
     }
     .main-content.mobile-active { display: flex !important; }
     
