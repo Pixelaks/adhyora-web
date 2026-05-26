@@ -834,7 +834,7 @@ body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color
 /* =========================================
    📱 MOBILE POLISH & 2-COLUMN GRID FIX
    ========================================= */
-@media (max-width: 1024px) {
+@media (max-width: 900px) {
     body { height: 100dvh !important; overflow: hidden !important; }
     .dashboard-wrapper { flex-direction: column; }
     
