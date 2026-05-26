@@ -841,8 +841,14 @@ body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color
     /* 🚨 HIDE MAIN CONTENT BY DEFAULT TO PREVENT OVERLAP */
     .main-content {
         display: none !important; 
-        flex: 1 !important; height: auto !important; margin-bottom: 85px !important; 
-        padding: 15px !important; box-sizing: border-box !important; overflow: hidden !important;
+        flex: 1 1 0% !important; 
+        min-height: 0 !important;
+        margin-bottom: 0 !important;
+        /* 🚨 FIX 3: Push the content up so it doesn't get stuck under the nav bar */
+        padding: 15px !important; 
+        padding-bottom: calc(80px + env(safe-area-inset-bottom)) !important;
+        box-sizing: border-box !important; 
+        overflow: hidden !important;
     }
     .main-content.mobile-active { display: flex !important; }
     
@@ -864,13 +870,31 @@ body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color
     .btn-text { font-size: 12px; color: var(--text-red); }
     .btn-icon { font-size: 20px; color: var(--text-red); opacity: 1; }
     
-    /* Floating Bottom Nav Pill */
+    /* Floating Bottom Nav Pill (Fixed Mobile Layout) */
     .icon-nav-container { 
-        position: fixed; top: auto; bottom: 15px; left: 0; right: 0; z-index: 10; 
-        display: flex; justify-content: center; pointer-events: none; 
+        position: fixed !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        top: auto !important;
+        /* 🚨 FIX 1: Add a solid background to block the red containers from bleeding through */
+        background: white !important;
+        padding: 15px 15px calc(15px + env(safe-area-inset-bottom)) 15px !important;
+        box-shadow: 0 -4px 15px rgba(0,0,0,0.05) !important;
+        z-index: 10 !important;
+        display: flex !important;
+        justify-content: center !important;
+        pointer-events: auto !important; 
     }
     .icon-nav { 
-        pointer-events: auto; width: 90%; max-width: 350px; justify-content: space-around; 
-        box-shadow: 0 5px 20px rgba(220, 38, 38, 0.2); 
+        width: 90%;
+        max-width: 400px;
+        margin: 0 auto;
+        justify-content: space-between;
+    }
+    
+    /* 🚨 FIX 2: Dark Mode compatibility for the new Nav Background */
+    body.dark-mode .icon-nav-container {
+        background: var(--bg-base) !important;
     }
 }
