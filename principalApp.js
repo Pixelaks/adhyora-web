@@ -776,6 +776,10 @@ function RC_ExecuteAction() {
         document.getElementById("pinOverlay").classList.remove("active");
         SS_ExecuteMove();
     }
+    else if (rcCurrentAction === "PROCESS_STUDENT_ACTION") {
+        document.getElementById("pinOverlay").classList.remove("active");
+        ExecuteStudentAdminAction();
+    }
     else if (rcCurrentAction === "PUBLISH_FEE_STRUCTURE") {
         document.getElementById("pinOverlay").classList.remove("active");
         
@@ -1098,15 +1102,103 @@ document.getElementById("studentListContainer").addEventListener("scroll", (e) =
 document.getElementById("slSearchInput").addEventListener("input", debounce((e) => renderStudentList(e.target.value.trim()), 250));
 
 let slTargetAdminID = "";
+let pendingStudentEdit = null;
+
 window.SL_OpenAdmin = (sID, name, currentStatus) => {
-    slTargetAdminID = sID; document.getElementById("saStudentName").innerText = name;
+    slTargetAdminID = sID; 
+    document.getElementById("saStudentRollDisplay").innerText = `Roll No: ${sID}`; // Shows locked ID
+    document.getElementById("saEditName").value = name;
     document.getElementById("saStatusDrop").value = (currentStatus === "Declined" || currentStatus === "Banned") ? "Declined" : "Approved";
     document.getElementById("studentAdminOverlay").classList.add("active");
 };
-document.getElementById("btnConfirmSA").addEventListener("click", async () => {
-    if(!slTargetAdminID) return; let newStatus = document.getElementById("saStatusDrop").value;
-    try { await updateDoc(doc(db, "colleges", currentCollegeID, "students", slTargetAdminID), { status: newStatus }); showRcToast(`Status updated to ${newStatus}`); document.getElementById("studentAdminOverlay").classList.remove("active"); } catch(e) { showRcToast("Error updating status"); }
+
+// 1. Edit Button Hook
+document.getElementById("btnConfirmSA").addEventListener("click", () => {
+    if(!slTargetAdminID) return;
+    
+    pendingStudentEdit = {
+        action: "EDIT",
+        targetRoll: slTargetAdminID,
+        newName: document.getElementById("saEditName").value.trim(),
+        newStatus: document.getElementById("saStatusDrop").value
+    };
+    
+    if(!pendingStudentEdit.newName) { 
+        showRcToast("Name is required."); return; 
+    }
+    
+    document.getElementById("studentAdminOverlay").classList.remove("active"); 
+    document.getElementById("pinInput").value = ""; 
+    document.getElementById("pinOverlay").classList.add("active"); 
+    rcCurrentAction = "PROCESS_STUDENT_ACTION"; 
 });
+
+// 2. Delete Button Hook
+document.getElementById("btnDeleteStudent").addEventListener("click", () => {
+    if(!slTargetAdminID) return;
+    
+    if(!confirm("Are you sure you want to permanently delete this student?")) return;
+    
+    pendingStudentEdit = { action: "DELETE", targetRoll: slTargetAdminID };
+    
+    document.getElementById("studentAdminOverlay").classList.remove("active");
+    document.getElementById("pinInput").value = "";
+    document.getElementById("pinOverlay").classList.add("active");
+    rcCurrentAction = "PROCESS_STUDENT_ACTION";
+});
+
+// 3. The Simplified Master Execution Engine
+async function ExecuteStudentAdminAction() {
+    if (!pendingStudentEdit) return;
+    
+    let action = pendingStudentEdit.action;
+    let targetRoll = pendingStudentEdit.targetRoll;
+    
+    showRcToast("Processing database changes...");
+    
+    try {
+        let wb = writeBatch(db);
+        
+        if (action === "DELETE") {
+            // Delete standard profiles
+            wb.delete(doc(db, "colleges", currentCollegeID, "students", targetRoll));
+            wb.delete(doc(db, "colleges", currentCollegeID, "public_lookup", targetRoll));
+            
+            // Find and remove from all batches safely
+            let batchesSnap = await getDocs(query(collection(db, "colleges", currentCollegeID, "subject_batches"), where("studentIDs", "array-contains", targetRoll)));
+            batchesSnap.forEach(batchDoc => {
+                let ids = batchDoc.data().studentIDs || [];
+                ids = ids.filter(id => id !== targetRoll);
+                wb.update(batchDoc.ref, { studentIDs: ids });
+            });
+            
+            await wb.commit();
+            showRcToast("✅ Student permanently deleted.");
+        } 
+        else if (action === "EDIT") {
+            let newName = pendingStudentEdit.newName;
+            let newStatus = pendingStudentEdit.newStatus;
+            
+            // Standard update - no need to move documents!
+            wb.update(doc(db, "colleges", currentCollegeID, "students", targetRoll), { 
+                Name: newName, 
+                status: newStatus, 
+                LastUpdated: serverTimestamp() 
+            });
+            wb.update(doc(db, "colleges", currentCollegeID, "public_lookup", targetRoll), { 
+                name: newName 
+            });
+            
+            await wb.commit();
+            showRcToast("✅ Student details updated.");
+        }
+    } catch (e) {
+        console.error(e);
+        showRcToast("❌ Error processing action.");
+    }
+    
+    pendingStudentEdit = null;
+}
 
 // ==========================================
 // STUDENT DASHBOARD
