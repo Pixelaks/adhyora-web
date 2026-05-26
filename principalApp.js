@@ -3251,12 +3251,30 @@ function SS_Init() {
 }
 function SS_RefreshCategories() {
     let types = new Set();
-    subCachedData.forEach(sub => { let sems = sub.semester.split(',').map(s=>s.trim()); if (sems.includes(ssCurrentSem) && sub.type) types.add(sub.type.trim()); });
+    
+    subCachedData.forEach(sub => { 
+        let sems = sub.semester.split(',').map(s => s.trim()); 
+        if (sems.includes(ssCurrentSem) && sub.type) {
+            
+            let typeUpper = sub.type.trim().toUpperCase();
+            
+            // 🚨 C# PORT: Hide MJD and CORE subjects from the Reassignment view!
+            // Because they are core subjects, students can't be "moved" between them manually.
+            if (!typeUpper.startsWith("MJD") && !typeUpper.startsWith("CORE")) {
+                types.add(sub.type.trim()); 
+            }
+        } 
+    });
+    
     let catDrop = document.getElementById("ssCatDrop");
-    if (types.size === 0) catDrop.innerHTML = `<option value="">No Categories</option>`;
-    else {
-        let arr = Array.from(types).sort(); catDrop.innerHTML = `<option value="">Select Category</option>` + arr.map(t => `<option value="${t}">${t}</option>`).join('');
+    
+    if (types.size === 0) {
+        catDrop.innerHTML = `<option value="">No Categories</option>`;
+    } else {
+        let arr = Array.from(types).sort(); 
+        catDrop.innerHTML = `<option value="">Select Category</option>` + arr.map(t => `<option value="${t}">${t}</option>`).join('');
     }
+    
     SS_RefreshSubjects();
 }
 
