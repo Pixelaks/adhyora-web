@@ -134,10 +134,10 @@ async function enforceVersionCheck() {
       // CLEAR STORAGE
       //localStorage.clear();
 
-      // FORCE HARD REFRESH
-      window.location.href =
-        window.location.pathname +
-        `?update=${Date.now()}`;
+      // FORCE HARD REFRESH (Preserving existing parameters)
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set("update", Date.now());
+      window.location.href = currentUrl.toString();
 
       return;
     }
