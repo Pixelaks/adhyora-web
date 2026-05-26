@@ -838,34 +838,11 @@ body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color
     body { height: 100dvh !important; overflow: hidden !important; }
     .dashboard-wrapper { flex-direction: column; }
     
+    /* 🚨 HIDE MAIN CONTENT BY DEFAULT TO PREVENT OVERLAP */
     .main-content {
-        padding-bottom: calc(80px + env(safe-area-inset-bottom)) !important;
-    }
-
-    /* 2. Force dashboard-view to fill its flex parent correctly */
-    .dashboard-view {
-        flex: 1 1 0px !important;
-        height: 0 !important;
-        min-height: 0 !important;
-        overflow: hidden !important;
-        padding-bottom: 0 !important;
-        box-sizing: border-box !important;
-    }
-
-    /* 3. Inner scroll lists fill remaining space and handle their own scroll */
-    .dashboard-view .scrollable-list {
-        min-height: 0 !important;
-        flex: 1 1 0px !important;
-        overflow-y: auto !important;
-        -webkit-overflow-scrolling: touch !important;
-        padding-bottom: 120px !important;
-    }
-
-    /* 4. Views that scroll themselves (no inner scrollable-list) */
-    #calendarView,
-    #studentDashboardView {
-        overflow-y: auto !important;
-        padding-bottom: 120px !important;
+        display: none !important; 
+        flex: 1 !important; height: auto !important; margin-bottom: 85px !important; 
+        padding: 15px !important; box-sizing: border-box !important; overflow: hidden !important;
     }
     .main-content.mobile-active { display: flex !important; }
     
