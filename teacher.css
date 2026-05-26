@@ -834,21 +834,38 @@ body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color
 /* =========================================
    📱 MOBILE POLISH & 2-COLUMN GRID FIX
    ========================================= */
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
     body { height: 100dvh !important; overflow: hidden !important; }
     .dashboard-wrapper { flex-direction: column; }
     
-    /* 🚨 HIDE MAIN CONTENT BY DEFAULT TO PREVENT OVERLAP */
+    /* 🚨 1. FIX MAIN CONTENT PUSHING (Leaves room for the floating pill) */
     .main-content {
         display: none !important; 
         flex: 1 1 0% !important; 
         min-height: 0 !important;
-        margin-bottom: 0 !important;
-        /* 🚨 FIX 3: Push the content up so it doesn't get stuck under the nav bar */
+        margin: 0 !important;
         padding: 15px !important; 
-        padding-bottom: calc(80px + env(safe-area-inset-bottom)) !important;
+        padding-bottom: calc(90px + env(safe-area-inset-bottom)) !important; /* Forces the gap */
         box-sizing: border-box !important; 
         overflow: hidden !important;
+    }
+
+    /* 🚨 2. FORCE THE GRID CARD TO RESPECT THE GAP */
+    .welcome-card {
+        flex: 1 1 0% !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    /* 🚨 3. STOP INNER VIEWS FROM INFINITELY STRETCHING */
+    .dashboard-view {
+        flex: 1 1 0% !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
     }
     .main-content.mobile-active { display: flex !important; }
     
