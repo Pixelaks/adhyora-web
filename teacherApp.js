@@ -1897,24 +1897,37 @@ attachSafeClick("btnSignOut", () => {
 // ==========================================
 // 🚨 THEME MANAGER
 // ==========================================
+// 🚨 PREMIUM THEME ENGINE
 function applyTheme(isDark) {
-    const metaThemeColor = document.getElementById("pwaThemeColorMeta"); // 🚨 Grab the PWA tag
-    
+    // Check if the browser supports the modern View Transitions API
+    if (!document.startViewTransition) {
+        executeThemeClassToggle(isDark);
+        return;
+    }
+
+    // This performs the "Brush" or "Sweep" effect
+    document.startViewTransition(() => {
+        executeThemeClassToggle(isDark);
+    });
+}
+
+function executeThemeClassToggle(isDark) {
     if (isDark) {
         document.body.classList.add("dark-mode");
-        let dBtn = document.getElementById("btnDarkMode"); let lBtn = document.getElementById("btnLightMode");
-        if(dBtn) dBtn.style.border = "2px solid var(--brand-red)"; if(lBtn) lBtn.style.border = "1px solid #475569";
-        
-        // 🚨 Update PWA bars to Dark Mode
-        if(metaThemeColor) metaThemeColor.setAttribute("content", "#0f172a"); 
+        let dBtn = document.getElementById("btnDarkMode"); 
+        let lBtn = document.getElementById("btnLightMode");
+        if(dBtn) dBtn.style.border = "2px solid var(--brand-red)"; 
+        if(lBtn) lBtn.style.border = "1px solid #475569";
     } else {
         document.body.classList.remove("dark-mode");
-        let dBtn = document.getElementById("btnDarkMode"); let lBtn = document.getElementById("btnLightMode");
-        if(lBtn) lBtn.style.border = "2px solid var(--brand-red)"; if(dBtn) dBtn.style.border = "1px solid #cbd5e1";
-        
-        // 🚨 Update PWA bars to Light Mode
-        if(metaThemeColor) metaThemeColor.setAttribute("content", "#ffffff"); 
+        let dBtn = document.getElementById("btnDarkMode"); 
+        let lBtn = document.getElementById("btnLightMode");
+        if(lBtn) lBtn.style.border = "2px solid var(--brand-red)"; 
+        if(dBtn) dBtn.style.border = "1px solid #cbd5e1";
     }
+    
+    // Update PWA bar and storage
+    updateSystemThemeBar(); 
     localStorage.setItem("adhyora_teacher_theme", isDark ? "dark" : "light");
 }
 attachSafeClick("btnThemes", () => { let s = document.getElementById("settingsOverlay"); let t = document.getElementById("themesModal"); if(s) s.classList.remove("active"); if(t) t.classList.add("active"); });
@@ -7397,6 +7410,8 @@ function SetLockMode(mode) {
         elLock.btnForgot.innerText = "Skip for now";
         elLock.btnForgot.style.display = "block";
     }
+
+    updateSystemThemeBar();
 }
 
 elLock.btnSubmit.addEventListener("click", async () => {
@@ -7623,6 +7638,22 @@ function startLogoAnimation() {
         }
         iterations += 1 / 3;
     }, 50);
+}
+
+function updateSystemThemeBar() {
+    const metaThemeColor = document.getElementById("pwaThemeColorMeta");
+    const isDark = localStorage.getItem("adhyora_teacher_theme") === "dark";
+    
+    // If the lock screen is currently visible (flex), force dark mode bar color
+    const isLocked = document.getElementById("appLockScreen").style.display === "flex";
+    
+    if (metaThemeColor) {
+        if (isLocked) {
+            metaThemeColor.setAttribute("content", "#0f172a"); // Dark Navy for lock screen
+        } else {
+            metaThemeColor.setAttribute("content", isDark ? "#0f172a" : "#ffffff");
+        }
+    }
 }
 
 function glitchLoop() {
