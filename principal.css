@@ -1214,12 +1214,93 @@ body.dark-mode #feeLiveStructureGrid span {
 
 /* Views that scroll themselves (no inner scrollable-list) */
 #calendarView,
-#studentDashboardView,
-#teacherDashboardView,
 #dataView {
     overflow-y: auto !important;
     padding-bottom: 20px !important;       /* Fixed: Reduced massive dead space */
 }
+
+/* ========================================================
+       🚨 11. STUDENT & TEACHER DASHBOARD (FOLD PHONE FIXES)
+       ======================================================== */
+
+    /* Give the dashboard breathing room and unlock scrolling */
+    #studentDashboardView,
+    #teacherDashboardView {
+        padding: 15px !important; 
+        overflow-x: hidden !important; 
+        overflow-y: auto !important;   
+        padding-bottom: 40px !important; 
+        -webkit-overflow-scrolling: touch !important; 
+    }
+
+    /* Force the flex row (Circle Wave + Attendance) to stack vertically */
+    #studentDashboardView div[style*="min-width: 250px"],
+    #studentDashboardView div[style*="min-width: 300px"],
+    #teacherDashboardView div[style*="min-width: 250px"],
+    #teacherDashboardView div[style*="min-width: 300px"] {
+        min-width: 0 !important;
+        width: 100% !important;
+        flex-basis: 100% !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    /* 🚨 FIX 1: ONLY target the outer 'auto-fit' layout grids, NOT the inner ledger summary! */
+    #studentDashboardView div[style*="auto-fit"],
+    #teacherDashboardView div[style*="auto-fit"] {
+        grid-template-columns: 1fr !important;
+        gap: 15px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    /* 🚨 FIX 2: Shrink the date filters so the "All Time" button doesn't get pushed out */
+    #tdDateFilter, #sdDateFilter {
+        width: 120px !important; /* Constrain the date input width */
+        padding: 5px !important;
+        font-size: 11px !important;
+    }
+    
+    #tdBtnAllTime, #sdBtnAllTime {
+        padding: 5px 10px !important;
+        font-size: 11px !important;
+        white-space: nowrap; /* Prevents the text inside the button from stacking */
+    }
+
+    /* 🚨 FIX 3: Reformat the Fees Ledger Summary to look beautiful on tiny screens */
+    #pdFeesLedgerContainer div[style*="grid-template-columns: repeat(3, 1fr)"] {
+        grid-template-columns: 1fr 1fr !important; /* Converts 3-columns into a nice 2-column grid */
+        text-align: left !important;
+        gap: 12px !important;
+    }
+    
+    /* Make the "Remaining" stat span across the bottom of the grid */
+    #pdFeesLedgerContainer div[style*="grid-template-columns: repeat(3, 1fr)"] > div:nth-child(3) {
+        grid-column: span 2;
+        border-top: 1px dashed rgba(74, 222, 128, 0.4);
+        padding-top: 8px;
+    }
+
+    /* ========================================================
+       🚨 12. SQUEEZE DAY BUTTONS TO FIT (NO SCROLLING)
+       ======================================================== */
+    .asn-days-container, 
+    .tt-days-container {
+        gap: 5px !important; /* Shrink the dead space between buttons */
+        width: 100% !important;
+        justify-content: space-between !important; 
+        overflow: hidden !important; /* Explicitly kill the scrollbar */
+    }
+
+    .asn-day-btn, 
+    .tt-day-btn {
+        flex: 1 !important; /* Force all 5 buttons to share the width equally (20% each) */
+        padding: 6px 0 !important; /* Remove bulky side padding so they can squish */
+        font-size: 11px !important; /* Drop font size slightly to fit the words "Mon", "Tue" */
+        text-align: center !important; /* Keep the text perfectly centered */
+        min-width: 0 !important; /* Strip browser defaults that prevent shrinking */
+        letter-spacing: -0.5px !important; /* Pull the letters just a hair closer together */
+    }
 
     /* 6. BOTTOM NAVIGATION */
     .icon-nav-container {
@@ -1324,25 +1405,35 @@ body.dark-mode #feeLiveStructureGrid span {
         display: block;
     }
 
-    /* 9. FEE & ASSIGNMENT GRIDS */
+    /* 9. FEE & ASSIGNMENT GRIDS (MOBILE RESPONSIVE UPGRADE) */
     .fee-center-split-wrapper {
         flex-direction: column !important;
-
         align-items: stretch !important;
-
         gap: 20px !important;
+    }
+
+    /* 🚨 FIX 1: Nuke the hardcoded inline min-widths that shatter small screens */
+    .fee-center-split-wrapper > div {
+        min-width: 0 !important; 
+        width: 100% !important;
     }
 
     #feeConfigOverlay .compose-modal {
         width: 92% !important;
-
         max-width: 420px !important;
-
         padding: 20px 15px !important;
-
-        max-height: 82vh !important;
+        max-height: 85vh !important;
+        /* 🚨 FIX 2: Allow the modal itself to scroll vertically */
+        overflow-y: auto !important; 
+        -webkit-overflow-scrolling: touch !important; 
     }
 
+    /* 🚨 FIX 3: Constrain the roster list height so it doesn't hijack the whole screen */
+    #feeLiveStructureGrid {
+        max-height: 250px !important;
+    }
+
+    /* Keep your existing Assignment Grid rule below this... */
     .asn-periods-grid {
         grid-template-columns: 1fr !important;
     }
