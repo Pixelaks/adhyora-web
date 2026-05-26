@@ -951,4 +951,12 @@ body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color
     body.dark-mode .icon-nav-container {
         background: var(--bg-base) !important;
     }
+
+   /* 🚨 6. BIGGER LOGO TEXT ON MOBILE */
+    .logo-container {
+        margin-bottom: 15px;
+    }
+    .logo-text {
+        font-size: 3.5rem !important; 
+    }
 }
