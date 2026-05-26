@@ -1898,14 +1898,22 @@ attachSafeClick("btnSignOut", () => {
 // 🚨 THEME MANAGER
 // ==========================================
 function applyTheme(isDark) {
+    const metaThemeColor = document.getElementById("pwaThemeColorMeta"); // 🚨 Grab the PWA tag
+    
     if (isDark) {
         document.body.classList.add("dark-mode");
         let dBtn = document.getElementById("btnDarkMode"); let lBtn = document.getElementById("btnLightMode");
         if(dBtn) dBtn.style.border = "2px solid var(--brand-red)"; if(lBtn) lBtn.style.border = "1px solid #475569";
+        
+        // 🚨 Update PWA bars to Dark Mode
+        if(metaThemeColor) metaThemeColor.setAttribute("content", "#0f172a"); 
     } else {
         document.body.classList.remove("dark-mode");
         let dBtn = document.getElementById("btnDarkMode"); let lBtn = document.getElementById("btnLightMode");
         if(lBtn) lBtn.style.border = "2px solid var(--brand-red)"; if(dBtn) dBtn.style.border = "1px solid #cbd5e1";
+        
+        // 🚨 Update PWA bars to Light Mode
+        if(metaThemeColor) metaThemeColor.setAttribute("content", "#ffffff"); 
     }
     localStorage.setItem("adhyora_teacher_theme", isDark ? "dark" : "light");
 }
@@ -7581,3 +7589,61 @@ document.onkeydown = function(e) {
     if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) return false;
     if (e.ctrlKey && e.keyCode === 85) return false;
 };
+
+// ==========================================
+// 🚀 ADHYORA LOGO GLITCH ENGINE
+// ==========================================
+const logoEl = document.querySelector('.logo-text');
+const finalText = "ADHYORA";
+
+const charMap = {
+    'A': 'अ', 'D': 'ड', 'H': 'ह', 'Y': 'य', 'O': 'ओ', 'R': 'र'
+};
+const chaosChars = "अआइईउऊऋएऐओऔकखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसह";
+
+function startLogoAnimation() {
+    if (!logoEl) return;
+    
+    // 1. Intro Decode Animation
+    let iterations = 0;
+    const interval = setInterval(() => {
+        logoEl.innerText = finalText
+            .split("")
+            .map((letter, index) => {
+                if (index < iterations) return finalText[index];
+                return chaosChars[Math.floor(Math.random() * chaosChars.length)];
+            })
+            .join("");
+        
+        if (iterations >= finalText.length) {
+            clearInterval(interval);
+            logoEl.innerText = finalText;
+            // 2. Start Glitch Loop after intro
+            setTimeout(glitchLoop, 3000);
+        }
+        iterations += 1 / 3;
+    }, 50);
+}
+
+function glitchLoop() {
+    if (!logoEl) return;
+    
+    const randomIndex = Math.floor(Math.random() * finalText.length);
+    const originalChar = finalText[randomIndex];
+    const glitchChar = charMap[originalChar] || chaosChars[Math.floor(Math.random() * chaosChars.length)];
+
+    // Glitch
+    let textArr = finalText.split("");
+    textArr[randomIndex] = glitchChar;
+    logoEl.innerText = textArr.join("");
+
+    // Revert after 2 seconds
+    setTimeout(() => {
+        logoEl.innerText = finalText;
+        // Repeat after 3-6 seconds
+        setTimeout(glitchLoop, Math.random() * 3000 + 3000);
+    }, 2000);
+}
+
+// Kick it off!
+startLogoAnimation();
