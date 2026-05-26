@@ -835,22 +835,66 @@ body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color
    📱 MOBILE POLISH & 2-COLUMN GRID FIX
    ========================================= */
 @media (max-width: 1024px) {
-    body { height: 100dvh !important; overflow: hidden !important; }
-    .dashboard-wrapper { flex-direction: column; }
-    
-    /* 🚨 1. FIX MAIN CONTENT PUSHING (Leaves room for the floating pill) */
-    .main-content {
-        display: none !important; 
-        flex: 1 1 0% !important; 
-        min-height: 0 !important;
-        margin: 0 !important;
-        padding: 15px !important; 
-        padding-bottom: calc(80px + env(safe-area-inset-bottom)) !important; /* Forces the gap */
-        box-sizing: border-box !important; 
+    /* 🚨 1. PWA ROOT LOCK (Copied from your perfect Principal code) */
+    html,
+    body {
+        height: 100%;
         overflow: hidden !important;
     }
 
-    /* 🚨 2. FORCE THE GRID CARD TO RESPECT THE GAP */
+    .dashboard-wrapper {
+        flex-direction: column !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        overflow: hidden !important;
+    }
+
+    /* 🚨 2. FIX MAIN CONTENT PUSHING */
+    .main-content {
+        display: none !important;
+        flex: 1 1 0% !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 15px !important;
+        /* Forces the gap above the gesture bar and nav pill */
+        padding-bottom: calc(80px + env(safe-area-inset-bottom)) !important; 
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+    }
+
+    /* 🚨 3. THE PWA/SAFARI FLEXBOX FIX */
+    .dashboard-view {
+        flex: 1 1 0px !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        overflow: hidden !important; /* Locks the outer card */
+        padding-bottom: 0 !important;
+        -webkit-overflow-scrolling: touch !important;
+        box-sizing: border-box !important;
+    }
+
+    /* 🚨 CRITICAL FIX: Stop inner inline HTML heights from breaking the PWA */
+    .dashboard-view > div[style*="height: 100%"],
+    #attMainScreen, 
+    #attHistoryScreen, 
+    #attRecordScreen {
+        flex: 1 1 0px !important;
+        height: auto !important;     /* Overrides your inline height: 100% */
+        min-height: 0 !important;
+        max-height: 100% !important;
+        overflow: hidden !important; /* Passes scrolling duty to the list */
+    }
+
+    /* 🚨 4. FIX: Inner scroll lists handle their own scroll, keeping buttons pinned! */
+    .dashboard-view .scrollable-list {
+        min-height: 0 !important;
+        flex: 1 1 0px !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        padding-bottom: 20px !important;       /* Keeps breathing room at the bottom of the list */
+    }
+
+    /* 🚨 5. FORCE THE GRID CARD TO RESPECT THE GAP */
     .welcome-card {
         flex: 1 1 0% !important;
         min-height: 0 !important;
@@ -860,25 +904,6 @@ body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color
         flex-direction: column !important;
     }
 
-    /* 🚨 3. STOP INNER VIEWS FROM INFINITELY STRETCHING */
-.dashboard-view {
-    flex: 1 1 0px !important;
-    height: 0 !important;
-    min-height: 0 !important;
-    overflow: hidden !important;          /* 🚨 FIX: Lock outer scroll */
-    padding-bottom: 0 !important;         /* 🚨 FIX: Remove massive padding */
-    -webkit-overflow-scrolling: touch !important;
-    box-sizing: border-box !important;
-}
-
-/* 🚨 FIX: Inner scroll lists handle their own scroll */
-.dashboard-view .scrollable-list {
-    min-height: 0 !important;
-    flex: 1 1 0px !important;
-    overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    padding-bottom: 20px !important;       /* 🚨 FIX: Keeps breathing room at the bottom of the list */
-}
     .main-content.mobile-active { display: flex !important; }
     
     .sidebar { 
@@ -906,7 +931,7 @@ body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color
         right: 0 !important;
         bottom: 0 !important;
         top: auto !important;
-        /* 🚨 FIX 1: Add a solid background to block the red containers from bleeding through */
+        /* Add a solid background to block the red containers from bleeding through */
         background: white !important;
         padding: 15px 15px calc(15px + env(safe-area-inset-bottom)) 15px !important;
         box-shadow: 0 -4px 15px rgba(0,0,0,0.05) !important;
@@ -922,7 +947,7 @@ body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color
         justify-content: space-between;
     }
     
-    /* 🚨 FIX 2: Dark Mode compatibility for the new Nav Background */
+    /* Dark Mode compatibility for the new Nav Background */
     body.dark-mode .icon-nav-container {
         background: var(--bg-base) !important;
     }
