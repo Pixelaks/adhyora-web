@@ -13,19 +13,29 @@
    GLOBAL RESET & CONTAINERS
    ========================================= */
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Poppins', sans-serif; }
+/* 1. Reset the Body to be plain/clean */
 body { 
     background-color: var(--bg-main, #ffffff) !important; 
-    background-image: 
-        linear-gradient(var(--bg-grid-color, rgba(59, 130, 246, 0.08)) 1px, transparent 1px), 
-        linear-gradient(90deg, var(--bg-grid-color, rgba(59, 130, 246, 0.08)) 1px, transparent 1px) !important;
-    background-size: 25px 25px !important;
+    background-image: none !important; /* Remove grid from global body */
     width: 100vw; 
-    height: 100vh;      
-    height: 100dvh;      
+    height: 100dvh; 
     overflow: hidden; 
     margin: 0; 
-    color: var(--text-main) !important; 
-    transition: background-color 0.3s, color 0.3s;
+    transition: background-color 0.3s;
+}
+
+/* 2. Create the new reusable Grid Container */
+.grid-panel {
+    background-color: var(--bg-card, #ffffff) !important;
+    background-image: 
+        linear-gradient(var(--bg-grid-color) 1px, transparent 1px), 
+        linear-gradient(90deg, var(--bg-grid-color) 1px, transparent 1px) !important;
+    background-size: 25px 25px !important;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 20px; /* Adjust as needed */
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    transition: background-color 0.3s;
 }
 
 .hidden-view { display: none !important; }
