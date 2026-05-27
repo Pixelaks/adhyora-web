@@ -7664,9 +7664,14 @@ function updateSystemThemeBar() {
     // If the lock screen is currently visible (flex), force dark mode bar color
     const isLocked = document.getElementById("appLockScreen").style.display === "flex";
     
+    // 🚨 FIX: Check if the initial app loader is still blocking the screen
+    const loader = document.getElementById("initialAppLoader");
+    const isLoaderVisible = loader && loader.style.display !== "none";
+
     if (metaThemeColor) {
-        if (isLocked) {
-            metaThemeColor.setAttribute("content", "#0f172a"); // Dark Navy for lock screen
+        // If it is locked OR loading, strictly enforce the dark navy theme
+        if (isLocked || isLoaderVisible) {
+            metaThemeColor.setAttribute("content", "#0f172a"); 
         } else {
             metaThemeColor.setAttribute("content", isDark ? "#0f172a" : "#ffffff");
         }
