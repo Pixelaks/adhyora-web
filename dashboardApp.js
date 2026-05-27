@@ -205,25 +205,35 @@ async function registerWebSession() {
 
 async function syncCollegeAndListen() {
     
+    // 1. Listen for College Settings & Subscription changes
     onSnapshot(doc(db, "colleges", collegeID), (colSnap) => {
         if (colSnap.exists()) {
             let data = colSnap.data();
-            if (data.currentSemesterType) { collegeSemesterType = data.currentSemesterType; }
             
-            // Add this line to grab the dynamic database flag:
-            if (data.settings && data.settings.attendanceCalculationMode) {
-                attendanceCalculationMode = data.settings.attendanceCalculationMode;
+            // Update Semester Type
+            if (data.currentSemesterType) { 
+                collegeSemesterType = data.currentSemesterType; 
             }
-            
-            isStrictCollege = (attendanceCalculationMode === "STRICT_SESSION");
 
+            // 🚨 DYNAMIC ATTENDANCE MODE ENGINE
+            if (data.settings && data.settings.attendanceCalculationMode) {
+                // This updates the global variable so the rest of your logic uses the right math
+                isStrictCollege = (data.settings.attendanceCalculationMode === "STRICT_SESSION");
+                
+                // Force UI to recalculate based on the new mode
+                if (typeof updateUIForCurrentSemester === 'function') {
+                    updateUIForCurrentSemester();
+                }
+            }
+
+            // Subscription/Lock Logic
             const blockPanel = document.getElementById("subscriptionBlockPanel");
             const dashboardUI = document.querySelector(".dashboard-container"); 
             
             if (!data.subscription) {
                 blockPanel.classList.add("active");
                 dashboardUI.style.display = "none";
-              updateStatusBar();
+                updateStatusBar();
             } else {
                 let expiryTimestamp = data.subscription.expiryDate || 0;
                 let hardBlockDate = new Date(expiryTimestamp * 1000);
@@ -232,20 +242,20 @@ async function syncCollegeAndListen() {
                 if (new Date() > hardBlockDate) {
                     blockPanel.classList.add("active");
                     dashboardUI.style.display = "none"; 
-                  updateStatusBar();
+                    updateStatusBar();
                 } else {
                     blockPanel.classList.remove("active");
                     dashboardUI.style.display = "flex"; 
-                  updateStatusBar();
+                    updateStatusBar();
                 }
             }
         }
     });
 
+    // 2. Load Student Profile
     const secureUID = auth.currentUser.uid; 
     const q = query(collection(db, "colleges", collegeID, "students"), where("userID", "==", secureUID));
 
-    // 🚨 PREVENTS THE SNAPSHOT CASCADE
     let isFirstBoot = true; 
 
     onSnapshot(q, async (snapshot) => {
@@ -255,7 +265,7 @@ async function syncCollegeAndListen() {
         
         registerWebSession();
 
-        // 🚨 ONLY FETCH THESE HEAVY ARRAYS ONCE!
+        // 🚨 ONLY FETCH HEAVY ARRAYS ONCE
         if (isFirstBoot) {
             fetchGlobalCalendarData(); 
             
@@ -274,15 +284,14 @@ async function syncCollegeAndListen() {
         processStudentData(docSnap.data());
         loadDailyAttendance(); 
 
-      // 🚨 ADD THIS LINE RIGHT HERE! 🚨
+        // Initial Loading Cleanup
         hideAppLoader();
         
         if (!isDataListening) {
             isDataListening = true;
             startBackgroundListeners();
             requestPushPermissions();
-
-          updateNotificationToggleUI();
+            updateNotificationToggleUI();
         }
 
         if (!el.ttView.classList.contains("hidden-view")) {
