@@ -7195,6 +7195,12 @@ let securityListener = null;
 let isFirstSecurityLoad = true;
 
 function CheckSecurityPin() {
+    // 🚨 FIX: Force the phone status bar and bottom nav to match the dark lockscreen
+    const metaThemeColor = document.getElementById("pwaThemeColorMeta");
+    if(metaThemeColor) metaThemeColor.setAttribute("content", "#0f172a");
+    document.documentElement.style.backgroundColor = "#0f172a";
+    document.body.style.backgroundColor = "#0f172a";
+
     document.querySelector(".main-content").style.display = "none";
     document.getElementById("mainSidebar").style.display = "none";
     document.getElementById("initialAppLoader").style.display = "none"; 
@@ -7517,6 +7523,11 @@ function UnlockSecurityWall() {
     document.querySelector(".main-content").style.display = "";
     document.getElementById("mainSidebar").style.display = "";
     failedPinAttempts = 0;
+
+    // 🚨 FIX: Remove inline background overrides and restore the user's theme color!
+    document.documentElement.style.backgroundColor = "";
+    document.body.style.backgroundColor = "";
+    updateSystemThemeBar();
 }
 
 // --- FORGOT PIN / RE-AUTH LOGIC ---
@@ -7590,6 +7601,12 @@ document.addEventListener("visibilitychange", () => {
             document.getElementById("mainSidebar").style.display = "none";
             elLock.screen.style.display = "flex";
             SetLockMode("LOGIN");
+
+            // 🚨 FIX: Force the phone's status bar to match the dark lock screen when auto-locking!
+            const metaThemeColor = document.getElementById("pwaThemeColorMeta");
+            if (metaThemeColor) {
+                metaThemeColor.setAttribute("content", "#0f172a");
+            }
         }
     }
 });
