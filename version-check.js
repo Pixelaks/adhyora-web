@@ -20,14 +20,13 @@ remoteConfig.settings = {
 // ==========================================
 // 🚨 CHANGE ONLY THIS VERSION
 // ==========================================
-const LOCAL_VERSION = "1.0.54";
+const LOCAL_VERSION = "1.0.55";
 
 // ==========================================
 // SHOW VERSION TEXT
 // ==========================================
 document.addEventListener("DOMContentLoaded", () => {
   const versionDisplayElement = document.getElementById("versionText");
-
   if (versionDisplayElement) {
     versionDisplayElement.innerText = `Version ${LOCAL_VERSION} (Web)`;
   }
@@ -36,35 +35,27 @@ document.addEventListener("DOMContentLoaded", () => {
 // ==========================================
 // LOAD CORRECT PAGE SCRIPT
 // ==========================================
-function loadMainApp() {
-
+// 🚨 This now accepts a targetVersion parameter to bypass cache
+function loadMainApp(targetVersion) {
+  const versionToLoad = targetVersion || LOCAL_VERSION;
   const currentPage = window.location.pathname.toLowerCase();
 
   let appFile = "app.js";
 
-  // INDEX
   if (currentPage.includes("index")) {
     appFile = "app.js";
-  }
-
-  // STUDENT
-  else if (currentPage.includes("student")) {
+  } else if (currentPage.includes("student")) {
     appFile = "dashboardApp.js";
-  }
-
-  // TEACHER
-  else if (currentPage.includes("teacher")) {
+  } else if (currentPage.includes("teacher")) {
     appFile = "teacherApp.js";
-  }
-
-  // PRINCIPAL
-  else if (currentPage.includes("principal")) {
+  } else if (currentPage.includes("principal")) {
     appFile = "principalApp.js";
   }
 
   const appScript = document.createElement("script");
   appScript.type = "module";
-  appScript.src = `${appFile}?v=${LOCAL_VERSION}`;
+  // 🚨 Inject the version into the URL so the browser downloads a fresh file
+  appScript.src = `${appFile}?v=${versionToLoad}`;
 
   document.body.appendChild(appScript);
 }
@@ -73,91 +64,65 @@ function loadMainApp() {
 // CHECK FIREBASE VERSION
 // ==========================================
 async function enforceVersionCheck() {
-
   try {
-
     await fetchAndActivate(remoteConfig);
+    const remoteVersion = getString(remoteConfig, "web_version");
 
-    const remoteVersion =
-      getString(remoteConfig, "web_version");
-
-    console.log(
-      "LOCAL:",
-      LOCAL_VERSION,
-      "| REMOTE:",
-      remoteVersion
-    );
+    console.log("LOCAL:", LOCAL_VERSION, "| REMOTE:", remoteVersion);
 
     // ==========================================
     // NEW VERSION DETECTED
     // ==========================================
-    if (
-      remoteVersion &&
-      remoteVersion !== LOCAL_VERSION
-    ) {
-
+    if (remoteVersion && remoteVersion !== LOCAL_VERSION) {
       console.log("🚨 NEW VERSION DETECTED!");
 
-      // STOP LOOP
-      if (sessionStorage.getItem("updatingNow")) {
-
-        sessionStorage.removeItem("updatingNow");
-
-        loadMainApp();
-
-        return;
-      }
-
-      sessionStorage.setItem("updatingNow", "true");
-
-      // REMOVE SERVICE WORKERS
+      // 1. Remove Service Workers (Kills background caching)
       if ("serviceWorker" in navigator) {
-
-        const registrations =
-          await navigator.serviceWorker.getRegistrations();
-
+        const registrations = await navigator.serviceWorker.getRegistrations();
         for (const registration of registrations) {
           await registration.unregister();
         }
       }
 
-      // CLEAR CACHE
+      // 2. Clear Standard PWA Caches
       if ("caches" in window) {
-
         const cacheKeys = await caches.keys();
-
-        await Promise.all(
-          cacheKeys.map(key => caches.delete(key))
-        );
+        await Promise.all(cacheKeys.map(key => caches.delete(key)));
       }
 
-      // CLEAR STORAGE
-      //localStorage.clear();
+      // 3. Failsafe: Prevent infinite reload loops
+      let lastAttempt = sessionStorage.getItem("update_attempt_" + remoteVersion);
+      if (lastAttempt) {
+        console.warn("HTML cache stubbornly persists. Bypassing and injecting new script directly.");
+        // We load the new script immediately without reloading the page again
+        loadMainApp(remoteVersion); 
+        return;
+      }
+      
+      sessionStorage.setItem("update_attempt_" + remoteVersion, "true");
 
-      // FORCE HARD REFRESH (Preserving existing parameters)
+      // 4. Force Hard Refresh WITH a Cache Buster in the URL
       const currentUrl = new URL(window.location.href);
-      currentUrl.searchParams.set("update", Date.now());
-      window.location.href = currentUrl.toString();
-
+      currentUrl.searchParams.set("app_version", remoteVersion);
+      
+      // location.replace prevents the user from going "back" into the update loop
+      window.location.replace(currentUrl.toString());
       return;
     }
 
     // ==========================================
     // APP IS UP TO DATE
     // ==========================================
-    loadMainApp();
+    loadMainApp(LOCAL_VERSION);
 
   } catch (error) {
-
-    console.error(
-      "Version Check Failed:",
-      error
-    );
-
-    // LOAD APP EVEN IF REMOTE CONFIG FAILS
-    loadMainApp();
+    console.error("Version Check Failed:", error);
+    // LOAD APP EVEN IF REMOTE CONFIG FAILS (Fallback)
+    loadMainApp(LOCAL_VERSION);
   }
 }
 
 // START
 enforceVersionCheck();
+
+// Note: If you have Service Worker/Notification click listeners at the bottom of this file, paste them right below this line!
