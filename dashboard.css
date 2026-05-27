@@ -13,29 +13,13 @@
    GLOBAL RESET & CONTAINERS
    ========================================= */
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Poppins', sans-serif; }
-/* 1. Reset the Body to be plain/clean */
 body { 
-    background-color: var(--bg-main, #ffffff) !important; 
-    background-image: none !important; /* Remove grid from global body */
+    background-color: #ffffff; 
     width: 100vw; 
-    height: 100dvh; 
+    height: 100vh;       /* Fallback for old browsers */
+    height: 100dvh;      /* 🚨 THE FIX: Dynamic Viewport Height */
     overflow: hidden; 
     margin: 0; 
-    transition: background-color 0.3s;
-}
-
-/* 2. Create the new reusable Grid Container */
-.grid-panel {
-    background-color: var(--bg-card, #ffffff) !important;
-    background-image: 
-        linear-gradient(var(--bg-grid-color) 1px, transparent 1px), 
-        linear-gradient(90deg, var(--bg-grid-color) 1px, transparent 1px) !important;
-    background-size: 25px 25px !important;
-    border: 1px solid var(--border-color);
-    border-radius: 20px;
-    padding: 20px; /* Adjust as needed */
-    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-    transition: background-color 0.3s;
 }
 
 .hidden-view { display: none !important; }
@@ -53,9 +37,35 @@ body {
 .nav-btn { background: none; border: none; color: white; font-size: 18px; cursor: pointer; padding: 0 10px;}
 
 /* =========================================
-   SCROLLABLE CONTENT AREA
+   🚨 SCROLLABLE CONTENT AREA (FIXED SCROLL GRACE BUFFER)
    ========================================= */
-.scrollable-content { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 20px; padding-bottom: 120px; }
+.scrollable-content { 
+    flex: 1; 
+    overflow-y: auto; 
+    overflow-x: hidden; 
+    padding: 20px; 
+    /* 🚨 THE BUFFER BUFFER SHIELD: Drastically increase bottom spacing to push content above navigation bars */
+    padding-bottom: 160px !important; 
+    box-sizing: border-box !important;
+}
+.scrollable-content::-webkit-scrollbar { width: 8px; }
+.scrollable-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+/* =========================================
+   💳 FEE PORTAL OVERFLOW REPAIR VECTOR
+   ========================================= */
+#feesView {
+    box-sizing: border-box !important;
+    padding-bottom: 160px !important;
+}
+
+#feesListContainer {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    padding-bottom: 30px; /* Gives the individual layout cards independent breathing room */
+}
 .scrollable-content::-webkit-scrollbar { width: 8px; }
 .scrollable-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 
@@ -334,8 +344,70 @@ body {
 .sidebar-header p { font-size: 12px; color: #888; margin-top: 5px;}
 .sidebar-header .sem-text { color: #ffc107; font-weight: bold;}
 .sidebar-menu { display: flex; flex-direction: column; overflow-y: auto;}
-.sidebar-btn { background: #3b82f6; color: #fff; border: none; border-radius: 12px; padding: 15px 20px; margin-bottom: 10px; font-weight: 600; font-size: 14px; cursor: pointer; text-align: left; transition: 0.2s; }
-.sidebar-btn:hover { background: #2563eb; }
+/* =========================================
+   SETTINGS SIDEBAR BUTTONS (THEMED OUTLINE)
+   ========================================= */
+.sidebar-btn { 
+    background: transparent !important; 
+    border: 1.5px solid var(--theme-main); /* Border matches theme color */
+    border-radius: 12px; 
+    padding: 15px 20px; 
+    margin-bottom: 10px; 
+    font-weight: 600; 
+    font-size: 14px; 
+    cursor: pointer; 
+    text-align: left; 
+    transition: all 0.2s ease; 
+}
+
+/* Icons match the theme color */
+.sidebar-btn i {
+    margin-right: 10px;
+    font-size: 15px;
+    color: var(--theme-main); 
+    transition: 0.2s;
+}
+
+/* Hover State: Light theme background and colored border */
+.sidebar-btn:hover { 
+    background: var(--theme-light) !important; 
+    border-color: var(--theme-main);
+    color: var(--theme-main);
+}
+.sidebar-btn:hover i {
+    opacity: 1;
+    color: var(--theme-main);
+}
+
+/* Click/Active State: Solid theme color */
+.sidebar-btn:active {
+    background: var(--theme-main) !important;
+    color: #ffffff;
+}
+.sidebar-btn:active i {
+    color: #ffffff;
+}
+
+/* --- Special Red Styling for Sign Out Button --- */
+#btnSignOut {
+    border-color: #fca5a5;
+    color: #ef4444;
+}
+#btnSignOut i {
+    color: #ef4444;
+}
+#btnSignOut:hover {
+    background: #fef2f2 !important;
+    border-color: #ef4444;
+    color: #ef4444;
+}
+#btnSignOut:active {
+    background: #ef4444 !important;
+    color: #ffffff;
+}
+#btnSignOut:active i {
+    color: #ffffff;
+}
 .toggle-switch {
     width: 36px; height: 18px; background: #cbd5e1; border-radius: 20px; position: relative; pointer-events: none; transition: background-color 0.3s;
 }
@@ -496,12 +568,11 @@ body.dark-mode {
     --theme-nav: #0f172a;
 }
 
-/* 🚨 FIX: Force the main containers to be transparent so the body's grid shows through! */
-.dashboard-container, .scrollable-content { background-color: transparent !important; color: var(--text-main) !important; transition: color 0.3s; }
+body, .dashboard-container, .scrollable-content { background-color: var(--bg-main) !important; color: var(--text-main) !important; transition: background-color 0.3s, color 0.3s; }
 .data-card, .daily-card, .calendar-container, .sidebar-drawer, .profile-card, .list-container, .session-card, .upcoming-card, .tt-card { background-color: var(--bg-card) !important; border-color: var(--border-color) !important; color: var(--text-main); transition: background-color 0.3s; }
 
 .logo-text, .cat-pill { color: var(--theme-main) !important; }
-.semester-nav, .daily-header-blue, .sidebar-btn, .day-btn.active, .marks-header-container, .status-badge { background-color: var(--theme-main) !important; }
+.semester-nav, .daily-header-blue, .day-btn.active, .marks-header-container, .status-badge { background-color: var(--theme-main) !important; }
 
 .bottom-nav { background-color: var(--theme-nav) !important; border: 1px solid var(--border-color); }
 .icon-btn.active { border-color: var(--theme-main) !important; box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
@@ -577,6 +648,16 @@ body.dark-mode .percentage-value { color: #ffffff !important; text-shadow: 0 2px
 .tt-card.free { background-color: transparent !important; border: 1.5px dashed var(--theme-main) !important; opacity: 0.65 !important; box-shadow: none !important; }
 .tt-card.free .tt-pill { background-color: transparent !important; box-shadow: none !important; border: 1px solid var(--border-color) !important; color: var(--text-muted) !important; }
 
+/* Injects contrast safety variables into card frames when dark theme fires */
+body.dark-mode #feesListContainer .data-card {
+    background-color: var(--bg-card) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-main) !important;
+}
+body.dark-mode #feesListContainer h4 {
+    color: var(--text-main) !important;
+}
+
 /* SUSPENSION CARD ANIMATION */
 @keyframes pulse-red {
     0% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.2); }
@@ -610,4 +691,42 @@ body.dark-mode .percentage-value { color: #ffffff !important; text-shadow: 0 2px
 #predictSubmitBtn {
     flex-shrink: 0; /* Tells the button to never get squished by the input */
     white-space: nowrap; /* Prevents the word "Calculate" from breaking into two lines */
+}
+
+/* =========================================
+   🚨 DYNAMIC CONTENT PANEL WRAPPER
+   ========================================= */
+.content-wrapper-panel {
+    flex: 1;
+    margin: 15px 15px 0 15px; /* Creates spacing from the edges */
+    border-radius: 20px 20px 0 0; /* Rounds the top corners like a card */
+    border: 2px solid var(--theme-main); /* Outer colored border */
+    border-bottom: none; /* Let it flow behind the bottom nav seamlessly */
+    background-color: var(--theme-light);
+    
+    /* Dynamic Theme-Colored Grid Pattern */
+    background-image: 
+        linear-gradient(color-mix(in srgb, var(--theme-main) 20%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, var(--theme-main) 20%, transparent) 1px, transparent 1px);
+    background-size: 25px 25px; /* Size of the grid squares */
+    background-position: center top;
+    
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 1;
+}
+
+/* Ensure Dark Mode blends correctly without blinding the user */
+body.dark-mode .content-wrapper-panel {
+    background-color: var(--bg-main);
+}
+
+/* Guarantee that the views stretch fully inside this new wrapper and become transparent */
+.content-wrapper-panel > .scrollable-content,
+.content-wrapper-panel > .dashboard-view {
+    flex: 1;
+    width: 100%;
+    background-color: transparent !important; /* 👈 THIS IS THE FIX */
 }
