@@ -56,6 +56,7 @@ function debounce(func, wait = 300) {
 let currentCollegeID = "";
 let currentUserID = "";
 let collegeSemesterType = "Odd";
+let attendanceCalculationMode = "SIMPLE";
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxVL1MGATuPxN4cmAkWbd8GsY5YaoWBkyVTkjfDV-f4jJrWBnMvZ-gXdMZU5pnhHmlPHw/exec";
 let myRealName = "Principal"; 
 
@@ -1363,8 +1364,11 @@ async function SD_BuildUI(specificDate = "All Time") {
         });
     }
 
-    let projectedAtt = strictTotal > 0 ? strictPresent : simpleAtt;
-    let projectedTot = strictTotal > 0 ? strictTotal : simpleTotal;
+    // 🚨 THE FIX: Force it to respect the Principal's global setting!
+    let isStrict = (attendanceCalculationMode === "STRICT_SESSION");
+    
+    let projectedAtt = (isStrict && strictTotal > 0) ? strictPresent : simpleAtt;
+    let projectedTot = (isStrict && strictTotal > 0) ? strictTotal : simpleTotal;
     let percent = projectedTot > 0 ? (projectedAtt / projectedTot) * 100 : 0;
     
     SD_UpdateWaveUI(percent);
@@ -2948,28 +2952,78 @@ async function GenerateMarksCSV(students, sem) {
 
 async function GenerateStatsCSV(students, sem) {
     let semKey = `Semester_${sem}`;
-    let grouped = {};
-    
+    let groupedSubjects = {};
+    let overallStats = [];
+
     for (let stu of students) {
         let stats = stu.data().attendance_stats;
         if (stats && stats[semKey]) {
+            
+           // 1. Calculate Overall Stats (Checking Strict_Global first)
+            let overallP = 0;
+            let overallT = 0;
+            let isStrict = (attendanceCalculationMode === "STRICT_SESSION");
+            
+            // 🚨 THE FIX: Only use Strict Math if the college actually has it turned on!
+            if (isStrict && stats[semKey]["Strict_Global"]) {
+                // Read the Teacher's Strict Delta Math
+                overallP = parseFloat(stats[semKey]["Strict_Global"].present || 0);
+                overallT = parseFloat(stats[semKey]["Strict_Global"].total || 0);
+            } else {
+                // Fallback to simple addition if Strict_Global doesn't exist
+                for (let sub in stats[semKey]) {
+                    if (sub === "Strict_Global") continue;
+                    overallP += parseFloat(stats[semKey][sub].present || 0);
+                    overallT += parseFloat(stats[semKey][sub].total || 0);
+                }
+            }
+            
+            let overallPct = overallT > 0 ? (overallP / overallT) * 100 : 0;
+            overallStats.push({ 
+                id: stu.id, 
+                name: stu.data().Name || "", 
+                p: overallP, 
+                t: overallT, 
+                pct: overallPct.toFixed(2) 
+            });
+
+            // 2. Group Subject-Specific Stats
             for (let sub in stats[semKey]) {
                 if (sub === "Strict_Global") continue;
-                if (!grouped[sub]) grouped[sub] = [];
+                if (!groupedSubjects[sub]) groupedSubjects[sub] = [];
+                
                 let s = stats[semKey][sub];
-                let p = s.present || 0; let t = s.total || 0; let pct = t > 0 ? (p/t)*100 : 0;
-                grouped[sub].push({ id: stu.id, name: stu.data().Name || "", p: p, t: t, pct: pct.toFixed(2) });
+                let p = s.present || 0; 
+                let t = s.total || 0; 
+                let pct = t > 0 ? (p/t)*100 : 0;
+                
+                groupedSubjects[sub].push({ 
+                    id: stu.id, 
+                    name: stu.data().Name || "", 
+                    p: p, 
+                    t: t, 
+                    pct: pct.toFixed(2) 
+                });
             }
         }
     }
 
     let csv = `\n========== SEMESTER ${sem} STATS ==========\n`;
-    for (let sub of Object.keys(grouped).sort()) {
+    
+    // --- ADDED: OVERALL ATTENDANCE SECTION ---
+    csv += `\n--- OVERALL ATTENDANCE (INCLUDES STRICT MATH) ---,,,,\nRoll No,Name,Total Present,Total Conducted,Overall Percentage\n`;
+    for (let row of overallStats.sort((a,b) => a.id.localeCompare(b.id))) {
+        csv += `${row.id},${row.name},${row.p},${row.t},${row.pct}%\n`;
+    }
+    
+    // --- EXISTING: SUBJECT-BY-SUBJECT SECTION ---
+    for (let sub of Object.keys(groupedSubjects).sort()) {
         csv += `\n--- SUBJECT: ${sub} ---,,,,\nRoll No,Name,Present,Total,Percentage\n`;
-        for (let row of grouped[sub].sort((a,b) => a.id.localeCompare(b.id))) {
+        for (let row of groupedSubjects[sub].sort((a,b) => a.id.localeCompare(b.id))) {
             csv += `${row.id},${row.name},${row.p},${row.t},${row.pct}%\n`;
         }
     }
+    
     return csv;
 }
 
@@ -4092,6 +4146,11 @@ function startSubscriptionListener() {
         // 1. Semester Sync
         if (data.currentSemesterType) {
             collegeSemesterType = data.currentSemesterType;
+        }
+
+        // 🚨 ADD THIS: 1.5 Sync Attendance Mode
+        if (data.settings && data.settings.attendanceCalculationMode) {
+            attendanceCalculationMode = data.settings.attendanceCalculationMode;
         }
 
         // 2. Subscription Engine
