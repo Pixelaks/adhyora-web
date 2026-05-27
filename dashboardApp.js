@@ -60,7 +60,7 @@ let actualProjectedPercent = 0;
 let savedStrictPresent = 0;
 let savedStrictTotal = 0;
 let savedRemainingDays = 0;
-let isStrictCollege = true;
+let attendanceCalculationMode = "SIMPLE";
 
 // ==========================================
 // 🚨 DYNAMIC PHONE STATUS BAR CONTROLLER
@@ -209,6 +209,13 @@ async function syncCollegeAndListen() {
         if (colSnap.exists()) {
             let data = colSnap.data();
             if (data.currentSemesterType) { collegeSemesterType = data.currentSemesterType; }
+            
+            // Add this line to grab the dynamic database flag:
+            if (data.settings && data.settings.attendanceCalculationMode) {
+                attendanceCalculationMode = data.settings.attendanceCalculationMode;
+            }
+            
+            isStrictCollege = (attendanceCalculationMode === "STRICT_SESSION");
 
             const blockPanel = document.getElementById("subscriptionBlockPanel");
             const dashboardUI = document.querySelector(".dashboard-container"); 
