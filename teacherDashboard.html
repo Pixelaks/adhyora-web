@@ -47,7 +47,7 @@
             <h2 id="lockTitle" style="color:white; font-family:'Yatra One', cursive; margin-bottom:10px; font-size:24px; letter-spacing:1px;">ENTER SECURE PIN</h2>
             <p id="lockStatus" style="color:#94a3b8; font-size:13px; margin-bottom:25px; line-height:1.5;">Please enter your 4-digit PIN.</p>
             
-            <input type="password" id="lockPinInput" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" maxlength="4" style="text-align:center; font-size:28px; letter-spacing:15px; padding:15px; width:200px; border-radius:12px; border:2px solid #475569; background:#0f172a; color:white; outline:none; margin-bottom:25px; transition:0.3s;" oninput="this.value=this.value.replace(/[^0-9]/g,'');">
+            <input type="tel" id="lockPinInput" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" style="-webkit-text-security: disc; text-align:center; font-size:28px; letter-spacing:15px; padding:15px; width:200px; border-radius:12px; border:2px solid #475569; background:#0f172a; color:white; outline:none; margin-bottom:25px; transition:0.3s;" oninput="this.value=this.value.replace(/[^0-9]/g,'');">
             
             <button id="btnLockBiometrics" style="width:100%; background:transparent; border:2px solid var(--brand-red); color:var(--brand-red); font-weight:bold; padding:15px; border-radius:12px; cursor:pointer; font-size:16px; margin-bottom:15px; display:none; transition:0.3s; box-shadow: 0 0 15px rgba(220,38,38,0.1);">
                 <i class="fas fa-fingerprint" style="margin-right:8px; font-size:20px; vertical-align:middle;"></i> Use Biometrics
