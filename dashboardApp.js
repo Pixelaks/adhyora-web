@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-import { getFirestore, doc, setDoc, deleteDoc, serverTimestamp, onSnapshot, collection, query, where, getDoc, getDocs, orderBy, limit, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getFirestore, doc, setDoc, addDoc, deleteDoc, serverTimestamp, onSnapshot, collection, query, where, getDoc, getDocs, orderBy, limit, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getMessaging, getToken, onMessage, deleteToken } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging.js";
 // 🚨 PASTE YOUR REAL CONFIG HERE 🚨
 const firebaseConfig = {
@@ -104,6 +104,11 @@ function hideAppLoader() {
     }
 }
 
+function showToast(msg) {
+    // Uses a simple alert since studentApp doesn't have the custom toast UI
+    alert(msg);
+}
+
 // ==========================================
 // DOM ELEMENTS
 // ==========================================
@@ -121,6 +126,7 @@ const el = {
     sbName: document.getElementById("sidebarName"), sbSub: document.getElementById("sidebarSubtitle"),
     calModal: document.getElementById("calendarModal"), calTitle: document.getElementById("calMonthYearText"),
     calGrid: document.getElementById("calendarGrid"), upcomingTxt: document.getElementById("upcomingEventText"),
+    feesView: document.getElementById("feesView"),
     
     mainView: document.getElementById("mainDashboardView"),
     dailyView: document.getElementById("dailyAttendanceView"),
@@ -779,8 +785,11 @@ const btnNavDaily = document.getElementById("btnNavDaily");
 
 // 🚨 ADDED: pushToHistory parameter
 function switchView(activeBtn, viewToShow, pushToHistory = true) {
-    [btnNavMain, btnNavAssign, btnNavNotif, btnNavMsg, btnNavTimetable, btnNavDaily].forEach(btn => btn.classList.remove("active"));
-    [el.mainView, el.assignView, el.actualNotifView, el.msgView, el.ttView, el.dailyView].forEach(view => view.classList.add("hidden-view"));
+    [btnNavMain, btnNavAssign, btnNavNotif, btnNavMsg, btnNavTimetable, btnNavDaily, document.getElementById("btnNavFees")].forEach(btn => btn.classList.remove("active"));
+    
+    // 🚨 ADD el.feesView TO THIS LIST:
+    [el.mainView, el.assignView, el.actualNotifView, el.msgView, el.ttView, el.dailyView, el.feesView].forEach(view => view.classList.add("hidden-view"));
+    
     activeBtn.classList.add("active");
     viewToShow.classList.remove("hidden-view");
 
@@ -804,6 +813,11 @@ btnNavTimetable.addEventListener("click", () => {
     document.querySelectorAll('.day-btn').forEach(btn => btn.classList.toggle("active", btn.dataset.day === todayName));
     
     loadTimetableForDay(todayName);
+});
+
+document.getElementById("btnNavFees").addEventListener("click", () => {
+    switchView(document.getElementById("btnNavFees"), el.feesView);
+    FEES_Init();
 });
 
 // ==========================================
@@ -1374,11 +1388,11 @@ const btnThemes = document.getElementById("btnThemes");
 const closeThemesBtn = document.getElementById("closeThemesBtn");
 
 const colorPalettes = {
-    blue:   { main: '#3b82f6', light: '#e0f2fe', nav: '#bfdbfe', gridLight: 'rgba(59, 130, 246, 0.08)', gridDark: 'rgba(59, 130, 246, 0.15)' },
-    yellow: { main: '#eab308', light: '#fef9c3', nav: '#fde047', gridLight: 'rgba(234, 179, 8, 0.08)',  gridDark: 'rgba(234, 179, 8, 0.15)' }, 
-    pink:   { main: '#ec4899', light: '#fce7f3', nav: '#fbcfe8', gridLight: 'rgba(236, 72, 153, 0.08)', gridDark: 'rgba(236, 72, 153, 0.15)' },
-    purple: { main: '#8b5cf6', light: '#ede9fe', nav: '#ddd6fe', gridLight: 'rgba(139, 92, 246, 0.08)', gridDark: 'rgba(139, 92, 246, 0.15)' },
-    orange: { main: '#f97316', light: '#ffedd5', nav: '#fed7aa', gridLight: 'rgba(249, 115, 22, 0.08)', gridDark: 'rgba(249, 115, 22, 0.15)' }
+    blue:   { main: '#3b82f6', light: '#e0f2fe', nav: '#bfdbfe' },
+    yellow: { main: '#eab308', light: '#fef9c3', nav: '#fde047' }, 
+    pink:   { main: '#ec4899', light: '#fce7f3', nav: '#fbcfe8' },
+    purple: { main: '#8b5cf6', light: '#ede9fe', nav: '#ddd6fe' },
+    orange: { main: '#f97316', light: '#ffedd5', nav: '#fed7aa' }
 };
 
 btnThemes.addEventListener("click", () => {
@@ -1395,9 +1409,6 @@ function applyTheme(colorKey, isDark) {
     root.style.setProperty('--theme-main', palette.main);
     root.style.setProperty('--theme-light', palette.light);
     root.style.setProperty('--theme-nav', palette.nav);
-    
-    // 🚨 NEW: Inject the active grid color into CSS!
-    root.style.setProperty('--bg-grid-color', isDark ? palette.gridDark : palette.gridLight);
 
     if (isDark) {
         document.body.classList.add("dark-mode");
@@ -1574,3 +1585,133 @@ window.addEventListener('load', () => {
         }, 1500); 
     }
 });
+
+// ==========================================
+// 💳 STUDENT FEE PORTAL ENGINE
+// ==========================================
+let feesLoaded = false;
+
+async function FEES_Init() {
+    if (feesLoaded) return;
+    feesLoaded = true;
+    renderFeeDashboard();
+}
+
+async function renderFeeDashboard() {
+    let container = document.getElementById("feesListContainer");
+    container.innerHTML = "<i>Loading Fee Portal...</i>";
+
+    if (!currentStudentProfileData || !currentStudentProfileData.Department) {
+        container.innerHTML = "Profile data not loaded.";
+        return;
+    }
+
+    try {
+        let deptName = currentStudentProfileData.Department.replace("DEPT_", "");
+        let deptID = "DEPT_" + deptName.replace(/\s+/g, '');
+        
+        // 1. Data Aggregators
+        let feeMap = {}; 
+        let totalDue = 0;
+        let totalPaid = 0;
+
+        // 2. Fetch Fee Structures
+        const feeSnap = await getDocs(collection(db, "colleges", collegeID, "fee_structures"));
+        
+        feeSnap.forEach(d => {
+            let data = d.data();
+            if (data.departmentID === deptID || data.departmentID === "General") {
+                feeMap[data.targetSemester] = { 
+                    amount: data.semesterFee || 0, 
+                    dueDate: data.dueDate || "N/A", 
+                    paid: 0, 
+                    status: "Pending" 
+                };
+                totalDue += (data.semesterFee || 0);
+            }
+        });
+
+        // 3. Fetch Student's Payment records
+        const paySnap = await getDocs(collection(db, "colleges", collegeID, "students", currentRollNo, "payments"));
+        paySnap.forEach(d => {
+            let p = d.data();
+            totalPaid += (p.amount || 0); // Update global total paid
+            
+            if (feeMap[p.semester]) {
+                feeMap[p.semester].paid += (p.amount || 0);
+            }
+        });
+
+        // 4. Calculate statuses
+        Object.keys(feeMap).forEach(sem => {
+            if (feeMap[sem].paid >= feeMap[sem].amount) feeMap[sem].status = "Paid";
+            else if (feeMap[sem].paid > 0) feeMap[sem].status = "Partial";
+        });
+
+        // 5. Render
+        let pendingOverall = totalDue - totalPaid;
+        
+        let html = `
+            <div class="data-card" style="border-left-color: var(--theme-main); background: var(--theme-light);">
+                <h4 style="margin-bottom: 10px; font-size: 14px; opacity: 0.8;">Institutional Summary</h4>
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <span>Total Due:</span> <b>₹${totalDue.toLocaleString()}</b>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <span>Total Paid:</span> <b style="color:#10b981;">₹${totalPaid.toLocaleString()}</b>
+                </div>
+                <div style="display:flex; justify-content:space-between; border-top: 1px solid var(--border-color); padding-top: 5px;">
+                    <span>Remaining:</span> <b style="color:#ef4444;">₹${pendingOverall.toLocaleString()}</b>
+                </div>
+            </div>
+            <h4 style="margin: 20px 0 10px 0; font-size: 14px;">Semester Details</h4>
+        `;
+
+        html += Object.keys(feeMap).sort((a,b) => a-b).map(sem => {
+            let f = feeMap[sem];
+            let color = f.status === "Paid" ? "#10b981" : (f.status === "Partial" ? "#f59e0b" : "#ef4444");
+            let pendingAmt = f.amount - f.paid;
+            
+            return `
+            <div class="data-card">
+                <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                    <span style="font-weight:bold; font-size: 14px;">Semester ${sem}</span>
+                    <span style="color:${color}; font-weight:bold; font-size: 12px;">${f.status}</span>
+                </div>
+                <div style="font-size:12px; color:#64748b; margin-bottom:10px;"><i class="fas fa-calendar-alt"></i> Due: ${f.dueDate}</div>
+                <div style="display:flex; justify-content:space-between; font-size:13px; color:#334155; margin-bottom: 10px;">
+                    <span>Total: ₹${f.amount.toLocaleString()}</span>
+                    <span style="font-weight:600;">Paid: ₹${f.paid.toLocaleString()}</span>
+                </div>
+                ${f.status !== "Paid" ? `<button onclick="FEES_PayNow('${sem}', ${pendingAmt})" style="width:100%; padding:10px; border:none; background:var(--theme-main); color:white; border-radius:8px; cursor:pointer; font-weight:bold;">Pay ₹${pendingAmt.toLocaleString()}</button>` : ""}
+            </div>`;
+        }).join('');
+
+        container.innerHTML = html;
+
+    } catch(e) { 
+        container.innerHTML = "Error loading fees."; 
+        console.error("Fee Load Error:", e);
+    }
+}
+
+window.FEES_PayNow = async (sem, amount) => {
+    if (!confirm(`Confirm payment of ₹${amount}?`)) return;
+    
+    try {
+        // 🚀 FIXED: Injected missing "colleges" root literal back into the pointer chain
+        await addDoc(collection(db, "colleges", collegeID, "students", currentRollNo, "payments"), {
+            semester: parseInt(sem), // Ensures data is stored cleanly as a Number
+            amount: parseFloat(amount),
+            date: new Date().toISOString().split('T')[0],
+            timestamp: serverTimestamp(),
+            method: "Online"
+        });
+        
+        showToast("✅ Payment Successful!");
+        renderFeeDashboard(); // Instantly updates your summary balances
+    } catch(e) { 
+        showToast("❌ Payment processing failed."); 
+        console.error("Payment Error Trace: ", e);
+    }
+};
