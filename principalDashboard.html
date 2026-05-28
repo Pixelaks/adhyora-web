@@ -98,7 +98,7 @@
         
         <div id="subParticles" style="position: absolute; width: 100%; height: 100%; z-index: 1; top: 0; left: 0;"></div>
 
-        <div class="premium-sub-container" style="position: relative; z-index: 2; width: 100%; max-width: 900px; text-align: center; animation: subFloatUp 0.6s ease-out;">
+        <div class="premium-sub-container" style="position: relative; z-index: 2; width: 100%; max-width: 1150px; text-align: center; animation: subFloatUp 0.6s ease-out;">
             
             <h2 id="subBlockHeading" style="font-family: 'Rajdhani', sans-serif; font-size: 2.5rem; color: #fff; margin-bottom: 10px; letter-spacing: 2px;">CHOOSE A PLAN</h2>
             
@@ -106,43 +106,58 @@
 
             <div id="subBlockLoading" style="margin-bottom: 30px; color: #2ecc71; font-size: 15px; display: none; font-weight: bold; animation: pulseOp 1.5s infinite;"><i class="fas fa-circle-notch fa-spin" style="margin-right: 8px;"></i> Processing Secure Payment...</div>
 
-            <div class="pricing-container" style="display: flex; justify-content: center; gap: 30px; flex-wrap: wrap; padding: 0 5%;">
+            <div class="pricing-container" style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; padding: 0 2%;">
                 
-                <div class="pricing-card" style="flex: 1; min-width: 320px; max-width: 400px; text-align: center; border-radius: 20px; background: rgba(26, 26, 26, 0.9); padding: 40px; border: 1px solid rgba(255, 255, 255, 0.05); border-top: 5px solid #aaa;">
-                    <p style="text-transform: uppercase; letter-spacing: 2px; color: #aaa; font-weight: bold; margin-bottom: 10px;">Monthly Subscription</p>
-                    <h3 style="font-size: 3rem; color: #fff; margin-bottom: 5px;">₹2,999<span style="font-size: 1rem; color: #777;">/mo</span></h3>
+                <!-- BASE PLAN -->
+                <div class="pricing-card" style="flex: 1; min-width: 280px; max-width: 350px; text-align: center; border-radius: 20px; background: rgba(26, 26, 26, 0.9); padding: 40px 30px; border: 1px solid rgba(255, 255, 255, 0.05); border-top: 5px solid #aaa; display: flex; flex-direction: column;">
+                    <p style="text-transform: uppercase; letter-spacing: 2px; color: #aaa; font-weight: bold; margin-bottom: 10px;">Adhyora Base</p>
+                    <h3 style="font-size: 3.5rem; color: #fff; margin-bottom: 5px;">₹59<span style="font-size: 1rem; color: #777;">/student</span></h3>
                     
-                    <p id="monthlyHighlightText" style="color: #2ecc71; font-weight: bold; margin-bottom: 25px;">Flexi Renewal</p>
+                    <p id="baseHighlightText" style="color: #2ecc71; font-weight: bold; margin-bottom: 25px;">Essential Features</p>
                     
-                    <ul style="list-style: none; padding: 0; color: #ccc; text-align: left; margin-bottom: 30px; line-height: 2;">
+                    <ul style="list-style: none; padding: 0; color: #ccc; text-align: left; margin-bottom: 30px; line-height: 2.2; font-size: 13px;">
                         <li><i class="fas fa-check" style="color: #2ecc71; margin-right: 10px;"></i> Full Administrative Control</li>
                         <li><i class="fas fa-check" style="color: #2ecc71; margin-right: 10px;"></i> Faculty & Student Portals</li>
                         <li><i class="fas fa-check" style="color: #2ecc71; margin-right: 10px;"></i> Attendance & Marks Tracking</li>
                         <li><i class="fas fa-check" style="color: #2ecc71; margin-right: 10px;"></i> Real-time Campus Alerts</li>
                         <li><i class="fas fa-check" style="color: #2ecc71; margin-right: 10px;"></i> Cancel Anytime</li>
                     </ul>
-                    <button onclick="ProcessSubscription('monthly')" class="btn-monthly">Subscribe Monthly</button>
+                    <button onclick="ProcessSubscription('base')" class="btn-monthly" style="margin-top: auto;">Get Started</button>
                 </div>
 
-                <div class="pricing-card" style="flex: 1; min-width: 320px; max-width: 420px; text-align: center; border-radius: 20px; background: rgba(46, 204, 113, 0.05); padding: 40px; border: 1px solid rgba(46, 204, 113, 0.3); border-top: 5px solid #2ecc71; position: relative; box-shadow: 0 0 40px rgba(46, 204, 113, 0.1);">
+                <!-- PRO PLAN (MOST POPULAR) -->
+                <div class="pricing-card" style="flex: 1; min-width: 300px; max-width: 380px; text-align: center; border-radius: 20px; background: rgba(46, 204, 113, 0.05); padding: 40px 30px; border: 1px solid rgba(46, 204, 113, 0.3); border-top: 5px solid #2ecc71; position: relative; box-shadow: 0 0 40px rgba(46, 204, 113, 0.1); display: flex; flex-direction: column;">
                     <div style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%); background: #2ecc71; color: #000; padding: 5px 20px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; letter-spacing: 1px;">MOST POPULAR</div>
-                    <p style="text-transform: uppercase; letter-spacing: 2px; color: #2ecc71; font-weight: bold; margin-bottom: 10px;">Annual Plan</p>
-                    <h3 style="font-size: 3rem; color: #fff; margin-bottom: 5px;">₹24,999<span style="font-size: 1rem; color: #777;">/yr</span></h3>
+                    <p style="text-transform: uppercase; letter-spacing: 2px; color: #2ecc71; font-weight: bold; margin-bottom: 10px;">Adhyora Pro</p>
+                    <h3 style="font-size: 3.5rem; color: #fff; margin-bottom: 5px;">₹79<span style="font-size: 1rem; color: #777;">/student</span></h3>
                     
-                    <p id="yearlyHighlightText" style="color: #2ecc71; font-weight: bold; margin-bottom: 25px;">Best Value</p>
+                    <p id="proHighlightText" style="color: #2ecc71; font-weight: bold; margin-bottom: 25px;">Advanced Management</p>
                     
-                    <ul style="list-style: none; padding: 0; color: #fff; text-align: left; margin-bottom: 30px; line-height: 2;">
-                        <li><i class="fas fa-star" style="color: #2ecc71; margin-right: 10px;"></i> <strong>Save ₹11,000 yearly</strong></li>
-                        <li><i class="fas fa-check" style="color: #2ecc71; margin-right: 10px;"></i> <strong>Everything in Monthly</strong></li>
+                    <ul style="list-style: none; padding: 0; color: #fff; text-align: left; margin-bottom: 30px; line-height: 2.2; font-size: 13px;">
+                        <li><i class="fas fa-star" style="color: #2ecc71; margin-right: 10px;"></i> <strong>Everything in Base</strong></li>
+                        <li><i class="fas fa-check" style="color: #2ecc71; margin-right: 10px;"></i> Fee Payment System</li>
+                        <li><i class="fas fa-check" style="color: #2ecc71; margin-right: 10px;"></i> Fee Management Tools</li>
                         <li><i class="fas fa-check" style="color: #2ecc71; margin-right: 10px;"></i> Priority Technical Support</li>
-                        <li><i class="fas fa-check" style="color: #2ecc71; margin-right: 10px;"></i> Unlimited Cloud Storage</li>
                     </ul>
-                    <button onclick="ProcessSubscription('yearly')" class="btn-yearly">Subscribe Yearly</button>
+                    <button onclick="ProcessSubscription('pro')" class="btn-yearly" style="margin-top: auto;">Get Started Now</button>
+                </div>
+
+                <!-- ULTIMATE PLAN -->
+                <div class="pricing-card" style="flex: 1; min-width: 280px; max-width: 350px; text-align: center; border-radius: 20px; background: rgba(26, 26, 26, 0.9); padding: 40px 30px; border: 1px solid rgba(255, 255, 255, 0.05); border-top: 5px solid #aaa; display: flex; flex-direction: column;">
+                    <p style="text-transform: uppercase; letter-spacing: 2px; color: #aaa; font-weight: bold; margin-bottom: 10px;">Adhyora Ultimate</p>
+                    <h3 style="font-size: 3.5rem; color: #fff; margin-bottom: 5px;">₹99<span style="font-size: 1rem; color: #777;">/student</span></h3>
+                    
+                    <p id="ultimateHighlightText" style="color: #2ecc71; font-weight: bold; margin-bottom: 25px;">Maximum Automation</p>
+                    
+                    <ul style="list-style: none; padding: 0; color: #ccc; text-align: left; margin-bottom: 30px; line-height: 2.2; font-size: 13px;">
+                        <li><i class="fas fa-star" style="color: #2ecc71; margin-right: 10px;"></i> <strong>Everything in Base & Pro</strong></li>
+                        <li><i class="fas fa-check" style="color: #2ecc71; margin-right: 10px;"></i> Automated Parental Alert Networks</li>
+                    </ul>
+                    <button onclick="ProcessSubscription('ultimate')" class="btn-monthly" style="margin-top: auto;">Get Started</button>
                 </div>
 
             </div>
         </div>
-    </div>
 
     <div id="subWarningBanner" style="position: fixed; top: 0; left: 0; right: 0; background: #ef4444; color: white; text-align: center; padding: 12px; z-index: 9999; font-weight: bold; display: none; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); font-size: 14px;">
         <i class="fas fa-exclamation-triangle" style="margin-right: 8px;"></i> <span id="subWarningText">Warning</span>
