@@ -143,19 +143,28 @@ document.getElementById("btnOpenBilling").addEventListener("click", async () => 
     } catch(e) {}
 
     // 2. Fetch the transaction ledger
+    // 2. Fetch the transaction ledger
     try {
         const snap = await getDocs(query(collection(db, "colleges", currentCollegeID, "subscription_history"), orderBy("timestamp", "desc")));
         let container = document.getElementById("billingHistoryList");
         
         if (snap.empty) {
             container.innerHTML = `<div class="no-data-text">No payment history found.</div>`;
+            document.getElementById("billingTotalSpent").innerText = "₹0";
             return;
         }
 
         let html = "";
+        let lifetimeSpend = 0; // 🚨 Tally Variable
+
         snap.forEach(d => {
             let txn = d.data();
             let planUpper = (txn.planType || "Plan").toUpperCase();
+            
+            // 🚨 Add this transaction's amount to the total
+            let amountPaid = txn.amount || 0;
+            lifetimeSpend += amountPaid;
+
             let dateStr = "Recently";
             if (txn.timestamp) dateStr = txn.timestamp.toDate().toLocaleString('en-US', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
             
@@ -169,7 +178,7 @@ document.getElementById("btnOpenBilling").addEventListener("click", async () => 
             <div id="sub_receipt_${txn.paymentId}" style="background: var(--bg-base); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; position: relative;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
                     <span style="font-weight: 800; font-size: 15px; color: var(--text-green);">Adhyora ${planUpper}</span>
-                    <span style="font-weight: bold; color: #2ecc71; font-size: 16px;">₹${(txn.amount || 0).toLocaleString('en-IN')}</span>
+                    <span style="font-weight: bold; color: #2ecc71; font-size: 16px;">₹${amountPaid.toLocaleString('en-IN')}</span>
                 </div>
                 
                 <div style="font-size: 11px; color: #64748b; margin-bottom: 10px; line-height: 1.6;">
@@ -192,10 +201,15 @@ document.getElementById("btnOpenBilling").addEventListener("click", async () => 
                 </button>
             </div>`;
         });
+        
         container.innerHTML = html;
+        
+        // 🚨 Update the UI with the final tallied amount
+        document.getElementById("billingTotalSpent").innerText = "₹" + lifetimeSpend.toLocaleString('en-IN');
 
     } catch (e) {
-        document.getElementById("billingHistoryList").innerHTML = `<div class="no-data-text">Error loading ledger.</div>`;
+        console.error("Ledger Fetch Error:", e);
+        document.getElementById("billingHistoryList").innerHTML = `<div class="no-data-text" style="color: #ef4444;">Error loading ledger.</div>`;
     }
 });
 
@@ -4275,14 +4289,15 @@ function startSubscriptionListener() {
 
         let newExpiry = subData.expiryDate || 0;
         let newPlan = subData.planType || "Premium";
-        let isTrialUsed = subData.isTrialUsed || false; // Check if they've had a trial
+        let isTrialUsed = subData.isTrialUsed || false; 
         
-        let dateChanged = (!isFirstSubLoad && newExpiry !== cachedExpiryTimestamp);
+        // 🚨 BUG FIX: Only show success panel if the new expiry is GREATER than the old one
+        let isRenewal = (!isFirstSubLoad && newExpiry > cachedExpiryTimestamp);
         cachedExpiryTimestamp = newExpiry;
 
         ValidateExpiry(newExpiry, isTrialUsed);
 
-        if (dateChanged) {
+        if (isRenewal) {
             ShowSuccessPanel(newExpiry, newPlan);
         }
 
