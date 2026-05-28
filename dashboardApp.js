@@ -61,6 +61,7 @@ let savedStrictPresent = 0;
 let savedStrictTotal = 0;
 let savedRemainingDays = 0;
 let attendanceCalculationMode = "SIMPLE";
+let isStrictCollege = false;
 
 // ==========================================
 // 🚨 DYNAMIC PHONE STATUS BAR CONTROLLER
@@ -555,7 +556,7 @@ function updateUIForCurrentSemester(optionalDept) {
     el.badge.innerText = projectedStrictPercent >= 85 ? "Excellent" : projectedStrictPercent >= 70 ? "Good" : projectedStrictPercent >= 50 ? "Average" : "Critical";
     el.badge.style.backgroundColor = hexColor;
     
-    let textColor = (projectedStrictPercent >= 70 && projectedStrictPercent < 85) ? "#0f172a" : "#ffffff";
+    let textColor = (projectedStrictPercent >= 70 && projectedStrictPercent < 85) ? "#0f172a" : "#000000";
     let targetHeight = `calc(${Math.min(100, Math.max(0, currentOverallPercent))}% - 12px)`;
 
     let existingWater = document.getElementById("animatedRowWater");
@@ -1418,137 +1419,82 @@ btnThemes.addEventListener("click", () => {
 });
 closeThemesBtn.addEventListener("click", () => themesModal.classList.remove("active"));
 
-function applyTheme(colorKey, isDark) {
-    const root = document.documentElement;
-    const palette = colorPalettes[colorKey] || colorPalettes.blue;
-
-    root.style.setProperty('--theme-main', palette.main);
-    root.style.setProperty('--theme-light', palette.light);
-    root.style.setProperty('--theme-nav', palette.nav);
-
-    if (isDark) {
-        document.body.classList.add("dark-mode");
-    } else {
-        document.body.classList.remove("dark-mode");
-    }
-
-    document.querySelectorAll('.color-swatch').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.theme === colorKey);
-    });
-    document.getElementById("btnDarkMode").classList.toggle("active", isDark);
-    document.getElementById("btnLightMode").classList.toggle("active", !isDark);
-
-    localStorage.setItem("adhyora_theme_color", colorKey);
-    localStorage.setItem("adhyora_theme_mode", isDark ? "dark" : "light");
-
-  updateStatusBar();
+// Stores where the ripple should originate from
+function setRippleOrigin(x, y) {
+    document.documentElement.style.setProperty('--ripple-x', `${x}px`);
+    document.documentElement.style.setProperty('--ripple-y', `${y}px`);
 }
 
+function applyTheme(colorKey, isDark, animated = true) {
+    const executeThemeUpdate = () => {
+        const root = document.documentElement;
+        const palette = colorPalettes[colorKey] || colorPalettes.blue;
+
+        root.style.setProperty('--theme-main', palette.main);
+        root.style.setProperty('--theme-light', palette.light);
+        root.style.setProperty('--theme-nav', palette.nav);
+
+        if (isDark) {
+            document.body.classList.add("dark-mode");
+        } else {
+            document.body.classList.remove("dark-mode");
+        }
+
+        document.querySelectorAll('.color-swatch').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.theme === colorKey);
+        });
+        document.getElementById("btnDarkMode").classList.toggle("active", isDark);
+        document.getElementById("btnLightMode").classList.toggle("active", !isDark);
+
+        localStorage.setItem("adhyora_theme_color", colorKey);
+        localStorage.setItem("adhyora_theme_mode", isDark ? "dark" : "light");
+
+        updateStatusBar();
+    };
+
+    // Skip animation on page load or unsupported browsers
+    if (!animated || !document.startViewTransition) {
+        executeThemeUpdate();
+        return;
+    }
+
+    document.startViewTransition(executeThemeUpdate);
+}
+
+// Color swatch clicks — ripple originates from the swatch itself
 document.querySelectorAll('.color-swatch').forEach(swatch => {
     swatch.addEventListener('click', (e) => {
-        let selectedColor = e.target.dataset.theme;
+        const rect = e.currentTarget.getBoundingClientRect();
+        setRippleOrigin(rect.left + rect.width / 2, rect.top + rect.height / 2);
+
+        let selectedColor = e.currentTarget.dataset.theme;
         let isDark = document.body.classList.contains("dark-mode");
         applyTheme(selectedColor, isDark);
     });
 });
 
-document.getElementById("btnDarkMode").addEventListener("click", () => {
+// Dark/Light mode buttons — ripple originates from the button
+document.getElementById("btnDarkMode").addEventListener("click", (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setRippleOrigin(rect.left + rect.width / 2, rect.top + rect.height / 2);
+
     let currentColor = localStorage.getItem("adhyora_theme_color") || "blue";
     applyTheme(currentColor, true);
 });
-document.getElementById("btnLightMode").addEventListener("click", () => {
+
+document.getElementById("btnLightMode").addEventListener("click", (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setRippleOrigin(rect.left + rect.width / 2, rect.top + rect.height / 2);
+
     let currentColor = localStorage.getItem("adhyora_theme_color") || "blue";
     applyTheme(currentColor, false);
 });
 
-async function requestPushPermissions() {
-    try {
-        console.log('Requesting notification permission...');
-        const permission = await Notification.requestPermission();
-        
-        if (permission === 'granted') {
-            console.log('Notification permission granted.');
-            
-            // 1. Register the Service Worker
-            const swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-            
-            // 2. Generate the Web Push Token
-            const currentToken = await getToken(messaging, { 
-                vapidKey: "BNO8RVA-R1iOy19P2rbVYPBzlCSnptpq13ybtqqO0IgHhDOXhkauOXEWm2hGN6yIUz2_fHL-Iv7IG9cpRZv2YkU",
-                serviceWorkerRegistration: swRegistration 
-            });
-
-            if (currentToken) {
-                console.log("Web Push Token Generated!");
-                myCurrentPushToken = currentToken; 
-
-                // 🚨 ZERO-COST READ: Pull the array straight from RAM!
-                let activeTokens = [];
-                if (currentStudentProfileData && currentStudentProfileData.webFcmTokens) {
-                    activeTokens = currentStudentProfileData.webFcmTokens;
-                }
-
-                // Remove old duplicate, add new token
-                activeTokens = activeTokens.filter(t => t !== currentToken);
-                activeTokens.push(currentToken);
-
-                // The 3-Device PC Cache limit (safely protects Android tokens)
-                if (activeTokens.length > 3) {
-                    activeTokens = activeTokens.slice(activeTokens.length - 3);
-                }
-
-                const studentRef = doc(db, "colleges", collegeID, "students", currentRollNo);
-                await setDoc(studentRef, { 
-                    webFcmTokens: activeTokens,
-                    lastWebLogin: serverTimestamp()
-                }, { merge: true });
-                
-                console.log("Token saved and array cleaned safely.");
-
-                // 4. THE LOOPHOLE: Force-Subscribe the Web Browser to Native Topics
-                const getSafe = (str) => (!str || str === "All") ? "ALL" : str.replace(/[^a-zA-Z0-9]/g, '');
-                
-                let safeCol = getSafe(collegeID);
-                let safeDept = getSafe(rawDept);
-                let safeYear = getSafe(myYearStr);
-
-                let topicsToJoin = [
-                    `${safeCol}_ALL`, 
-                    `${safeCol}_STUDENTS_ALL_ALL`, 
-                    `${safeCol}_STUDENTS_${safeDept}_ALL`, 
-                    `${safeCol}_STUDENTS_${safeDept}_${safeYear}`,
-                    `ADHYORA_GLOBAL_USERS`
-                ];
-
-                const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxVL1MGATuPxN4cmAkWbd8GsY5YaoWBkyVTkjfDV-f4jJrWBnMvZ-gXdMZU5pnhHmlPHw/exec";
-
-                fetch(APPS_SCRIPT_URL, {
-                    method: "POST",
-                    mode: "no-cors",
-                    body: JSON.stringify({
-                        action: "subscribe",
-                        token: currentToken,
-                        topics: topicsToJoin
-                    })
-                }).then(() => {
-                    console.log("✅ Loophole Complete: Web Browser synced with Native Topics!");
-
-                  updateNotificationToggleUI(); // Automatically turn the switch green!
-                  
-                }).catch(err => console.log("Subscription Fetch Error:", err));
-
-            }
-        } else {
-            console.log('Unable to get permission to notify.');
-        }
-    } catch (error) {
-        console.error('Error getting push token:', error);
-    }
-}
+// Load saved theme silently on boot (no animation)
 function loadSavedTheme() {
     let savedColor = localStorage.getItem("adhyora_theme_color") || "blue";
     let savedMode = localStorage.getItem("adhyora_theme_mode") || "light";
-    applyTheme(savedColor, savedMode === "dark");
+    applyTheme(savedColor, savedMode === "dark", false); // false = no animation on load
 }
 
 loadSavedTheme();
@@ -1712,22 +1658,85 @@ async function renderFeeDashboard() {
 }
 
 window.FEES_PayNow = async (sem, amount) => {
-    if (!confirm(`Confirm payment of ₹${amount}?`)) return;
+    if (!confirm(`Confirm payment of ₹${amount.toLocaleString()} for Semester ${sem}?`)) return;
     
+    showToast("Initializing secure payment gateway... Please wait.");
+
     try {
-        // 🚀 FIXED: Injected missing "colleges" root literal back into the pointer chain
-        await addDoc(collection(db, "colleges", collegeID, "students", currentRollNo, "payments"), {
-            semester: parseInt(sem), // Ensures data is stored cleanly as a Number
-            amount: parseFloat(amount),
-            date: new Date().toISOString().split('T')[0],
-            timestamp: serverTimestamp(),
-            method: "Online"
+        // 1. ASK FIREBASE TO CREATE A SECURE ORDER
+        const response = await fetch('https://createrazorpayorder-ubdlwfysbq-uc.a.run.app', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                collegeId: collegeID,
+                amountInRupees: amount
+            })
         });
         
-        showToast("✅ Payment Successful!");
-        renderFeeDashboard(); // Instantly updates your summary balances
+        const orderData = await response.json();
+        
+        if (!orderData.success) {
+            showToast("❌ Could not initialize gateway. Please try again later.");
+            return;
+        }
+
+        // 2. CONFIGURE THE RAZORPAY MODAL
+        var options = {
+            "key": orderData.razorpayKeyId, // The public key safely returned from Firebase
+            "amount": orderData.amountInPaise, 
+            "currency": "INR",
+            "name": "Adhyora",
+            "description": `Semester ${sem} Tuition Fee`,
+            "image": "https://raw.githubusercontent.com/Pixelaks/pixelaks.in/main/AdhyoraSplashLogo5.png",
+            "order_id": orderData.orderId, // The secure lock ID generated by Firebase
+            "prefill": {
+                "name": currentStudentProfileData.Name || "",
+                "email": currentStudentProfileData.email || "",
+            },
+            "theme": { "color": "#3b82f6" },
+            "handler": async function (response) {
+                // 3. THIS RUNS IF THE STUDENT ENTERS THEIR UPI PIN SUCCESSFULLY
+                showToast("Payment processing... Securing digital receipt.");
+                
+                try {
+                    // Call your verification endpoint
+                    const verifyResponse = await fetch('https://us-central1-adhyora-5d4c1.cloudfunctions.net/verifyAndSavePayment', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            collegeId: collegeID,
+                            studentId: currentRollNo,
+                            semester: sem,
+                            amount: amount,
+                            paymentId: response.razorpay_payment_id,
+                            orderId: response.razorpay_order_id,
+                            signature: response.razorpay_signature
+                        })
+                    });
+
+                    const verifyResult = await verifyResponse.json();
+
+                    if (verifyResult.success) {
+                        showToast("✅ Payment Verified & Receipt Saved!");
+                        renderFeeDashboard(); // Instantly updates the student's UI to "Paid"
+                    } else {
+                        showToast("❌ Payment successful, but verification failed. Contact Admin.");
+                    }
+                } catch (err) {
+                    showToast("❌ Network error saving receipt.");
+                }
+            }
+        };
+        
+        // 4. OPEN THE MODAL ON THE STUDENT'S SCREEN
+        var rzpCheckout = new Razorpay(options);
+        rzpCheckout.on('payment.failed', function (response){
+            showToast("❌ Payment Failed or Cancelled.");
+        });
+        rzpCheckout.open();
+
     } catch(e) { 
-        showToast("❌ Payment processing failed."); 
+        showToast("❌ Network Error connecting to payment server."); 
         console.error("Payment Error Trace: ", e);
     }
 };
