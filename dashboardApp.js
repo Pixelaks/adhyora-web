@@ -1209,15 +1209,22 @@ async function requestPushPermissions() {
         const permission = await Notification.requestPermission();
         
         if (permission === 'granted') {
-            // Generates the Firebase Cloud Messaging Token
-            // Note: If notifications fail to send later, you may need to add your VAPID key here
-            const currentToken = await getToken(messaging /*, { vapidKey: "YOUR_VAPID_KEY_HERE" } */);
+            console.log('Notification permission granted.');
+
+            // 🚨 FIX 1: Explicitly register the Service Worker first
+            const swRegistration = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+
+            // 🚨 FIX 2: Pass the VAPID key and Service Worker registration to getToken
+            const currentToken = await getToken(messaging, { 
+                vapidKey: "BNO8RVA-R1iOy19P2rbVYPBzlCSnptpq13ybtqqO0IgHhDOXhkauOXEWm2hGN6yIUz2_fHL-Iv7IG9cpRZv2YkU",
+                serviceWorkerRegistration: swRegistration 
+            });
 
             if (currentToken) {
                 myCurrentPushToken = currentToken; // Save to global RAM cache
                 console.log("Push token generated successfully.");
 
-                // 🚨 Save the token to the student's Firestore document
+                // Save the token to the student's Firestore document
                 if (currentRollNo && collegeID) {
                     const studentRef = doc(db, "colleges", collegeID, "students", currentRollNo);
                     await setDoc(studentRef, {
