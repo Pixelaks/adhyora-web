@@ -1572,7 +1572,7 @@ async function renderFeeDashboard() {
         let deptName = currentStudentProfileData.Department.replace("DEPT_", "");
         let deptID = "DEPT_" + deptName.replace(/\s+/g, '');
         
-        // 1. Data Aggregators
+        // 1. Updated Data Aggregators to capture transaction lists
         let feeMap = {}; 
         let totalDue = 0;
         let totalPaid = 0;
@@ -1587,7 +1587,8 @@ async function renderFeeDashboard() {
                     amount: data.semesterFee || 0, 
                     dueDate: data.dueDate || "N/A", 
                     paid: 0, 
-                    status: "Pending" 
+                    status: "Pending",
+                    transactions: [] // 🚨 Added to cache receipts for this semester
                 };
                 totalDue += (data.semesterFee || 0);
             }
@@ -1597,10 +1598,24 @@ async function renderFeeDashboard() {
         const paySnap = await getDocs(collection(db, "colleges", collegeID, "students", currentRollNo, "payments"));
         paySnap.forEach(d => {
             let p = d.data();
-            totalPaid += (p.amount || 0); // Update global total paid
+            totalPaid += (p.amount || 0);
             
             if (feeMap[p.semester]) {
                 feeMap[p.semester].paid += (p.amount || 0);
+                
+                // 🚨 Format and push transaction records into the semester container
+                let tTime = "N/A";
+                if (p.timestamp) {
+                    tTime = p.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+                
+                feeMap[p.semester].transactions.push({
+                    id: p.razorpay_payment_id || d.id || "N/A",
+                    orderId: p.razorpay_order_id || "N/A",
+                    date: p.date || "N/A",
+                    time: tTime,
+                    method: p.method || "Online"
+                });
             }
         });
 
@@ -1610,7 +1625,7 @@ async function renderFeeDashboard() {
             else if (feeMap[sem].paid > 0) feeMap[sem].status = "Partial";
         });
 
-        // 5. Render
+        // 5. Render Overview Layout
         let pendingOverall = totalDue - totalPaid;
         
         let html = `
@@ -1629,10 +1644,33 @@ async function renderFeeDashboard() {
             <h4 style="margin: 20px 0 10px 0; font-size: 14px;">Semester Details</h4>
         `;
 
+        // 6. Enhanced Renderer for Cards
         html += Object.keys(feeMap).sort((a,b) => a-b).map(sem => {
             let f = feeMap[sem];
             let color = f.status === "Paid" ? "#10b981" : (f.status === "Partial" ? "#f59e0b" : "#ef4444");
             let pendingAmt = f.amount - f.paid;
+            
+            // 🚨 Construct a beautiful transaction breakdown UI block if records exist
+            let receiptBlockHTML = "";
+            if (f.transactions && f.transactions.length > 0) {
+                receiptBlockHTML = `
+                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-color); font-size: 11px; color: #64748b; line-height: 1.6;">
+                        ${f.transactions.map((t, idx) => `
+                            <div style="margin-bottom: 8px;">
+                                <div style="display:flex; justify-content:space-between; font-weight:600; color:var(--text-main); margin-bottom:2px;">
+                                    <span>🧾 Receipt #${idx + 1}</span>
+                                    <span>${t.method}</span>
+                                </div>
+                                <div><b>TXN ID:</b> <span style="font-family: monospace; color:var(--text-main);">${t.id}</span></div>
+                                <div><b>Order ID:</b> <span style="font-family: monospace;">${t.orderId}</span></div>
+                                <div style="display:flex; justify-content:space-between; margin-top:2px; font-size:10px;">
+                                    <span>Cleared: ${t.date} @ ${t.time}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
             
             return `
             <div class="data-card">
@@ -1641,11 +1679,12 @@ async function renderFeeDashboard() {
                     <span style="color:${color}; font-weight:bold; font-size: 12px;">${f.status}</span>
                 </div>
                 <div style="font-size:12px; color:#64748b; margin-bottom:10px;"><i class="fas fa-calendar-alt"></i> Due: ${f.dueDate}</div>
-                <div style="display:flex; justify-content:space-between; font-size:13px; color:#334155; margin-bottom: 10px;">
+                <div style="display:flex; justify-content:space-between; font-size:13px; color:#334155; margin-bottom: ${f.status === "Paid" ? '0' : '10px'};">
                     <span>Total: ₹${f.amount.toLocaleString()}</span>
                     <span style="font-weight:600;">Paid: ₹${f.paid.toLocaleString()}</span>
                 </div>
-                ${f.status !== "Paid" ? `<button onclick="FEES_PayNow('${sem}', ${pendingAmt})" style="width:100%; padding:10px; border:none; background:var(--theme-main); color:white; border-radius:8px; cursor:pointer; font-weight:bold;">Pay ₹${pendingAmt.toLocaleString()}</button>` : ""}
+                ${receiptBlockHTML} 
+                ${f.status !== "Paid" ? `<button onclick="FEES_PayNow('${sem}', ${pendingAmt})" style="width:100%; padding:10px; border:none; background:var(--theme-main); color:white; border-radius:8px; cursor:pointer; font-weight:bold; margin-top:10px;">Pay ₹${pendingAmt.toLocaleString()}</button>` : ""}
             </div>`;
         }).join('');
 
