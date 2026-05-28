@@ -232,6 +232,9 @@ window.ForceOpenUpgradePanel = function() {
 function RenderPricingButtons(currentPlan) {
     const plans = { base: 1, pro: 2, ultimate: 3 };
     const currentLevel = plans[currentPlan] || 0; // 0 if no plan
+    
+    // 🚨 SMART CHECK: Is their plan currently expired?
+    let isExpired = (Math.floor(Date.now() / 1000) > cachedExpiryTimestamp);
 
     const btnBase = document.getElementById("btnPlanBase");
     const btnPro = document.getElementById("btnPlanPro");
@@ -239,7 +242,37 @@ function RenderPricingButtons(currentPlan) {
 
     if (!btnBase || !btnPro || !btnUlt) return;
 
-    // Helper: Style as Current Plan
+    // ========================================================
+    // SCENARIO A: EXPIRED OR NEW USER (Unlock everything)
+    // ========================================================
+    if (currentLevel === 0 || isExpired) {
+        
+        btnBase.innerText = currentLevel === 1 ? "Renew Base" : "Select Base";
+        btnBase.disabled = false;
+        btnBase.style.background = currentLevel === 1 ? "#f59e0b" : "transparent"; // Yellow if renewing
+        btnBase.style.color = currentLevel === 1 ? "#000" : "#fff";
+        btnBase.style.border = currentLevel === 1 ? "none" : "1px solid #777";
+        btnBase.style.cursor = "pointer";
+
+        btnPro.innerText = currentLevel === 2 ? "Renew Pro" : "Select Pro";
+        btnPro.disabled = false;
+        btnPro.style.background = currentLevel === 2 ? "#f59e0b" : "#2ecc71"; // Yellow if renewing
+        btnPro.style.color = "#000";
+        btnPro.style.border = "none";
+        btnPro.style.cursor = "pointer";
+
+        btnUlt.innerText = currentLevel === 3 ? "Renew Ultimate" : "Select Ultimate";
+        btnUlt.disabled = false;
+        btnUlt.style.background = currentLevel === 3 ? "#f59e0b" : "transparent"; // Yellow if renewing
+        btnUlt.style.color = currentLevel === 3 ? "#000" : "#fff";
+        btnUlt.style.border = currentLevel === 3 ? "none" : "1px solid #777";
+        btnUlt.style.cursor = "pointer";
+        return;
+    }
+
+    // ========================================================
+    // SCENARIO B: ACTIVE PLAN UPGRADE (Lock downgrades)
+    // ========================================================
     const setAsCurrent = (btn) => {
         btn.innerText = "Current Plan";
         btn.disabled = true;
@@ -247,10 +280,8 @@ function RenderPricingButtons(currentPlan) {
         btn.style.color = "#cbd5e1";
         btn.style.border = "none";
         btn.style.cursor = "not-allowed";
-        btn.style.boxShadow = "none";
     };
 
-    // Helper: Style as Downgrade (Blocked)
     const setAsDowngrade = (btn) => {
         btn.innerText = "Unavailable";
         btn.disabled = true;
@@ -258,40 +289,32 @@ function RenderPricingButtons(currentPlan) {
         btn.style.color = "#ef4444"; // Red text
         btn.style.border = "1px solid #ef4444";
         btn.style.cursor = "not-allowed";
-        btn.style.boxShadow = "none";
     };
 
-    // Helper: Style as Upgrade/Buy
-    const setAsUpgrade = (btn, text, bgColor, textColor) => {
+    const setAsUpgrade = (btn, text, bgColor, textColor, border) => {
         btn.innerText = text;
         btn.disabled = false;
         btn.style.background = bgColor;
         btn.style.color = textColor;
-        btn.style.border = "none";
+        btn.style.border = border || "none";
         btn.style.cursor = "pointer";
     };
 
-    // Apply Logic Based on Tier
     if (currentLevel === 1) { // On BASE
         setAsCurrent(btnBase);
         setAsUpgrade(btnPro, "Upgrade to Pro", "#2ecc71", "#000");
-        setAsUpgrade(btnUlt, "Upgrade to Ultimate", "#ffffff", "#000");
+        setAsUpgrade(btnUlt, "Upgrade to Ultimate", "transparent", "#fff", "1px solid #aaa");
     } 
     else if (currentLevel === 2) { // On PRO
         setAsDowngrade(btnBase);
         setAsCurrent(btnPro);
-        setAsUpgrade(btnUlt, "Upgrade to Ultimate", "#ffffff", "#000");
+        setAsUpgrade(btnUlt, "Upgrade to Ultimate", "transparent", "#fff", "1px solid #aaa");
     } 
     else if (currentLevel === 3) { // On ULTIMATE
         setAsDowngrade(btnBase);
         setAsDowngrade(btnPro);
         setAsCurrent(btnUlt);
     } 
-    else { // EXPIRED or NEVER SUBSCRIBED
-        setAsUpgrade(btnBase, "Get Started", "#ffffff", "#000");
-        setAsUpgrade(btnPro, "Get Started Now", "#2ecc71", "#000");
-        setAsUpgrade(btnUlt, "Get Started", "#ffffff", "#000");
-    }
 }
 
 // ==========================================
