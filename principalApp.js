@@ -4257,18 +4257,6 @@ window.addEventListener('load', () => {
 });
 
 // ==========================================
-// 🚨 MASTER SUBSCRIPTION & SEMESTER ENGINE
-// ==========================================
-let subscriptionListener = null;
-let cachedExpiryTimestamp = 0;
-let isFirstSubLoad = true;
-const gracePeriodDays = 8;
-
-// Replace these with your actual Razorpay Links!
-const RAZORPAY_MONTHLY = "https://pages.razorpay.com/pl_Rv6FL0YCAcrpNB/view";
-const RAZORPAY_YEARLY = "https://pages.razorpay.com/pl_Rv6Dh4gbH5csJe/view";
-
-// ==========================================
 // 🚨 SAAS FEATURE GATING ENGINE
 // ==========================================
 function ApplyPlanRestrictions(plan) {
