@@ -931,10 +931,19 @@
             <button class="close-settings" onclick="document.getElementById('billingOverlay').classList.remove('active')"><i class="fas fa-times"></i></button>
             <h3 style="color: var(--text-green); margin-bottom: 5px; font-size: 22px;"><i class="fas fa-crown"></i> Subscriptions</h3>
             
-            <div id="billingCurrentPlanBox" style="background: rgba(46, 204, 113, 0.1); border: 1px solid #2ecc71; border-radius: 12px; padding: 15px; margin-top: 15px; margin-bottom: 20px; text-align: center;">
-                <p style="font-size: 11px; font-weight: bold; color: #2ecc71; text-transform: uppercase; margin-bottom: 5px;">Active License</p>
-                <h2 id="billingCurrentPlanName" style="color: var(--text-green); font-size: 24px; margin-bottom: 5px;">Loading...</h2>
-                <p id="billingCurrentExpiry" style="font-size: 13px; color: #64748b; font-weight: bold;">Valid Until: ...</p>
+            <!-- 🚨 UPDATED BILLING HEADER WITH TWO COLUMNS -->
+            <div style="display: flex; gap: 15px; margin-top: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div id="billingCurrentPlanBox" style="flex: 1; min-width: 140px; background: rgba(46, 204, 113, 0.1); border: 1px solid #2ecc71; border-radius: 12px; padding: 15px; text-align: center; box-sizing: border-box;">
+                    <p style="font-size: 11px; font-weight: bold; color: #2ecc71; text-transform: uppercase; margin-bottom: 5px;">Active License</p>
+                    <h2 id="billingCurrentPlanName" style="color: var(--text-green); font-size: 18px; margin-bottom: 5px;">Loading...</h2>
+                    <p id="billingCurrentExpiry" style="font-size: 11px; color: #64748b; font-weight: bold;">Valid Until: ...</p>
+                </div>
+                
+                <div style="flex: 1; min-width: 140px; background: rgba(59, 130, 246, 0.1); border: 1px solid #3b82f6; border-radius: 12px; padding: 15px; text-align: center; box-sizing: border-box;">
+                    <p style="font-size: 11px; font-weight: bold; color: #3b82f6; text-transform: uppercase; margin-bottom: 5px;">Total Spent</p>
+                    <h2 id="billingTotalSpent" style="color: #1d4ed8; font-size: 22px; margin-bottom: 5px; font-weight: 800;">₹0</h2>
+                    <p style="font-size: 11px; color: #64748b; font-weight: bold;">Lifetime Value</p>
+                </div>
             </div>
     
             <h4 style="font-size: 14px; color: var(--text-green); margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">Transaction History</h4>
