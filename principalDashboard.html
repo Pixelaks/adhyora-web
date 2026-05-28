@@ -10,6 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Yatra+One&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
     <link rel="manifest" href="manifest.json">
     
     <meta id="pwaThemeColorMeta" name="theme-color" content="#0b111e">
@@ -445,6 +447,13 @@
                             <button id="btnOpenFeeConfig" style="background: #ef4444; box-shadow: 0 4px 10px rgb(239 68 68 / 79%);">Open Fee Setup</button>
                         </div>
 
+                        <div class="data-upload-card" style="border-color: #3b82f6; background: #eff6ff;">
+                            <div class="up-icon" style="color: #2563eb; background: #dbeafe;"><i class="fas fa-key"></i></div>
+                            <h4 style="color: #1d4ed8;">Payment Gateway</h4>
+                            <p>Securely link the college's Razorpay account to collect tuition fees.</p>
+                            <button id="btnOpenRazorpayConfig" style="background: #3b82f6; box-shadow: 0 4px 10px rgb(59 130 246 / 40%);">Link Razorpay</button>
+                        </div>
+
                         <div class="data-upload-card" style="border-color: #6ee7b7; background: #f0fdf4;">
                             <div class="up-icon" style="color: #10b981; background: #d1fae5;"><i class="fas fa-user-graduate"></i></div>
                             <h4 style="color: #047857;">Students Roster</h4>
@@ -548,6 +557,26 @@
                             </div>
                             
                         </div>
+                    </div>
+                </div>
+
+                <div class="modal-overlay" id="razorpayConfigOverlay">
+                    <div class="compose-modal" style="background: white; width: 90%; max-width: 450px; margin: auto; margin-top: 15vh; border-radius: 20px; padding: 30px; position: relative; border: 1px solid var(--border-color); box-shadow: 0 20px 50px rgba(0,0,0,0.1);">
+                        <button class="close-settings" onclick="document.getElementById('razorpayConfigOverlay').classList.remove('active')"><i class="fas fa-times"></i></button>
+                        <h3 style="color: var(--text-green); margin-bottom: 20px; font-size: 20px;"><i class="fas fa-lock"></i> Razorpay API Keys</h3>
+                        <p style="font-size: 12px; color: #64748b; margin-bottom: 15px; line-height: 1.5;">Enter the API keys from the college's Razorpay Dashboard. These will be encrypted and stored safely in the database.</p>
+                        
+                        <div style="margin-bottom: 15px; text-align: left;">
+                            <label style="font-size: 11px; font-weight: bold; color: #64748b;">Key ID (Public)</label>
+                            <input type="text" id="rzpKeyIdInput" class="asn-input" placeholder="rzp_live_xxxxxxxxxxxx" style="width: 100%; box-sizing: border-box; margin-top: 5px;">
+                        </div>
+                        
+                        <div style="margin-bottom: 20px; text-align: left;">
+                            <label style="font-size: 11px; font-weight: bold; color: #64748b;">Key Secret (Highly Sensitive)</label>
+                            <input type="password" id="rzpKeySecretInput" class="asn-input" placeholder="•••••••••••••••••••••" style="width: 100%; box-sizing: border-box; margin-top: 5px;">
+                        </div>
+                        
+                        <button id="btnSaveRazorpayKeys" style="width: 100%; background: var(--brand-green); color: white; border: none; padding: 15px; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 10px rgba(74, 222, 128, 0.3);">Secure & Save</button>
                     </div>
                 </div>
 
