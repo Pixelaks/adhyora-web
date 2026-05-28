@@ -4362,9 +4362,13 @@ function ApplyPlanRestrictions(plan) {
     const isUltimate = (plan === 'ultimate'); // 🚨 Identify Ultimate Tier
     
     // 🚨 1. Toggle the Logo Badge
+    // 🚨 1. Toggle the Logo Badge
     const ultBadge = document.getElementById("ultimateBadge");
     if (ultBadge) {
         ultBadge.style.display = isUltimate ? "block" : "none";
+        // Ensure it stays dark green
+        ultBadge.style.background = "#065f46"; 
+        ultBadge.style.color = "#ecfdf5";
     }
     
     // 2. Lock/Unlock Data Management Buttons
