@@ -1651,21 +1651,41 @@ async function renderFeeDashboard() {
             let pendingAmt = f.amount - f.paid;
             
             // 🚨 Construct a beautiful transaction breakdown UI block if records exist
+            // 🚨 Construct a beautiful transaction breakdown UI block if records exist
             let receiptBlockHTML = "";
             if (f.transactions && f.transactions.length > 0) {
                 receiptBlockHTML = `
                     <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-color); font-size: 11px; color: #64748b; line-height: 1.6;">
-                        ${f.transactions.map((t, idx) => `
-                            <div style="margin-bottom: 8px;">
-                                <div style="display:flex; justify-content:space-between; font-weight:600; color:var(--text-main); margin-bottom:2px;">
-                                    <span>🧾 Receipt #${idx + 1}</span>
+                        ${f.transactions.map((t) => `
+                            
+                            <!-- Notice the ID here. We use this to take the screenshot! -->
+                            <div id="receipt-${t.id}" style="margin-bottom: 12px; padding: 12px; background: var(--theme-light); border-radius: 8px; border: 1px solid rgba(0,0,0,0.05);">
+                                
+                                <div style="display:flex; justify-content:space-between; font-weight:600; color:var(--text-main); margin-bottom:8px;">
+                                    <span style="font-size: 13px;">🧾 Fee Receipt (Sem ${sem})</span>
                                     <span>${t.method}</span>
                                 </div>
-                                <div><b>TXN ID:</b> <span style="font-family: monospace; color:var(--text-main);">${t.id}</span></div>
-                                <div><b>Order ID:</b> <span style="font-family: monospace;">${t.orderId}</span></div>
-                                <div style="display:flex; justify-content:space-between; margin-top:2px; font-size:10px;">
-                                    <span>Cleared: ${t.date} @ ${t.time}</span>
+                                
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
+                                    <div><b>TXN ID:</b> <span style="font-family: monospace; color:var(--text-main); font-size:12px;">${t.id}</span></div>
+                                    <!-- COPY BUTTON -->
+                                    <button onclick="navigator.clipboard.writeText('${t.id}'); showToast('✅ TXN ID Copied!');" style="background:none; border:none; cursor:pointer; color:var(--theme-main); padding:5px;">
+                                        <i class="fas fa-copy" style="font-size: 14px;"></i>
+                                    </button>
                                 </div>
+                                
+                                <div><b>Order ID:</b> <span style="font-family: monospace;">${t.orderId}</span></div>
+                                
+                                <div style="margin-top:6px; padding-top:6px; border-top: 1px solid rgba(0,0,0,0.05); font-size:10px; display:flex; justify-content:space-between;">
+                                    <span>Cleared: ${t.date} @ ${t.time}</span>
+                                    <span style="color: #10b981; font-weight:bold;">₹${t.amount || f.amount}</span>
+                                </div>
+                                
+                                <!-- SHARE BUTTON (Hidden from the screenshot via css if we wanted, but good to have) -->
+                                <button onclick="shareReceiptImage('receipt-${t.id}', '${t.id}')" style="width:100%; margin-top:10px; padding:8px; background: white; border: 1px solid var(--theme-main); border-radius:6px; font-weight:bold; cursor:pointer; color:var(--theme-main); display:flex; justify-content:center; align-items:center; gap:8px;">
+                                    <i class="fas fa-share-nodes"></i> Share Digital Receipt
+                                </button>
+                                
                             </div>
                         `).join('')}
                     </div>
@@ -1799,3 +1819,58 @@ function hidePaymentLoader() {
         loader.classList.add("payment-loader-hidden");
     }
 }
+
+// ==========================================
+// RECEIPT IMAGE GENERATOR & SHARING
+// ==========================================
+window.shareReceiptImage = async (elementId, txnId) => {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    
+    showToast("Generating secure receipt... Please wait.");
+    
+    try {
+        // 1. Take a digital screenshot of the specific receipt div
+        const canvas = await html2canvas(el, { 
+            scale: 3, // High resolution for mobile sharing
+            backgroundColor: "#ffffff",
+            logging: false
+        });
+        
+        // 2. Convert it to an image file
+        canvas.toBlob(async (blob) => {
+            if (!blob) {
+                showToast("❌ Failed to generate image.");
+                return;
+            }
+            
+            const file = new File([blob], `Adhyora_Receipt_${txnId}.png`, { type: 'image/png' });
+            
+            // 3. Try to open the native phone Share Sheet (WhatsApp, Email, etc.)
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({
+                        files: [file],
+                        title: 'Adhyora Fee Receipt',
+                        text: `Fee Payment Receipt. TXN ID: ${txnId}`
+                    });
+                } catch (err) {
+                    console.log("User cancelled share");
+                }
+            } else {
+                // 4. FALLBACK: If on a desktop PC, just download the image instead
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Adhyora_Receipt_${txnId}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast("✅ Receipt downloaded to your device!");
+            }
+        }, 'image/png');
+        
+    } catch (err) {
+        console.error("Image gen error", err);
+        showToast("❌ Could not generate receipt image.");
+    }
+};
