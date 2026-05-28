@@ -106,10 +106,9 @@
 
             <div id="subBlockLoading" style="margin-bottom: 30px; color: #2ecc71; font-size: 15px; display: none; font-weight: bold; animation: pulseOp 1.5s infinite;"><i class="fas fa-circle-notch fa-spin" style="margin-right: 8px;"></i> Processing Secure Payment...</div>
 
-            <div class="pricing-container" style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; padding: 0 2%;">
+            <div class="pricing-container" style="display: flex; justify-content: center; align-items: stretch; gap: 30px; flex-wrap: wrap; padding: 20px 2%; margin: 0 auto;">
                 
-                <!-- BASE PLAN -->
-                <div class="pricing-card" style="flex: 1; min-width: 280px; max-width: 350px; text-align: center; border-radius: 20px; background: rgba(26, 26, 26, 0.9); padding: 40px 30px; border: 1px solid rgba(255, 255, 255, 0.05); border-top: 5px solid #aaa; display: flex; flex-direction: column;">
+                <div class="pricing-card" style="flex: 0 1 330px; width: 100%; max-width: 330px; text-align: center; border-radius: 20px; background: rgba(26, 26, 26, 0.9); padding: 40px 30px; border: 1px solid rgba(255, 255, 255, 0.05); border-top: 5px solid #aaa; display: flex; flex-direction: column; box-sizing: border-box;">
                     <p style="text-transform: uppercase; letter-spacing: 2px; color: #aaa; font-weight: bold; margin-bottom: 10px;">Adhyora Base</p>
                     <h3 style="font-size: 3.5rem; color: #fff; margin-bottom: 5px;">₹59<span style="font-size: 1rem; color: #777;">/student</span></h3>
                     
@@ -125,8 +124,7 @@
                     <button onclick="ProcessSubscription('base')" class="btn-monthly" style="margin-top: auto;">Get Started</button>
                 </div>
 
-                <!-- PRO PLAN (MOST POPULAR) -->
-                <div class="pricing-card" style="flex: 1; min-width: 300px; max-width: 380px; text-align: center; border-radius: 20px; background: rgba(46, 204, 113, 0.05); padding: 40px 30px; border: 1px solid rgba(46, 204, 113, 0.3); border-top: 5px solid #2ecc71; position: relative; box-shadow: 0 0 40px rgba(46, 204, 113, 0.1); display: flex; flex-direction: column;">
+                <div class="pricing-card" style="flex: 0 1 330px; width: 100%; max-width: 330px; text-align: center; border-radius: 20px; background: rgba(46, 204, 113, 0.05); padding: 40px 30px; border: 1px solid rgba(46, 204, 113, 0.3); border-top: 5px solid #2ecc71; position: relative; box-shadow: 0 0 40px rgba(46, 204, 113, 0.1); display: flex; flex-direction: column; box-sizing: border-box;">
                     <div style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%); background: #2ecc71; color: #000; padding: 5px 20px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; letter-spacing: 1px;">MOST POPULAR</div>
                     <p style="text-transform: uppercase; letter-spacing: 2px; color: #2ecc71; font-weight: bold; margin-bottom: 10px;">Adhyora Pro</p>
                     <h3 style="font-size: 3.5rem; color: #fff; margin-bottom: 5px;">₹79<span style="font-size: 1rem; color: #777;">/student</span></h3>
@@ -142,8 +140,7 @@
                     <button onclick="ProcessSubscription('pro')" class="btn-yearly" style="margin-top: auto;">Get Started Now</button>
                 </div>
 
-                <!-- ULTIMATE PLAN -->
-                <div class="pricing-card" style="flex: 1; min-width: 280px; max-width: 350px; text-align: center; border-radius: 20px; background: rgba(26, 26, 26, 0.9); padding: 40px 30px; border: 1px solid rgba(255, 255, 255, 0.05); border-top: 5px solid #aaa; display: flex; flex-direction: column;">
+                <div class="pricing-card" style="flex: 0 1 330px; width: 100%; max-width: 330px; text-align: center; border-radius: 20px; background: rgba(26, 26, 26, 0.9); padding: 40px 30px; border: 1px solid rgba(255, 255, 255, 0.05); border-top: 5px solid #aaa; display: flex; flex-direction: column; box-sizing: border-box;">
                     <p style="text-transform: uppercase; letter-spacing: 2px; color: #aaa; font-weight: bold; margin-bottom: 10px;">Adhyora Ultimate</p>
                     <h3 style="font-size: 3.5rem; color: #fff; margin-bottom: 5px;">₹99<span style="font-size: 1rem; color: #777;">/student</span></h3>
                     
@@ -168,7 +165,7 @@
             <h2 style="color: var(--text-green, #4ade80); margin-bottom: 10px; font-size: 22px;"><i class="fas fa-check-circle"></i> Plan Activated!</h2>
             <h4 id="successPlanName" style="color: #f8fafc; margin-bottom: 5px; font-size: 16px;">Current Plan: Trial</h4>
             <p id="successExpiryDate" style="color: #94a3b8; margin-bottom: 25px; font-size: 13px;">Valid Until: ...</p>
-            <button onclick="document.getElementById('subSuccessPanel').style.display='none'" style="width: 100%; padding: 14px; border-radius: 12px; background: var(--brand-green, #4ade80); color: #0f172a; border: none; font-weight: bold; cursor: pointer;">Continue to Dashboard</button>
+            <button onclick="document.getElementById('subSuccessPanel').classList.remove('active'); setTimeout(() => { document.getElementById('subSuccessPanel').style.display='none'; }, 300); UnlockAccess();" style="width: 100%; padding: 14px; border-radius: 12px; background: var(--brand-green, #4ade80); color: #0f172a; border: none; font-weight: bold; cursor: pointer; transition: 0.2s;">Continue to Dashboard</button>
         </div>
     </div>
 
