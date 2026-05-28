@@ -781,6 +781,10 @@ function RC_ExecuteAction() {
         document.getElementById("pinOverlay").classList.remove("active");
         ExecuteStudentAdminAction();
     }
+    else if (rcCurrentAction === "SAVE_RAZORPAY_KEYS") {
+        document.getElementById("pinOverlay").classList.remove("active");
+        ExecuteSaveRazorpayKeys();
+    }
     else if (rcCurrentAction === "PUBLISH_FEE_STRUCTURE") {
         document.getElementById("pinOverlay").classList.remove("active");
         
@@ -4363,9 +4367,80 @@ window.ProcessSubscription = async function(planType) {
         if (result === "TRIAL_ACTIVATED") {
             loadingTxt.innerText = "Trial Activated! Unlocking...";
         } else if (result === "OPEN_LINK") {
-            loadingTxt.innerText = "Opening Secure Payment Page...";
-            let link = planType === 'monthly' ? RAZORPAY_MONTHLY : RAZORPAY_YEARLY;
-            window.open(link + "?collegeid=" + currentCollegeID, "_blank");
+            loadingTxt.innerText = "Calculating dynamic student billing...";
+            
+            // 1. ASK CLOUD FUNCTION TO COUNT STUDENTS & CREATE ORDER
+            const orderRes = await fetch('https://us-central1-adhyora-5d4c1.cloudfunctions.net/createAdhyoraSubscription', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    collegeId: currentCollegeID, 
+                    planType: planType 
+                })
+            });
+            const orderData = await orderRes.json();
+
+            if (!orderData.success) {
+                loadingTxt.innerText = "Error calculating billing. Please try again.";
+                setTimeout(() => { loadingTxt.style.display = "none"; }, 3000);
+                return;
+            }
+
+            loadingTxt.style.display = "none";
+
+            // 2. CONFIGURE RAZORPAY
+            var options = {
+                "key": orderData.razorpayKeyId,
+                "amount": orderData.amountInPaise, 
+                "currency": "INR",
+                "name": "Pixelaks Technologies",
+                "description": `Adhyora ${planType.toUpperCase()} Plan (${orderData.studentCount} Students)`,
+                "image": "https://raw.githubusercontent.com/Pixelaks/pixelaks.in/main/AdhyoraSplashLogo5.png",
+                "order_id": orderData.orderId,
+                "prefill": {
+                    "name": myRealName || "Principal",
+                },
+                "theme": { "color": "#2ecc71" }, // Adhyora Green
+                "handler": async function (response) {
+                    
+                    loadingTxt.style.display = "block";
+                    loadingTxt.innerText = "Payment successful! Unlocking dashboard...";
+                    
+                    // 3. SECURELY VERIFY & ACTIVATE
+                    try {
+                        const verifyRes = await fetch('https://us-central1-adhyora-5d4c1.cloudfunctions.net/verifyAdhyoraSubscription', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                collegeId: currentCollegeID,
+                                planType: planType,
+                                paymentId: response.razorpay_payment_id,
+                                orderId: response.razorpay_order_id,
+                                signature: response.razorpay_signature
+                            })
+                        });
+
+                        const verifyResult = await verifyRes.json();
+
+                        if (verifyResult.success) {
+                            loadingTxt.innerText = "✅ License Renewed Successfully!";
+                            setTimeout(() => { UnlockAccess(); }, 1500);
+                        } else {
+                            loadingTxt.innerText = "❌ Security verification failed. Contact support.";
+                        }
+                    } catch (err) {
+                        loadingTxt.innerText = "❌ Network error saving license.";
+                    }
+                }
+            };
+            
+            var rzpCheckout = new Razorpay(options);
+            rzpCheckout.on('payment.failed', function (response){
+                loadingTxt.style.display = "block";
+                loadingTxt.innerText = "❌ Payment Cancelled.";
+                setTimeout(() => { loadingTxt.style.display = "none"; }, 3000);
+            });
+            rzpCheckout.open();
         }
     } catch (e) {
         loadingTxt.innerText = "Connection Error. Please try again.";
@@ -5180,6 +5255,88 @@ window.addEventListener('popstate', (e) => {
         history.pushState({ layer: 'home' }, '');
     }
 });
+
+// ==========================================
+// 💳 RAZORPAY GATEWAY CONFIGURATION
+// ==========================================
+
+// 1. Open Modal and pre-fill existing Key ID if they already saved it once
+document.getElementById("btnOpenRazorpayConfig").addEventListener("click", async () => {
+    document.getElementById("razorpayConfigOverlay").classList.add("active");
+    document.getElementById("rzpKeyIdInput").value = "";
+    document.getElementById("rzpKeySecretInput").value = "";
+    
+    try {
+        // Look up existing keys in a secure metadata path
+        const docSnap = await getDoc(doc(db, "colleges", currentCollegeID, "metadata", "payment_gateway"));
+        if (docSnap.exists() && docSnap.data().razorpayKeyId) {
+            document.getElementById("rzpKeyIdInput").value = docSnap.data().razorpayKeyId;
+            // Show fake dots so the principal knows a secret is already saved
+            document.getElementById("rzpKeySecretInput").value = "••••••••••••••••"; 
+        }
+    } catch(e) { console.error("Could not fetch existing keys"); }
+});
+
+// 2. Button Click: Send to your Security PIN screen first!
+document.getElementById("btnSaveRazorpayKeys").addEventListener("click", () => {
+    let keyId = document.getElementById("rzpKeyIdInput").value.trim();
+    let keySecret = document.getElementById("rzpKeySecretInput").value.trim();
+    
+    // 1. Basic Empty Check
+    if (!keyId || !keySecret) {
+        showRcToast("⚠️ Please enter both Key ID and Key Secret.");
+        return;
+    }
+
+    // 2. Key ID Format Validation
+    // Must start with rzp_live_ or rzp_test_, followed by 14+ letters/numbers
+    const keyIdRegex = /^rzp_(live|test)_[a-zA-Z0-9]{14,}$/;
+    if (!keyIdRegex.test(keyId)) {
+        showRcToast("⚠️ Invalid Key ID. It must start with 'rzp_live_' or 'rzp_test_'.");
+        return;
+    }
+
+    // 3. Key Secret Format Validation
+    // Only check the secret if they are typing a new one (ignoring the placeholder dots)
+    if (keySecret !== "••••••••••••••••") {
+        // Must be alphanumeric only, no spaces, at least 20 characters long
+        const keySecretRegex = /^[a-zA-Z0-9]{20,}$/;
+        if (!keySecretRegex.test(keySecret)) {
+            showRcToast("⚠️ Invalid Key Secret. Make sure there are no spaces or missing characters.");
+            return;
+        }
+    }
+
+    // 4. Everything is valid! Proceed to the Security PIN Wall
+    document.getElementById("razorpayConfigOverlay").classList.remove("active");
+    document.getElementById("pinInput").value = "";
+    document.getElementById("pinOverlay").classList.add("active");
+    
+    // Set the action flag for your PIN execution engine
+    rcCurrentAction = "SAVE_RAZORPAY_KEYS"; 
+});
+
+// 3. The actual save function (Executes AFTER they type correct PIN)
+async function ExecuteSaveRazorpayKeys() {
+    showRcToast("Locking API Keys to Database...");
+    
+    let keyId = document.getElementById("rzpKeyIdInput").value.trim();
+    let keySecret = document.getElementById("rzpKeySecretInput").value.trim();
+    
+    let payload = { razorpayKeyId: keyId, updatedAt: serverTimestamp() };
+    
+    // Only update the secret if they actually typed a new one (ignore the fake dots)
+    if (keySecret !== "••••••••••••••••") {
+        payload.razorpayKeySecret = keySecret;
+    }
+
+    try {
+        await setDoc(doc(db, "colleges", currentCollegeID, "metadata", "payment_gateway"), payload, { merge: true });
+        showRcToast("✅ Razorpay Keys Locked & Secured!");
+    } catch(e) {
+        showRcToast("❌ Error connecting to secure database.");
+    }
+}
 
 // ==========================================
 // 🚀 ADHYORA LOGO GLITCH ENGINE
