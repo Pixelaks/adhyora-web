@@ -4269,31 +4269,43 @@ function HandleBlockState(msg, isFirstTime) {
     }
 }
 
+window.CloseSuccessPanel = function() {
+    let successPanel = document.getElementById("subSuccessPanel");
+    if (successPanel) {
+        successPanel.classList.remove("active");
+        // 🚨 Forcefully override CSS to ensure it fades out and vanishes
+        successPanel.style.setProperty("opacity", "0", "important");
+        successPanel.style.setProperty("visibility", "hidden", "important");
+        setTimeout(() => { 
+            successPanel.style.setProperty("display", "none", "important"); 
+        }, 300);
+    }
+    window.UnlockAccess();
+};
+
 window.UnlockAccess = function() {
     hideAppLoader();
 
-    // 2. Hide the block panel
     let blockPanel = document.getElementById("subBlockPanel");
     if (blockPanel) {
-        blockPanel.style.display = "none";
-        blockPanel.style.opacity = "0";
-        blockPanel.style.visibility = "hidden";
         blockPanel.classList.remove("active");
+        // 🚨 Forcefully override CSS to drop the dark paywall background
+        blockPanel.style.setProperty("opacity", "0", "important");
+        blockPanel.style.setProperty("visibility", "hidden", "important");
+        setTimeout(() => { 
+            blockPanel.style.setProperty("display", "none", "important"); 
+        }, 300);
     }
 
-    // 3. 🚨 THE FIX: Hand control back to the CSS!
     let mainContent = document.querySelector(".main-content");
     let sidebar = document.getElementById("mainSidebar");
     
     if (mainContent) {
-        // Remove the inline lock so your @media (max-width: 900px) can hide it on mobile!
         mainContent.style.removeProperty("display"); 
-        
         mainContent.style.opacity = "0";
         setTimeout(() => mainContent.style.opacity = "1", 50);
     }
     if (sidebar) {
-        // Remove the inline lock
         sidebar.style.removeProperty("display");
     }
 };
