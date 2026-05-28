@@ -4193,19 +4193,18 @@ function ValidateExpiry(expirySeconds, isTrialUsed) {
 
     if (today > hardBlockDate) {
         let dateStr = expiryDate.toLocaleDateString('en-US', { day:'numeric', month:'short', year:'numeric' });
-        // 🚨 If they are expired but they used a trial, they are NOT a first-time user anymore.
         HandleBlockState(`Your plan expired on ${dateStr}. Please renew to unlock access.`, !isTrialUsed);
     } 
     else if (today > expiryDate) {
-        UnlockAccess();
+        window.UnlockAccess(); // 🚨 Updated here
         TriggerBanner(`Plan Expired! Service completely stops in ${daysLeftInGrace} days.`);
     }
     else if (daysUntilExpiry === 7 || daysUntilExpiry <= 3) {
-        UnlockAccess();
+        window.UnlockAccess(); // 🚨 Updated here
         TriggerBanner(`Reminder: Your Adhyora plan expires in ${daysUntilExpiry} days.`);
     }
     else {
-        UnlockAccess();
+        window.UnlockAccess(); // 🚨 Updated here
         document.getElementById("subWarningBanner").style.display = "none";
     }
 }
@@ -4270,8 +4269,7 @@ function HandleBlockState(msg, isFirstTime) {
     }
 }
 
-function UnlockAccess() {
-    // 🚨 REPLACED: Use the smooth fade-out here too!
+window.UnlockAccess = function() {
     hideAppLoader();
 
     // 2. Hide the block panel
@@ -4298,7 +4296,7 @@ function UnlockAccess() {
         // Remove the inline lock
         sidebar.style.removeProperty("display");
     }
-}
+};
 
 function TriggerBanner(msg) {
     let banner = document.getElementById("subWarningBanner");
@@ -4426,7 +4424,7 @@ window.ProcessSubscription = async function(planType) {
 
                         if (verifyResult.success) {
                             loadingTxt.innerText = "✅ License Renewed Successfully!";
-                            setTimeout(() => { UnlockAccess(); }, 1500);
+                            setTimeout(() => { window.UnlockAccess(); }, 1500); // 🚨 Updated here
                         } else {
                             loadingTxt.innerText = "❌ Security verification failed. Contact support.";
                         }
