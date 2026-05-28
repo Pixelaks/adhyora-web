@@ -702,9 +702,9 @@ body.dark-mode .profile-card:hover { box-shadow: 0 8px 25px rgba(0,0,0,0.5) !imp
 .bottom-nav {
     background-color: var(--theme-nav) !important;
     background-image: none !important;
-    position: relative;
-    overflow-x: auto;     /* ✅ Restores horizontal scroll */
-    overflow-y: hidden;   /* ✅ Keeps vertical bounds clipped */
+    position: static;     /* 🚨 FIX: Detaches the element so the background won't scroll */
+    overflow-x: auto;
+    overflow-y: hidden;
     opacity: 1 !important;
 }
 
@@ -712,12 +712,19 @@ body.dark-mode .profile-card:hover { box-shadow: 0 8px 25px rgba(0,0,0,0.5) !imp
 .bottom-nav::before {
     content: '';
     position: absolute;
-    inset: 0;
-    border-radius: inherit;
+    
+    /* 🚨 FIX: Remove 'inset: 0' and match the nav pill's dimensions exactly */
+    width: 86%;
+    max-width: 440px;
+    height: 52px;         /* 32px icons + 20px vertical padding */
+    border-radius: 35px;  /* Match the nav pill radius */
+    
     pointer-events: none;
     z-index: 0;
     background-color: var(--theme-main);
     opacity: 0.3;
+    
+    /* Keep your existing mask SVG code below */
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='56'%3E%3Cpath d='M0 28 Q50 8 100 28 T200 28' stroke='black' stroke-width='1.2' fill='none'/%3E%3Cpath d='M0 38 Q50 18 100 38 T200 38' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 18 Q50 3 100 18 T200 18' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 48 Q50 32 100 48 T200 48' stroke='black' stroke-width='0.6' fill='none'/%3E%3Cpath d='M0 8 Q50 -3 100 8 T200 8' stroke='black' stroke-width='0.6' fill='none'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='56'%3E%3Cpath d='M0 28 Q50 8 100 28 T200 28' stroke='black' stroke-width='1.2' fill='none'/%3E%3Cpath d='M0 38 Q50 18 100 38 T200 38' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 18 Q50 3 100 18 T200 18' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 48 Q50 32 100 48 T200 48' stroke='black' stroke-width='0.6' fill='none'/%3E%3Cpath d='M0 8 Q50 -3 100 8 T200 8' stroke='black' stroke-width='0.6' fill='none'/%3E%3C/svg%3E");
     -webkit-mask-size: 200px 56px;
