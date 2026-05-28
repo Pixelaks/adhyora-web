@@ -4214,26 +4214,28 @@ function ValidateExpiry(expirySeconds, isTrialUsed) {
 function HandleBlockState(msg, isFirstTime) {
     document.getElementById("subBlockText").innerText = msg;
 
-    // 🚨 FIX: Force phone notification bar color to match the deep dark paywall sheet (#0a0a0a)
+    // Force phone notification bar color to match the deep dark paywall sheet
     const metaThemeColor = document.getElementById("pwaThemeColorMeta");
     if(metaThemeColor) metaThemeColor.setAttribute("content", "#0a0a0a");
     
-    // 🚨 DYNAMIC TEXT UPDATES
+    // DYNAMIC TEXT UPDATES FOR THE 3-TIER SYSTEM
     let heading = document.getElementById("subBlockHeading");
-    let monthHigh = document.getElementById("monthlyHighlightText");
-    let yearHigh = document.getElementById("yearlyHighlightText");
+    let baseHigh = document.getElementById("baseHighlightText");
+    let proHigh = document.getElementById("proHighlightText");
+    let ultHigh = document.getElementById("ultimateHighlightText");
 
     if (isFirstTime) {
         heading.innerText = "CHOOSE A SUBSCRIPTION PLAN";
-        monthHigh.innerText = "1st Month Free Trial";
-        yearHigh.innerText = "1st Month Free Trial";
+        if(baseHigh) baseHigh.innerText = "1st Month Free Trial";
+        if(proHigh) proHigh.innerText = "1st Month Free Trial";
+        if(ultHigh) ultHigh.innerText = "1st Month Free Trial";
     } else {
         heading.innerText = "SUBSCRIPTION EXPIRED";
-        monthHigh.innerText = "Flexi Renewal";
-        yearHigh.innerText = "Best Value";
+        if(baseHigh) baseHigh.innerText = "Essential Features";
+        if(proHigh) proHigh.innerText = "Advanced Management";
+        if(ultHigh) ultHigh.innerText = "Maximum Automation";
     }
 
-    // 🚨 REPLACED: We use the smooth fade-out instead of instantly hiding it!
     hideAppLoader();
     
     let blockPanel = document.getElementById("subBlockPanel");
