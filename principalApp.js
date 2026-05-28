@@ -4402,44 +4402,6 @@ function ApplyPlanRestrictions(plan) {
     }
 }
 
-function ApplyPlanRestrictions(plan) {
-    const isBase = (plan === 'base');
-    
-    // 1. Lock/Unlock Data Management Buttons
-    const btnFeeConfig = document.getElementById("btnOpenFeeConfig");
-    const btnRazorpay = document.getElementById("btnOpenRazorpayConfig");
-    
-    if (isBase) {
-        if (btnFeeConfig) {
-            btnFeeConfig.style.background = "#94a3b8";
-            btnFeeConfig.innerHTML = '<i class="fas fa-lock"></i> Pro Plan Required';
-            btnFeeConfig.style.boxShadow = "none";
-        }
-        if (btnRazorpay) {
-            btnRazorpay.style.background = "#94a3b8";
-            btnRazorpay.innerHTML = '<i class="fas fa-lock"></i> Pro Plan Required';
-            btnRazorpay.style.boxShadow = "none";
-        }
-    } else {
-        if (btnFeeConfig) {
-            btnFeeConfig.style.background = "#ef4444";
-            btnFeeConfig.innerHTML = 'Open Fee Setup';
-            btnFeeConfig.style.boxShadow = "0 4px 10px rgb(239 68 68 / 79%)";
-        }
-        if (btnRazorpay) {
-            btnRazorpay.style.background = "#3b82f6";
-            btnRazorpay.innerHTML = 'Link Razorpay';
-            btnRazorpay.style.boxShadow = "0 4px 10px rgb(59 130 246 / 40%)";
-        }
-    }
-    
-    // 2. Hide/Show Fees Ledger in Student Dashboard View
-    const feeLedgerContainer = document.getElementById("pdFeesLedgerContainer");
-    if (feeLedgerContainer && feeLedgerContainer.parentElement) {
-        feeLedgerContainer.parentElement.style.display = isBase ? "none" : "flex";
-    }
-}
-
 // ==========================================
 // 🚨 MASTER SUBSCRIPTION & SEMESTER ENGINE
 // ==========================================
