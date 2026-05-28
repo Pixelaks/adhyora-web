@@ -230,6 +230,9 @@ async function syncCollegeAndListen() {
             // Subscription/Lock Logic
             const blockPanel = document.getElementById("subscriptionBlockPanel");
             const dashboardUI = document.querySelector(".dashboard-container"); 
+
+            // 🚨 ADD THIS LINE to save the plan type globally
+            window.collegePlanTier = data.subscription ? (data.subscription.planType || "base").toLowerCase() : "base";
             
             if (!data.subscription) {
                 blockPanel.classList.add("active");
@@ -1627,38 +1630,69 @@ async function renderFeeDashboard() {
 
         // 5. Render Overview Layout
         let pendingOverall = totalDue - totalPaid;
-        
-        let html = `
-            <div class="data-card" style="border-left-color: var(--theme-main); background: var(--theme-light);">
-                <h4 style="margin-bottom: 10px; font-size: 14px; opacity: 0.8;">Institutional Summary</h4>
-                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                    <span>Total Due:</span> <b>₹${totalDue.toLocaleString()}</b>
+        let isBasePlan = (window.collegePlanTier === "base");
+
+        // 🚨 THE EDGE CASE: Base Plan + Zero History
+        if (isBasePlan && totalPaid === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 60px 20px; color: #64748b; background: white; border-radius: 16px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-top: 10px;">
+                    <i class="fas fa-wallet" style="font-size: 48px; color: #cbd5e1; margin-bottom: 15px;"></i>
+                    <h3 style="color: var(--text-main); margin-bottom: 5px;">Fee Portal Offline</h3>
+                    <p style="font-size: 13px; line-height: 1.6;">Your institution does not use Adhyora for online fee collection. Please contact your administration office directly for any fee inquiries.</p>
                 </div>
-                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                    <span>Total Paid:</span> <b style="color:#10b981;">₹${totalPaid.toLocaleString()}</b>
+            `;
+            return; // Stop rendering right here!
+        }
+
+        let html = "";
+
+        // 🚨 ONLY SHOW INSTITUTIONAL SUMMARY IF PRO/ULTIMATE
+        if (!isBasePlan) {
+            html += `
+                <div class="data-card" style="border-left-color: var(--theme-main); background: var(--theme-light);">
+                    <h4 style="margin-bottom: 10px; font-size: 14px; opacity: 0.8;">Institutional Summary</h4>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <span>Total Due:</span> <b>₹${totalDue.toLocaleString()}</b>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <span>Total Paid:</span> <b style="color:#10b981;">₹${totalPaid.toLocaleString()}</b>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; border-top: 1px solid var(--border-color); padding-top: 5px;">
+                        <span>Remaining:</span> <b style="color:#ef4444;">₹${pendingOverall.toLocaleString()}</b>
+                    </div>
                 </div>
-                <div style="display:flex; justify-content:space-between; border-top: 1px solid var(--border-color); padding-top: 5px;">
-                    <span>Remaining:</span> <b style="color:#ef4444;">₹${pendingOverall.toLocaleString()}</b>
+            `;
+        } else {
+            // 🚨 THEY ARE ON BASE PLAN, BUT HAVE OLD RECEIPTS!
+            html += `
+                <div class="info-banner" style="padding: 15px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 12px; margin-bottom: 20px; font-size: 13px; color: #b91c1c;">
+                    <i class="fas fa-info-circle"></i> Online fee collection is currently disabled for this institution. Your past digital receipts are safely preserved below.
                 </div>
-            </div>
-            <h4 style="margin: 20px 0 10px 0; font-size: 14px;">Semester Details</h4>
-        `;
+            `;
+        }
+
+        html += `<h4 style="margin: 20px 0 10px 0; font-size: 14px;">${isBasePlan ? "Past Payment Records" : "Semester Details"}</h4>`;
 
         // 6. Enhanced Renderer for Cards
-        html += Object.keys(feeMap).sort((a,b) => a-b).map(sem => {
+        let semKeysToRender = Object.keys(feeMap).sort((a,b) => a-b);
+        
+        // If Base Plan, ONLY render semesters that actually have past transactions
+        if (isBasePlan) {
+            semKeysToRender = semKeysToRender.filter(sem => feeMap[sem].transactions && feeMap[sem].transactions.length > 0);
+        }
+
+        html += semKeysToRender.map(sem => {
             let f = feeMap[sem];
             let color = f.status === "Paid" ? "#10b981" : (f.status === "Partial" ? "#f59e0b" : "#ef4444");
             let pendingAmt = f.amount - f.paid;
             
-            // 🚨 Construct a beautiful transaction breakdown UI block if records exist
-            // 🚨 Construct a beautiful transaction breakdown UI block if records exist
+            // Construct a beautiful transaction breakdown UI block if records exist
             let receiptBlockHTML = "";
             if (f.transactions && f.transactions.length > 0) {
                 receiptBlockHTML = `
                     <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-color); font-size: 11px; color: #64748b; line-height: 1.6;">
                         ${f.transactions.map((t) => `
                             
-                            <!-- Notice the ID here. We use this to take the screenshot! -->
                             <div id="receipt-${t.id}" style="margin-bottom: 12px; padding: 12px; background: var(--theme-light); border-radius: 8px; border: 1px solid rgba(0,0,0,0.05);">
                                 
                                 <div style="display:flex; justify-content:space-between; font-weight:600; color:var(--text-main); margin-bottom:8px;">
@@ -1668,7 +1702,6 @@ async function renderFeeDashboard() {
                                 
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
                                     <div><b>TXN ID:</b> <span style="font-family: monospace; color:var(--text-main); font-size:12px;">${t.id}</span></div>
-                                    <!-- COPY BUTTON -->
                                     <button onclick="navigator.clipboard.writeText('${t.id}'); showToast('✅ TXN ID Copied!');" style="background:none; border:none; cursor:pointer; color:var(--theme-main); padding:5px;">
                                         <i class="fas fa-copy" style="font-size: 14px;"></i>
                                     </button>
@@ -1681,7 +1714,6 @@ async function renderFeeDashboard() {
                                     <span style="color: #10b981; font-weight:bold;">₹${t.amount || f.amount}</span>
                                 </div>
                                 
-                                <!-- SHARE BUTTON (Hidden from the screenshot via css if we wanted, but good to have) -->
                                 <button onclick="shareReceiptImage('receipt-${t.id}', '${t.id}')" style="width:100%; margin-top:10px; padding:8px; background: white; border: 1px solid var(--theme-main); border-radius:6px; font-weight:bold; cursor:pointer; color:var(--theme-main); display:flex; justify-content:center; align-items:center; gap:8px;">
                                     <i class="fas fa-share-nodes"></i> Share Digital Receipt
                                 </button>
@@ -1692,6 +1724,12 @@ async function renderFeeDashboard() {
                 `;
             }
             
+            // 🚨 SECURITY GATE: Only render the "Pay" button if it's NOT the base plan
+            let payButtonHTML = "";
+            if (!isBasePlan && f.status !== "Paid") {
+                payButtonHTML = `<button onclick="FEES_PayNow('${sem}', ${pendingAmt})" style="width:100%; padding:10px; border:none; background:var(--theme-main); color:white; border-radius:8px; cursor:pointer; font-weight:bold; margin-top:10px;">Pay ₹${pendingAmt.toLocaleString()}</button>`;
+            }
+
             return `
             <div class="data-card">
                 <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
@@ -1704,7 +1742,7 @@ async function renderFeeDashboard() {
                     <span style="font-weight:600;">Paid: ₹${f.paid.toLocaleString()}</span>
                 </div>
                 ${receiptBlockHTML} 
-                ${f.status !== "Paid" ? `<button onclick="FEES_PayNow('${sem}', ${pendingAmt})" style="width:100%; padding:10px; border:none; background:var(--theme-main); color:white; border-radius:8px; cursor:pointer; font-weight:bold; margin-top:10px;">Pay ₹${pendingAmt.toLocaleString()}</button>` : ""}
+                ${payButtonHTML}
             </div>`;
         }).join('');
 
