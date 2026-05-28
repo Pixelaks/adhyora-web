@@ -222,19 +222,14 @@ document.getElementById("btnOpenBilling").addEventListener("click", async () => 
 });
 
 window.ForceOpenUpgradePanel = function() {
-    // Hide the billing overlay
     document.getElementById("billingOverlay").classList.remove("active");
-    
-    // Call our existing block state, but tell it this is NOT a first-time user
-    HandleBlockState("Upgrade your plan to unlock more features. Your unused balance will be automatically credited.", false);
+    // 🚨 Pass "UPGRADE" as the mode!
+    HandleBlockState("Upgrade your plan to unlock more features. Your unused balance will be automatically credited.", "UPGRADE");
 };
 
-function RenderPricingButtons(currentPlan) {
+function RenderPricingButtons(currentPlan, mode) {
     const plans = { base: 1, pro: 2, ultimate: 3 };
-    const currentLevel = plans[currentPlan] || 0; // 0 if no plan
-    
-    // 🚨 SMART CHECK: Is their plan currently expired?
-    let isExpired = (Math.floor(Date.now() / 1000) > cachedExpiryTimestamp);
+    const currentLevel = plans[currentPlan] || 0; 
 
     const btnBase = document.getElementById("btnPlanBase");
     const btnPro = document.getElementById("btnPlanPro");
@@ -242,55 +237,29 @@ function RenderPricingButtons(currentPlan) {
 
     if (!btnBase || !btnPro || !btnUlt) return;
 
-    // ========================================================
-    // SCENARIO A: EXPIRED OR NEW USER (Unlock everything)
-    // ========================================================
-    if (currentLevel === 0 || isExpired) {
-        
-        btnBase.innerText = currentLevel === 1 ? "Renew Base" : "Select Base";
-        btnBase.disabled = false;
-        btnBase.style.background = currentLevel === 1 ? "#f59e0b" : "transparent"; // Yellow if renewing
-        btnBase.style.color = currentLevel === 1 ? "#000" : "#fff";
-        btnBase.style.border = currentLevel === 1 ? "none" : "1px solid #777";
-        btnBase.style.cursor = "pointer";
-
-        btnPro.innerText = currentLevel === 2 ? "Renew Pro" : "Select Pro";
-        btnPro.disabled = false;
-        btnPro.style.background = currentLevel === 2 ? "#f59e0b" : "#2ecc71"; // Yellow if renewing
-        btnPro.style.color = "#000";
-        btnPro.style.border = "none";
-        btnPro.style.cursor = "pointer";
-
-        btnUlt.innerText = currentLevel === 3 ? "Renew Ultimate" : "Select Ultimate";
-        btnUlt.disabled = false;
-        btnUlt.style.background = currentLevel === 3 ? "#f59e0b" : "transparent"; // Yellow if renewing
-        btnUlt.style.color = currentLevel === 3 ? "#000" : "#fff";
-        btnUlt.style.border = currentLevel === 3 ? "none" : "1px solid #777";
-        btnUlt.style.cursor = "pointer";
-        return;
-    }
-
-    // ========================================================
-    // SCENARIO B: ACTIVE PLAN UPGRADE (Lock downgrades)
-    // ========================================================
+    // Helper: Style as Current Plan
     const setAsCurrent = (btn) => {
         btn.innerText = "Current Plan";
         btn.disabled = true;
-        btn.style.background = "#475569"; // Slate gray
+        btn.style.background = "#475569"; 
         btn.style.color = "#cbd5e1";
         btn.style.border = "none";
         btn.style.cursor = "not-allowed";
+        btn.style.boxShadow = "none";
     };
 
+    // Helper: Style as Downgrade (Blocked)
     const setAsDowngrade = (btn) => {
         btn.innerText = "Unavailable";
         btn.disabled = true;
         btn.style.background = "transparent";
-        btn.style.color = "#ef4444"; // Red text
+        btn.style.color = "#ef4444"; 
         btn.style.border = "1px solid #ef4444";
         btn.style.cursor = "not-allowed";
+        btn.style.boxShadow = "none";
     };
 
+    // Helper: Style as Upgrade/Buy
     const setAsUpgrade = (btn, text, bgColor, textColor, border) => {
         btn.innerText = text;
         btn.disabled = false;
@@ -300,21 +269,56 @@ function RenderPricingButtons(currentPlan) {
         btn.style.cursor = "pointer";
     };
 
-    if (currentLevel === 1) { // On BASE
-        setAsCurrent(btnBase);
-        setAsUpgrade(btnPro, "Upgrade to Pro", "#2ecc71", "#000");
-        setAsUpgrade(btnUlt, "Upgrade to Ultimate", "transparent", "#fff", "1px solid #aaa");
-    } 
-    else if (currentLevel === 2) { // On PRO
-        setAsDowngrade(btnBase);
-        setAsCurrent(btnPro);
-        setAsUpgrade(btnUlt, "Upgrade to Ultimate", "transparent", "#fff", "1px solid #aaa");
-    } 
-    else if (currentLevel === 3) { // On ULTIMATE
-        setAsDowngrade(btnBase);
-        setAsDowngrade(btnPro);
-        setAsCurrent(btnUlt);
-    } 
+    // ========================================================
+    // SCENARIO 1: FIRST TIME USER
+    // ========================================================
+    if (mode === "FIRST_TIME" || currentLevel === 0) {
+        setAsUpgrade(btnBase, "Get Started", "transparent", "#fff", "1px solid #aaa");
+        setAsUpgrade(btnPro, "Get Started Now", "#2ecc71", "#000", "none");
+        setAsUpgrade(btnUlt, "Get Started", "transparent", "#fff", "1px solid #aaa");
+        return;
+    }
+
+    // ========================================================
+    // SCENARIO 2: EXPIRED (Unlock everything, highlight Renew)
+    // ========================================================
+    if (mode === "EXPIRED") {
+        if (currentLevel === 1) {
+            setAsUpgrade(btnBase, "Renew Base", "#f59e0b", "#000", "none");
+            setAsUpgrade(btnPro, "Select Pro", "#2ecc71", "#000", "none");
+            setAsUpgrade(btnUlt, "Select Ultimate", "transparent", "#fff", "1px solid #aaa");
+        } else if (currentLevel === 2) {
+            setAsUpgrade(btnBase, "Select Base", "transparent", "#fff", "1px solid #aaa");
+            setAsUpgrade(btnPro, "Renew Pro", "#f59e0b", "#000", "none");
+            setAsUpgrade(btnUlt, "Select Ultimate", "transparent", "#fff", "1px solid #aaa");
+        } else if (currentLevel === 3) {
+            setAsUpgrade(btnBase, "Select Base", "transparent", "#fff", "1px solid #aaa");
+            setAsUpgrade(btnPro, "Select Pro", "transparent", "#fff", "1px solid #aaa");
+            setAsUpgrade(btnUlt, "Renew Ultimate", "#f59e0b", "#000", "none");
+        }
+        return;
+    }
+
+    // ========================================================
+    // SCENARIO 3: UPGRADING (Lock downgrades, lock current)
+    // ========================================================
+    if (mode === "UPGRADE") {
+        if (currentLevel === 1) { // On BASE
+            setAsCurrent(btnBase);
+            setAsUpgrade(btnPro, "Upgrade to Pro", "#2ecc71", "#000", "none");
+            setAsUpgrade(btnUlt, "Upgrade to Ultimate", "transparent", "#fff", "1px solid #aaa");
+        } 
+        else if (currentLevel === 2) { // On PRO
+            setAsDowngrade(btnBase);
+            setAsCurrent(btnPro);
+            setAsUpgrade(btnUlt, "Upgrade to Ultimate", "transparent", "#fff", "1px solid #aaa");
+        } 
+        else if (currentLevel === 3) { // On ULTIMATE
+            setAsDowngrade(btnBase);
+            setAsDowngrade(btnPro);
+            setAsCurrent(btnUlt);
+        }
+    }
 }
 
 // ==========================================
@@ -4419,16 +4423,16 @@ function startSubscriptionListener() {
 
         let subData = data.subscription;
         if (!subData) {
-            HandleBlockState("Welcome to Adhyora! Please select a plan to activate your institution.", true);
+            // 🚨 Passed "FIRST_TIME" mode
+            HandleBlockState("Welcome to Adhyora! Please select a plan to activate your institution.", "FIRST_TIME");
             isFirstSubLoad = false;
             return;
         }
 
         let newExpiry = subData.expiryDate || 0;
-        let newPlan = subData.planType || "Premium";
+        let newPlan = subData.planType || "base";
         let isTrialUsed = subData.isTrialUsed || false; 
         
-        // 🚨 SAVE THE PLAN GLOBALLY AND APPLY UI LOCKS
         currentCollegePlan = newPlan.toLowerCase();
         ApplyPlanRestrictions(currentCollegePlan);
 
@@ -4455,42 +4459,47 @@ function ValidateExpiry(expirySeconds, isTrialUsed) {
 
     if (today > hardBlockDate) {
         let dateStr = expiryDate.toLocaleDateString('en-US', { day:'numeric', month:'short', year:'numeric' });
-        HandleBlockState(`Your plan expired on ${dateStr}. Please renew to unlock access.`, !isTrialUsed);
+        // 🚨 Passed "EXPIRED" mode
+        HandleBlockState(`Your plan expired on ${dateStr}. Please renew to unlock access.`, "EXPIRED");
     } 
     else if (today > expiryDate) {
-        window.UnlockAccess(); // 🚨 Updated here
+        window.UnlockAccess();
         TriggerBanner(`Plan Expired! Service completely stops in ${daysLeftInGrace} days.`);
     }
     else if (daysUntilExpiry === 7 || daysUntilExpiry <= 3) {
-        window.UnlockAccess(); // 🚨 Updated here
+        window.UnlockAccess();
         TriggerBanner(`Reminder: Your Adhyora plan expires in ${daysUntilExpiry} days.`);
     }
     else {
-        window.UnlockAccess(); // 🚨 Updated here
+        window.UnlockAccess();
         document.getElementById("subWarningBanner").style.display = "none";
     }
 }
 
 // 🚨 THE ANTI-HACK GHOST UI (SMART VERSION)
-function HandleBlockState(msg, isFirstTime) {
+function HandleBlockState(msg, mode) {
     document.getElementById("subBlockText").innerText = msg;
 
-    // Force phone notification bar color to match the deep dark paywall sheet
     const metaThemeColor = document.getElementById("pwaThemeColorMeta");
     if(metaThemeColor) metaThemeColor.setAttribute("content", "#0a0a0a");
     
-    // DYNAMIC TEXT UPDATES FOR THE 3-TIER SYSTEM
     let heading = document.getElementById("subBlockHeading");
     let baseHigh = document.getElementById("baseHighlightText");
     let proHigh = document.getElementById("proHighlightText");
     let ultHigh = document.getElementById("ultimateHighlightText");
 
-    if (isFirstTime) {
+    // 🚨 DYNAMIC TITLE LOGIC
+    if (mode === "FIRST_TIME") {
         heading.innerText = "CHOOSE A SUBSCRIPTION PLAN";
         if(baseHigh) baseHigh.innerText = "1st Month Free Trial";
         if(proHigh) proHigh.innerText = "1st Month Free Trial";
         if(ultHigh) ultHigh.innerText = "1st Month Free Trial";
-    } else {
+    } else if (mode === "UPGRADE") {
+        heading.innerText = "UPGRADE YOUR PLAN";
+        if(baseHigh) baseHigh.innerText = "Essential Features";
+        if(proHigh) proHigh.innerText = "Advanced Management";
+        if(ultHigh) ultHigh.innerText = "Maximum Automation";
+    } else { // EXPIRED
         heading.innerText = "SUBSCRIPTION EXPIRED";
         if(baseHigh) baseHigh.innerText = "Essential Features";
         if(proHigh) proHigh.innerText = "Advanced Management";
@@ -4500,13 +4509,11 @@ function HandleBlockState(msg, isFirstTime) {
     hideAppLoader();
     
     let blockPanel = document.getElementById("subBlockPanel");
-    
     document.body.appendChild(blockPanel); 
     blockPanel.style.display = "flex";
     blockPanel.style.opacity = "1";
     blockPanel.style.visibility = "visible";
     
-    // Ensure dashboard remains hidden
     let mainContent = document.querySelector(".main-content");
     let sidebar = document.getElementById("mainSidebar");
     if (mainContent) mainContent.style.setProperty("display", "none", "important");
@@ -4530,8 +4537,8 @@ function HandleBlockState(msg, isFirstTime) {
         });
     }
 
-    // 🚨 RUN THE DYNAMIC PRICING BUTTON RENDERER
-    RenderPricingButtons(window.collegePlanTier || "none");
+    // 🚨 RUN THE RENDERER WITH THE GLOBAL PLAN VAR AND MODE
+    RenderPricingButtons(currentCollegePlan, mode);
 }
 
 window.CloseSuccessPanel = function() {
