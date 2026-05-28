@@ -138,12 +138,19 @@ document.getElementById("btnOpenBilling").addEventListener("click", async () => 
             let displayPlan = sub.planType.charAt(0).toUpperCase() + sub.planType.slice(1);
             let dateObj = new Date((sub.expiryDate || 0) * 1000);
             
+            // 🚨 NEW UPGRADE BUTTON LOGIC 🚨
+            let upgradeButtonHTML = "";
+            // Only show the upgrade button if they are on base or pro
+            if (sub.planType.toLowerCase() !== "ultimate") {
+                upgradeButtonHTML = `<br><button onclick="window.ForceOpenUpgradePanel()" style="margin-top: 10px; background: var(--text-green); color: var(--bg-base); border: none; padding: 6px 15px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 10px rgba(74, 222, 128, 0.2);">Upgrade Plan</button>`;
+            }
+            
             document.getElementById("billingCurrentPlanName").innerText = "Adhyora " + displayPlan;
-            document.getElementById("billingCurrentExpiry").innerText = "Valid Until: " + dateObj.toLocaleDateString('en-US', { day:'numeric', month:'long', year:'numeric' });
+            // 🚨 Changed to .innerHTML so the HTML button tag actually renders on screen!
+            document.getElementById("billingCurrentExpiry").innerHTML = `Valid Until: ${dateObj.toLocaleDateString('en-US', { day:'numeric', month:'long', year:'numeric' })} ${upgradeButtonHTML}`;
         }
     } catch(e) {}
 
-    // 2. Fetch the transaction ledger
     // 2. Fetch the transaction ledger
     try {
         const snap = await getDocs(query(collection(db, "colleges", currentCollegeID, "subscription_history"), orderBy("timestamp", "desc")));
@@ -213,6 +220,14 @@ document.getElementById("btnOpenBilling").addEventListener("click", async () => 
         document.getElementById("billingHistoryList").innerHTML = `<div class="no-data-text" style="color: #ef4444;">Error loading ledger.</div>`;
     }
 });
+
+window.ForceOpenUpgradePanel = function() {
+    // Hide the billing overlay
+    document.getElementById("billingOverlay").classList.remove("active");
+    
+    // Call our existing block state, but tell it this is NOT a first-time user
+    HandleBlockState("Upgrade your plan to unlock more features. Your unused balance will be automatically credited.", false);
+};
 
 function RenderPricingButtons(currentPlan) {
     const plans = { base: 1, pro: 2, ultimate: 3 };
