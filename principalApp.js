@@ -223,7 +223,7 @@ document.getElementById("btnOpenBilling").addEventListener("click", async () => 
 
 window.ForceOpenUpgradePanel = function() {
     document.getElementById("billingOverlay").classList.remove("active");
-    // 🚨 Pass "UPGRADE" as the mode!
+    // 🚨 FIX: Explicitly passing "UPGRADE" as the strict mode!
     HandleBlockState("Upgrade your plan to unlock more features. Your unused balance will be automatically credited.", "UPGRADE");
 };
 
@@ -270,37 +270,23 @@ function RenderPricingButtons(currentPlan, mode) {
     };
 
     // ========================================================
-    // SCENARIO 1: FIRST TIME USER
+    // SCENARIO 1: FIRST TIME USER OR EXPIRED (Unlock all, highlight Renew)
     // ========================================================
-    if (mode === "FIRST_TIME" || currentLevel === 0) {
-        setAsUpgrade(btnBase, "Get Started", "transparent", "#fff", "1px solid #aaa");
-        setAsUpgrade(btnPro, "Get Started Now", "#2ecc71", "#000", "none");
-        setAsUpgrade(btnUlt, "Get Started", "transparent", "#fff", "1px solid #aaa");
-        return;
-    }
-
-    // ========================================================
-    // SCENARIO 2: EXPIRED (Unlock everything, highlight Renew)
-    // ========================================================
-    if (mode === "EXPIRED") {
-        if (currentLevel === 1) {
-            setAsUpgrade(btnBase, "Renew Base", "#f59e0b", "#000", "none");
-            setAsUpgrade(btnPro, "Select Pro", "#2ecc71", "#000", "none");
-            setAsUpgrade(btnUlt, "Select Ultimate", "transparent", "#fff", "1px solid #aaa");
-        } else if (currentLevel === 2) {
-            setAsUpgrade(btnBase, "Select Base", "transparent", "#fff", "1px solid #aaa");
-            setAsUpgrade(btnPro, "Renew Pro", "#f59e0b", "#000", "none");
-            setAsUpgrade(btnUlt, "Select Ultimate", "transparent", "#fff", "1px solid #aaa");
-        } else if (currentLevel === 3) {
-            setAsUpgrade(btnBase, "Select Base", "transparent", "#fff", "1px solid #aaa");
-            setAsUpgrade(btnPro, "Select Pro", "transparent", "#fff", "1px solid #aaa");
-            setAsUpgrade(btnUlt, "Renew Ultimate", "#f59e0b", "#000", "none");
+    if (mode === "FIRST_TIME" || mode === "EXPIRED") {
+        if (currentLevel === 0 || mode === "FIRST_TIME") {
+            setAsUpgrade(btnBase, "Get Started", "transparent", "#fff", "1px solid #aaa");
+            setAsUpgrade(btnPro, "Get Started Now", "#2ecc71", "#000", "none");
+            setAsUpgrade(btnUlt, "Get Started", "transparent", "#fff", "1px solid #aaa");
+        } else {
+            setAsUpgrade(btnBase, currentLevel === 1 ? "Renew Base" : "Select Base", currentLevel === 1 ? "#f59e0b" : "transparent", currentLevel === 1 ? "#000" : "#fff", currentLevel === 1 ? "none" : "1px solid #aaa");
+            setAsUpgrade(btnPro, currentLevel === 2 ? "Renew Pro" : "Select Pro", currentLevel === 2 ? "#f59e0b" : "#2ecc71", "#000", "none");
+            setAsUpgrade(btnUlt, currentLevel === 3 ? "Renew Ultimate" : "Select Ultimate", currentLevel === 3 ? "#f59e0b" : "transparent", currentLevel === 3 ? "#000" : "#fff", currentLevel === 3 ? "none" : "1px solid #aaa");
         }
         return;
     }
 
     // ========================================================
-    // SCENARIO 3: UPGRADING (Lock downgrades, lock current)
+    // SCENARIO 2: UPGRADING (Lock downgrades & current plan)
     // ========================================================
     if (mode === "UPGRADE") {
         if (currentLevel === 1) { // On BASE
@@ -317,6 +303,11 @@ function RenderPricingButtons(currentPlan, mode) {
             setAsDowngrade(btnBase);
             setAsDowngrade(btnPro);
             setAsCurrent(btnUlt);
+        }
+        else { // Free Trial 
+            setAsUpgrade(btnBase, "Select Base", "transparent", "#fff", "1px solid #aaa");
+            setAsUpgrade(btnPro, "Select Pro", "#2ecc71", "#000", "none");
+            setAsUpgrade(btnUlt, "Select Ultimate", "transparent", "#fff", "1px solid #aaa");
         }
     }
 }
@@ -4488,7 +4479,7 @@ function HandleBlockState(msg, mode) {
     let proHigh = document.getElementById("proHighlightText");
     let ultHigh = document.getElementById("ultimateHighlightText");
 
-    // 🚨 DYNAMIC TITLE LOGIC
+    // 🚨 STRICT DYNAMIC TITLE LOGIC
     if (mode === "FIRST_TIME") {
         heading.innerText = "CHOOSE A SUBSCRIPTION PLAN";
         if(baseHigh) baseHigh.innerText = "1st Month Free Trial";
@@ -4537,7 +4528,7 @@ function HandleBlockState(msg, mode) {
         });
     }
 
-    // 🚨 RUN THE RENDERER WITH THE GLOBAL PLAN VAR AND MODE
+    // 🚨 Passes the exact mode down to the button renderer
     RenderPricingButtons(currentCollegePlan, mode);
 }
 
