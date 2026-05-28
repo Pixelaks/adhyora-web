@@ -1203,6 +1203,43 @@ function updateNotificationToggleUI() {
     }
 }
 
+async function requestPushPermissions() {
+    try {
+        console.log("Requesting notification permissions...");
+        const permission = await Notification.requestPermission();
+        
+        if (permission === 'granted') {
+            // Generates the Firebase Cloud Messaging Token
+            // Note: If notifications fail to send later, you may need to add your VAPID key here
+            const currentToken = await getToken(messaging /*, { vapidKey: "YOUR_VAPID_KEY_HERE" } */);
+
+            if (currentToken) {
+                myCurrentPushToken = currentToken; // Save to global RAM cache
+                console.log("Push token generated successfully.");
+
+                // 🚨 Save the token to the student's Firestore document
+                if (currentRollNo && collegeID) {
+                    const studentRef = doc(db, "colleges", collegeID, "students", currentRollNo);
+                    await setDoc(studentRef, {
+                        webFcmTokens: arrayUnion(currentToken)
+                    }, { merge: true });
+                }
+            } else {
+                console.warn("No registration token available. Check Firebase config.");
+            }
+        } else {
+            console.warn("Notification permission denied by user.");
+        }
+        
+        // Update the UI switch based on the result
+        updateNotificationToggleUI();
+        
+    } catch (error) {
+        console.error("Error retrieving push token: ", error);
+        updateNotificationToggleUI();
+    }
+}
+
 // 2. Function to safely destroy the token and unsubscribe
 async function unsubscribePushNotifications() {
     try {
