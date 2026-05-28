@@ -1125,9 +1125,23 @@ body.dark-mode #feeLiveStructureGrid span {
         display: none !important;
     }
 
-    .logo-container {
-        margin-bottom: 15px;
-    }
+    /* Ensure the logo container doesn't force horizontal scroll */
+   .logo-container {
+       width: 100%;
+       box-sizing: border-box;
+       margin-bottom: 15px;
+       padding: 0 10px;
+       overflow: visible; /* Important: allows the badge to exist outside if needed without scrolling */
+   }
+   
+   /* Responsive adjustment for badges on very small screens */
+   @media (max-width: 350px) {
+       #ultimateBadge {
+           right: -25px !important; /* Pull it closer if screen is tiny */
+           font-size: 7px !important;
+           padding: 1px 4px !important;
+       }
+   }
 
     .nav-grid {
         display: grid;
