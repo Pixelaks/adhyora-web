@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
     <link rel="manifest" href="manifest.json">
     
@@ -691,6 +692,7 @@
                     <div class="toggle-switch" id="notifToggleSwitch"></div>
                 </button>
                 <button class="settings-btn" id="btnThemes"><i class="fas fa-palette"></i> Themes</button>
+                <button class="settings-btn" id="btnOpenBilling"><i class="fas fa-file-invoice-dollar"></i> Billing & Subscriptions</button>
                 <button class="settings-btn" id="btnDevices"><i class="fas fa-laptop-house"></i> Devices</button>
                 <div class="settings-btn" id="btnToggleBiometrics" style="display:flex; justify-content:space-between; align-items:center;">
                     <div style="display:flex; gap:10px; align-items:center;"><i class="fas fa-fingerprint"></i> Enable Biometrics</div>
@@ -916,6 +918,31 @@
     </div>
 
     <div id="rcToast" style="position: fixed; bottom: -100px; left: 50%; transform: translateX(-50%); background: #1e293b; color: white; padding: 12px 25px; border-radius: 30px; font-size: 13px; font-weight: bold; box-shadow: 0 10px 25px rgba(0,0,0,0.2); transition: bottom 0.3s; z-index: 9999;">Notification</div>
+
+    <!-- SECURE PAYMENT LOADER OVERLAY -->
+    <div id="subPaymentLoaderOverlay" style="position: fixed; inset: 0; background: rgba(11, 17, 30, 0.85); backdrop-filter: blur(5px); z-index: 99999; display: flex; flex-direction: column; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;">
+        <div style="border: 4px solid rgba(255, 255, 255, 0.2); border-top: 4px solid #2ecc71; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 15px;"></div>
+        <div id="subPaymentLoaderText" style="color: #ffffff; font-size: 16px; font-weight: 600; letter-spacing: 1px;">Processing...</div>
+    </div>
+
+    <!-- BILLING & SUBSCRIPTIONS MODAL -->
+    <div class="modal-overlay" id="billingOverlay">
+        <div class="compose-modal" style="background: var(--bg-base, white); width: 95%; max-width: 500px; margin: auto; margin-top: 5vh; border-radius: 20px; padding: 30px; position: relative; border: 1px solid var(--border-color); box-shadow: 0 20px 50px rgba(0,0,0,0.2);">
+            <button class="close-settings" onclick="document.getElementById('billingOverlay').classList.remove('active')"><i class="fas fa-times"></i></button>
+            <h3 style="color: var(--text-green); margin-bottom: 5px; font-size: 22px;"><i class="fas fa-crown"></i> Subscriptions</h3>
+            
+            <div id="billingCurrentPlanBox" style="background: rgba(46, 204, 113, 0.1); border: 1px solid #2ecc71; border-radius: 12px; padding: 15px; margin-top: 15px; margin-bottom: 20px; text-align: center;">
+                <p style="font-size: 11px; font-weight: bold; color: #2ecc71; text-transform: uppercase; margin-bottom: 5px;">Active License</p>
+                <h2 id="billingCurrentPlanName" style="color: var(--text-green); font-size: 24px; margin-bottom: 5px;">Loading...</h2>
+                <p id="billingCurrentExpiry" style="font-size: 13px; color: #64748b; font-weight: bold;">Valid Until: ...</p>
+            </div>
+    
+            <h4 style="font-size: 14px; color: var(--text-green); margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">Transaction History</h4>
+            <div id="billingHistoryList" class="scrollable-list" style="display: flex; flex-direction: column; gap: 15px; max-height: 40vh; overflow-y: auto; padding-right: 5px;">
+                <div class="no-data-text">Loading ledger...</div>
+            </div>
+        </div>
+    </div>
 
 
     <script>
