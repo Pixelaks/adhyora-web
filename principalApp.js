@@ -59,6 +59,7 @@ let collegeSemesterType = "Odd";
 let attendanceCalculationMode = "SIMPLE";
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxVL1MGATuPxN4cmAkWbd8GsY5YaoWBkyVTkjfDV-f4jJrWBnMvZ-gXdMZU5pnhHmlPHw/exec";
 let myRealName = "Principal"; 
+let currentCollegePlan = "base";
 
 const el = {
     settingsOverlay: document.getElementById("settingsOverlay"), btnSettings: document.getElementById("btnSettings"), closeSettingsBtn: document.getElementById("closeSettingsBtn"),
@@ -2696,6 +2697,11 @@ document.getElementById("btnOpenExport").addEventListener("click", async () => {
 // ==========================================
 
 document.getElementById("btnOpenFeeConfig").addEventListener("click", async () => {
+    // 🚨 SAAS GATE
+    if (currentCollegePlan === 'base') {
+        showRcToast("🔒 Fee Management requires the Adhyora Pro or Ultimate plan. Please upgrade.");
+        return;
+    }
     document.getElementById("feeConfigOverlay").classList.add("active");
     document.getElementById("feeAmountInput").value = "";
     document.getElementById("feeApplyAllCheck").checked = false;
@@ -4262,26 +4268,66 @@ const gracePeriodDays = 8;
 const RAZORPAY_MONTHLY = "https://pages.razorpay.com/pl_Rv6FL0YCAcrpNB/view";
 const RAZORPAY_YEARLY = "https://pages.razorpay.com/pl_Rv6Dh4gbH5csJe/view";
 
+// ==========================================
+// 🚨 SAAS FEATURE GATING ENGINE
+// ==========================================
+function ApplyPlanRestrictions(plan) {
+    const isBase = (plan === 'base');
+    
+    // 1. Lock/Unlock Data Management Buttons
+    const btnFeeConfig = document.getElementById("btnOpenFeeConfig");
+    const btnRazorpay = document.getElementById("btnOpenRazorpayConfig");
+    
+    if (isBase) {
+        if (btnFeeConfig) {
+            btnFeeConfig.style.background = "#94a3b8";
+            btnFeeConfig.innerHTML = '<i class="fas fa-lock"></i> Pro Plan Required';
+            btnFeeConfig.style.boxShadow = "none";
+        }
+        if (btnRazorpay) {
+            btnRazorpay.style.background = "#94a3b8";
+            btnRazorpay.innerHTML = '<i class="fas fa-lock"></i> Pro Plan Required';
+            btnRazorpay.style.boxShadow = "none";
+        }
+    } else {
+        if (btnFeeConfig) {
+            btnFeeConfig.style.background = "#ef4444";
+            btnFeeConfig.innerHTML = 'Open Fee Setup';
+            btnFeeConfig.style.boxShadow = "0 4px 10px rgb(239 68 68 / 79%)";
+        }
+        if (btnRazorpay) {
+            btnRazorpay.style.background = "#3b82f6";
+            btnRazorpay.innerHTML = 'Link Razorpay';
+            btnRazorpay.style.boxShadow = "0 4px 10px rgb(59 130 246 / 40%)";
+        }
+    }
+    
+    // 2. Hide/Show Fees Ledger in Student Dashboard View
+    const feeLedgerContainer = document.getElementById("pdFeesLedgerContainer");
+    if (feeLedgerContainer && feeLedgerContainer.parentElement) {
+        feeLedgerContainer.parentElement.style.display = isBase ? "none" : "flex";
+    }
+}
+
+// ==========================================
+// 🚨 MASTER SUBSCRIPTION & SEMESTER ENGINE
+// ==========================================
+let subscriptionListener = null;
+let cachedExpiryTimestamp = 0;
+let isFirstSubLoad = true;
+const gracePeriodDays = 8;
+
 function startSubscriptionListener() {
     subscriptionListener = onSnapshot(doc(db, "colleges", currentCollegeID), (snapshot) => {
         if (!snapshot.exists()) return;
         
         let data = snapshot.data();
         
-        // 1. Semester Sync
-        if (data.currentSemesterType) {
-            collegeSemesterType = data.currentSemesterType;
-        }
+        if (data.currentSemesterType) collegeSemesterType = data.currentSemesterType;
+        if (data.settings && data.settings.attendanceCalculationMode) attendanceCalculationMode = data.settings.attendanceCalculationMode;
 
-        // 🚨 ADD THIS: 1.5 Sync Attendance Mode
-        if (data.settings && data.settings.attendanceCalculationMode) {
-            attendanceCalculationMode = data.settings.attendanceCalculationMode;
-        }
-
-        // 2. Subscription Engine
         let subData = data.subscription;
         if (!subData) {
-            // 🚨 No subscription data at all = FIRST TIME USER!
             HandleBlockState("Welcome to Adhyora! Please select a plan to activate your institution.", true);
             isFirstSubLoad = false;
             return;
@@ -4291,7 +4337,10 @@ function startSubscriptionListener() {
         let newPlan = subData.planType || "Premium";
         let isTrialUsed = subData.isTrialUsed || false; 
         
-        // 🚨 BUG FIX: Only show success panel if the new expiry is GREATER than the old one
+        // 🚨 SAVE THE PLAN GLOBALLY AND APPLY UI LOCKS
+        currentCollegePlan = newPlan.toLowerCase();
+        ApplyPlanRestrictions(currentCollegePlan);
+
         let isRenewal = (!isFirstSubLoad && newExpiry > cachedExpiryTimestamp);
         cachedExpiryTimestamp = newExpiry;
 
@@ -5390,6 +5439,10 @@ window.addEventListener('popstate', (e) => {
 
 // 1. Open Modal and pre-fill existing Key ID if they already saved it once
 document.getElementById("btnOpenRazorpayConfig").addEventListener("click", async () => {
+    if (currentCollegePlan === 'base') {
+        showRcToast("🔒 Payment Gateways require the Adhyora Pro or Ultimate plan. Please upgrade.");
+        return;
+    }
     document.getElementById("razorpayConfigOverlay").classList.add("active");
     document.getElementById("rzpKeyIdInput").value = "";
     document.getElementById("rzpKeySecretInput").value = "";
