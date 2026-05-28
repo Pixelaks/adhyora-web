@@ -703,7 +703,8 @@ body.dark-mode .profile-card:hover { box-shadow: 0 8px 25px rgba(0,0,0,0.5) !imp
     background-color: var(--theme-nav) !important;
     background-image: none !important;
     position: relative;
-    overflow: hidden;
+    overflow-x: auto;     /* ✅ Restores horizontal scroll */
+    overflow-y: hidden;   /* ✅ Keeps vertical bounds clipped */
     opacity: 1 !important;
 }
 
