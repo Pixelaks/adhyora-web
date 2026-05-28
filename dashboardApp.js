@@ -217,12 +217,12 @@ async function syncCollegeAndListen() {
             }
 
             // 🚨 DYNAMIC ATTENDANCE MODE ENGINE
+            // 🚨 DYNAMIC ATTENDANCE MODE ENGINE
             if (data.settings && data.settings.attendanceCalculationMode) {
-                // This updates the global variable so the rest of your logic uses the right math
                 isStrictCollege = (data.settings.attendanceCalculationMode === "STRICT_SESSION");
                 
-                // Force UI to recalculate based on the new mode
-                if (typeof updateUIForCurrentSemester === 'function') {
+                // ✅ FIX: Only trigger the UI update if the student's semester data has actually loaded
+                if (typeof updateUIForCurrentSemester === 'function' && sortedSemesterKeys && sortedSemesterKeys.length > 0) {
                     updateUIForCurrentSemester();
                 }
             }
@@ -497,7 +497,8 @@ function updateUIForCurrentSemester(optionalDept) {
     if (optionalDept) el.sbSub.innerHTML = `${optionalDept} &nbsp; <span class="sem-text">${semData.name}</span>`;
     else el.sbSub.innerHTML = el.sbSub.innerHTML.split("&nbsp;")[0] + `&nbsp; <span class="sem-text">${semData.name}</span>`;
 
-    let simplePercent = (semData.simpleTotalHeld > 0) ? (semData.simpleTotalAttended / semData.simpleTotalHeld) * 100 : 0;
+    // ✅ REPLACE THIS LINE:
+    let simplePercent = (semData.simpleTotal > 0) ? (semData.simplePresent / semData.simpleTotal) * 100 : 0;
     
     let projectedStrictPercent = 0;
     let currentStrictPercent = 0;
