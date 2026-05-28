@@ -92,6 +92,113 @@ function hideAppLoader() {
     }
 }
 
+function showSubLoader(message) {
+    const loader = document.getElementById("subPaymentLoaderOverlay");
+    document.getElementById("subPaymentLoaderText").innerText = message;
+    loader.style.opacity = "1";
+    loader.style.pointerEvents = "all"; // Locks the screen
+}
+
+function hideSubLoader() {
+    const loader = document.getElementById("subPaymentLoaderOverlay");
+    loader.style.opacity = "0";
+    loader.style.pointerEvents = "none"; // Unlocks the screen
+}
+
+// Receipt Image Generator
+window.shareSubReceiptImage = async (elementId, txnId) => {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    showRcToast("Generating secure receipt...");
+    try {
+        const canvas = await html2canvas(el, { scale: 3, backgroundColor: "#ffffff" });
+        canvas.toBlob(async (blob) => {
+            const file = new File([blob], `Adhyora_License_${txnId}.png`, { type: 'image/png' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: 'Adhyora License', text: `License Renewal. TXN ID: ${txnId}` });
+            } else {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = `Adhyora_License_${txnId}.png`; a.click(); URL.revokeObjectURL(url);
+            }
+        }, 'image/png');
+    } catch (err) { showRcToast("❌ Could not generate receipt."); }
+};
+
+document.getElementById("btnOpenBilling").addEventListener("click", async () => {
+    document.getElementById("settingsOverlay").classList.remove("active");
+    document.getElementById("billingOverlay").classList.add("active");
+    
+    // 1. Fetch Current Plan details from the main college document
+    try {
+        const docSnap = await getDoc(doc(db, "colleges", currentCollegeID));
+        if (docSnap.exists() && docSnap.data().subscription) {
+            let sub = docSnap.data().subscription;
+            let displayPlan = sub.planType.charAt(0).toUpperCase() + sub.planType.slice(1);
+            let dateObj = new Date((sub.expiryDate || 0) * 1000);
+            
+            document.getElementById("billingCurrentPlanName").innerText = "Adhyora " + displayPlan;
+            document.getElementById("billingCurrentExpiry").innerText = "Valid Until: " + dateObj.toLocaleDateString('en-US', { day:'numeric', month:'long', year:'numeric' });
+        }
+    } catch(e) {}
+
+    // 2. Fetch the transaction ledger
+    try {
+        const snap = await getDocs(query(collection(db, "colleges", currentCollegeID, "subscription_history"), orderBy("timestamp", "desc")));
+        let container = document.getElementById("billingHistoryList");
+        
+        if (snap.empty) {
+            container.innerHTML = `<div class="no-data-text">No payment history found.</div>`;
+            return;
+        }
+
+        let html = "";
+        snap.forEach(d => {
+            let txn = d.data();
+            let planUpper = (txn.planType || "Plan").toUpperCase();
+            let dateStr = "Recently";
+            if (txn.timestamp) dateStr = txn.timestamp.toDate().toLocaleString('en-US', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+            
+            let validUntilStr = "N/A";
+            if (txn.validUntil) {
+                let vDate = new Date(txn.validUntil * 1000);
+                validUntilStr = vDate.toLocaleDateString('en-US', { day:'numeric', month:'short', year:'numeric' });
+            }
+
+            html += `
+            <div id="sub_receipt_${txn.paymentId}" style="background: var(--bg-base); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; position: relative;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+                    <span style="font-weight: 800; font-size: 15px; color: var(--text-green);">Adhyora ${planUpper}</span>
+                    <span style="font-weight: bold; color: #2ecc71; font-size: 16px;">₹${(txn.amount || 0).toLocaleString('en-IN')}</span>
+                </div>
+                
+                <div style="font-size: 11px; color: #64748b; margin-bottom: 10px; line-height: 1.6;">
+                    <div><b>Date:</b> ${dateStr}</div>
+                    <div><b>License Valid Until:</b> <span style="color:var(--text-green); font-weight:bold;">${validUntilStr}</span></div>
+                </div>
+
+                <div style="background: var(--bg-grid-color); padding: 10px; border-radius: 8px; font-size: 11px; font-family: monospace; color: #475569; margin-bottom: 15px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+                        <span><b>TXN ID:</b> ${txn.paymentId}</span>
+                        <button onclick="navigator.clipboard.writeText('${txn.paymentId}'); showRcToast('✅ TXN ID Copied!');" style="background:none; border:none; cursor:pointer; color:#2ecc71;"><i class="fas fa-copy" style="font-size: 14px;"></i></button>
+                    </div>
+                    <div><b>Order ID:</b> ${txn.orderId || "N/A"}</div>
+                    <div style="margin-top:4px;"><b>Method:</b> ${txn.method || "Online"}</div>
+                </div>
+
+                <!-- SHARE BUTTON -->
+                <button onclick="shareSubReceiptImage('sub_receipt_${txn.paymentId}', '${txn.paymentId}')" style="width:100%; padding:10px; background: transparent; border: 1px solid #2ecc71; border-radius:8px; font-weight:bold; cursor:pointer; color:#2ecc71; display:flex; justify-content:center; align-items:center; gap:8px; transition: 0.2s;">
+                    <i class="fas fa-share-nodes"></i> Share Invoice
+                </button>
+            </div>`;
+        });
+        container.innerHTML = html;
+
+    } catch (e) {
+        document.getElementById("billingHistoryList").innerHTML = `<div class="no-data-text">Error loading ledger.</div>`;
+    }
+});
+
 // ==========================================
 // 🚨 INITIAL AUTHENTICATION CHECK
 // ==========================================
@@ -4379,28 +4486,24 @@ window.ProcessSubscription = async function(planType) {
         if (result === "TRIAL_ACTIVATED") {
             loadingTxt.innerText = "Trial Activated! Unlocking...";
         } else if (result === "OPEN_LINK") {
-            loadingTxt.innerText = "Calculating dynamic student billing...";
+            showSubLoader("Calculating dynamic student billing..."); // 🚨 SCREEN LOCKED
             
-            // 1. ASK CLOUD FUNCTION TO COUNT STUDENTS & CREATE ORDER
             const orderRes = await fetch('https://us-central1-adhyora-5d4c1.cloudfunctions.net/createAdhyoraSubscription', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    collegeId: currentCollegeID, 
-                    planType: planType 
-                })
+                body: JSON.stringify({ collegeId: currentCollegeID, planType: planType })
             });
             const orderData = await orderRes.json();
 
             if (!orderData.success) {
-                loadingTxt.innerText = "Error calculating billing. Please try again.";
-                setTimeout(() => { loadingTxt.style.display = "none"; }, 3000);
+                hideSubLoader();
+                showRcToast("Error calculating billing. Please try again.");
                 return;
             }
 
-            loadingTxt.style.display = "none";
+            // 🚨 UNLOCK THE SCREEN TO SHOW RAZORPAY POPUP
+            hideSubLoader();
 
-            // 2. CONFIGURE RAZORPAY
             var options = {
                 "key": orderData.razorpayKeyId,
                 "amount": orderData.amountInPaise, 
@@ -4409,16 +4512,12 @@ window.ProcessSubscription = async function(planType) {
                 "description": `Adhyora ${planType.toUpperCase()} Plan (${orderData.studentCount} Students)`,
                 "image": "https://raw.githubusercontent.com/Pixelaks/pixelaks.in/main/AdhyoraSplashLogo5.png",
                 "order_id": orderData.orderId,
-                "prefill": {
-                    "name": myRealName || "Principal",
-                },
-                "theme": { "color": "#2ecc71" }, // Adhyora Green
+                "prefill": { "name": myRealName || "Principal" },
+                "theme": { "color": "#2ecc71" }, 
                 "handler": async function (response) {
                     
-                    loadingTxt.style.display = "block";
-                    loadingTxt.innerText = "Payment successful! Unlocking dashboard...";
+                    showSubLoader("Payment successful! Securing digital license..."); // 🚨 RE-LOCK SCREEN
                     
-                    // 3. SECURELY VERIFY & ACTIVATE
                     try {
                         const verifyRes = await fetch('https://us-central1-adhyora-5d4c1.cloudfunctions.net/verifyAdhyoraSubscription', {
                             method: 'POST',
@@ -4426,6 +4525,7 @@ window.ProcessSubscription = async function(planType) {
                             body: JSON.stringify({
                                 collegeId: currentCollegeID,
                                 planType: planType,
+                                amountPaid: orderData.totalAmountINR, // 🚨 Now passing amount to backend
                                 paymentId: response.razorpay_payment_id,
                                 orderId: response.razorpay_order_id,
                                 signature: response.razorpay_signature
@@ -4433,24 +4533,25 @@ window.ProcessSubscription = async function(planType) {
                         });
 
                         const verifyResult = await verifyRes.json();
+                        hideSubLoader(); // 🚨 UNLOCK SCREEN
 
                         if (verifyResult.success) {
-                            loadingTxt.innerText = "✅ License Renewed Successfully!";
-                            setTimeout(() => { window.UnlockAccess(); }, 1500); // 🚨 Updated here
+                            showRcToast("✅ License Renewed Successfully!");
+                            setTimeout(() => { window.UnlockAccess(); }, 500); 
                         } else {
-                            loadingTxt.innerText = "❌ Security verification failed. Contact support.";
+                            showRcToast("❌ Security verification failed. Contact support.");
                         }
                     } catch (err) {
-                        loadingTxt.innerText = "❌ Network error saving license.";
+                        hideSubLoader();
+                        showRcToast("❌ Network error saving license.");
                     }
                 }
             };
             
             var rzpCheckout = new Razorpay(options);
             rzpCheckout.on('payment.failed', function (response){
-                loadingTxt.style.display = "block";
-                loadingTxt.innerText = "❌ Payment Cancelled.";
-                setTimeout(() => { loadingTxt.style.display = "none"; }, 3000);
+                hideSubLoader();
+                showRcToast("❌ Payment Cancelled.");
             });
             rzpCheckout.open();
         }
