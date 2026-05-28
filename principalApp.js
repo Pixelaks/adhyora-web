@@ -214,6 +214,71 @@ document.getElementById("btnOpenBilling").addEventListener("click", async () => 
     }
 });
 
+function RenderPricingButtons(currentPlan) {
+    const plans = { base: 1, pro: 2, ultimate: 3 };
+    const currentLevel = plans[currentPlan] || 0; // 0 if no plan
+
+    const btnBase = document.getElementById("btnPlanBase");
+    const btnPro = document.getElementById("btnPlanPro");
+    const btnUlt = document.getElementById("btnPlanUltimate");
+
+    if (!btnBase || !btnPro || !btnUlt) return;
+
+    // Helper: Style as Current Plan
+    const setAsCurrent = (btn) => {
+        btn.innerText = "Current Plan";
+        btn.disabled = true;
+        btn.style.background = "#475569"; // Slate gray
+        btn.style.color = "#cbd5e1";
+        btn.style.border = "none";
+        btn.style.cursor = "not-allowed";
+        btn.style.boxShadow = "none";
+    };
+
+    // Helper: Style as Downgrade (Blocked)
+    const setAsDowngrade = (btn) => {
+        btn.innerText = "Unavailable";
+        btn.disabled = true;
+        btn.style.background = "transparent";
+        btn.style.color = "#ef4444"; // Red text
+        btn.style.border = "1px solid #ef4444";
+        btn.style.cursor = "not-allowed";
+        btn.style.boxShadow = "none";
+    };
+
+    // Helper: Style as Upgrade/Buy
+    const setAsUpgrade = (btn, text, bgColor, textColor) => {
+        btn.innerText = text;
+        btn.disabled = false;
+        btn.style.background = bgColor;
+        btn.style.color = textColor;
+        btn.style.border = "none";
+        btn.style.cursor = "pointer";
+    };
+
+    // Apply Logic Based on Tier
+    if (currentLevel === 1) { // On BASE
+        setAsCurrent(btnBase);
+        setAsUpgrade(btnPro, "Upgrade to Pro", "#2ecc71", "#000");
+        setAsUpgrade(btnUlt, "Upgrade to Ultimate", "#ffffff", "#000");
+    } 
+    else if (currentLevel === 2) { // On PRO
+        setAsDowngrade(btnBase);
+        setAsCurrent(btnPro);
+        setAsUpgrade(btnUlt, "Upgrade to Ultimate", "#ffffff", "#000");
+    } 
+    else if (currentLevel === 3) { // On ULTIMATE
+        setAsDowngrade(btnBase);
+        setAsDowngrade(btnPro);
+        setAsCurrent(btnUlt);
+    } 
+    else { // EXPIRED or NEVER SUBSCRIBED
+        setAsUpgrade(btnBase, "Get Started", "#ffffff", "#000");
+        setAsUpgrade(btnPro, "Get Started Now", "#2ecc71", "#000");
+        setAsUpgrade(btnUlt, "Get Started", "#ffffff", "#000");
+    }
+}
+
 // ==========================================
 // 🚨 INITIAL AUTHENTICATION CHECK
 // ==========================================
@@ -4426,6 +4491,9 @@ function HandleBlockState(msg, isFirstTime) {
             background: { color: "transparent" }
         });
     }
+
+    // 🚨 RUN THE DYNAMIC PRICING BUTTON RENDERER
+    RenderPricingButtons(window.collegePlanTier || "none");
 }
 
 window.CloseSuccessPanel = function() {
