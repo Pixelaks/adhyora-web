@@ -1,6 +1,37 @@
 /* Add this to the VERY TOP of your CSS file */
 @import url('https://fonts.googleapis.com/css2?family=Yatra+One&display=swap');
 
+/* =======================================================
+   💧 LIQUID SLIDING WAVE EFFECT (VIEW TRANSITIONS)
+   ======================================================= */
+::view-transition-old(root) {
+    animation: none;
+    z-index: 1;
+}
+
+::view-transition-new(root) {
+    animation: liquidWaveSwipe 0.65s cubic-bezier(0.25, 1, 0.5, 1) both;
+    z-index: 9999;
+    clip-path: polygon(0 0, 0 0, 0 100%, 0% 100%);
+}
+
+@keyframes liquidWaveSwipe {
+    0% {
+        clip-path: polygon(0 0, 0 0, 0 100%, 0% 100%);
+    }
+    50% {
+        /* Introduces an organic curvature wave drag right down the center vertical */
+        clip-path: polygon(0 0, 65% 0, 45% 100%, 0 100%);
+    }
+    100% {
+        clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+    }
+}
+
+::view-transition-group(root) {
+    animation-duration: 0.65s;
+}
+
 .logo-text { 
     color: #3b82f6; 
     font-size: 32px; 
@@ -33,7 +64,7 @@ body {
 .profile-info p { font-size: 12px; color: #666; margin-bottom: 5px; line-height: 1.4; }
 .status-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; color: #fff; background-color: #888; }
 
-.semester-nav { background-color: #3b82f6; color: white; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 14px; flex-shrink: 0; }
+.semester-nav { background-color: #3b82f6; color: #ededed; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 14px; flex-shrink: 0; }
 .nav-btn { background: none; border: none; color: white; font-size: 18px; cursor: pointer; padding: 0 10px;}
 
 /* =========================================
@@ -332,7 +363,7 @@ body {
     
     /* Layout & Width */
     width: 86%; /* Reduced from 98% */
-    max-width: 500px; 
+    max-width: 440px; 
     display: flex; 
     justify-content: flex-start; /* Aligns items to the left to allow scrolling */
     gap: 15px; /* 👈 Proper breathing space between buttons */
@@ -606,7 +637,7 @@ body {
 body.dark-mode {
     --bg-main: #0f172a;
     --bg-card: #1e293b;
-    --text-main: #f8fafc;
+    --text-main:#cecece;
     --text-muted: #94a3b8;
     --border-color: #334155;
     
@@ -656,7 +687,97 @@ body.dark-mode { color-scheme: dark; }
 body.dark-mode .profile-card:hover { box-shadow: 0 8px 25px rgba(0,0,0,0.5) !important; border-color: var(--text-main) !important; }
 
 .stat-item { background-color: transparent !important; border-bottom-color: var(--border-color) !important; }
-.bottom-nav, .periods-grid { background-image: radial-gradient(var(--theme-main) 1.5px, transparent 1.5px) !important; opacity: 0.9; }
+/* =========================================
+   BOTTOM NAV ART — Topographic (Light) + Frosted Glass (Dark)
+   ========================================= */
+
+/* Step 1: Remove background-image from the combined rule, keep periods-grid dots */
+.periods-grid {
+    background-image: radial-gradient(var(--theme-main) 1.5px, transparent 1.5px) !important;
+    background-size: 12px 12px;
+    opacity: 0.9;
+}
+
+/* Step 2: Base nav — clean background, no dots */
+.bottom-nav {
+    background-color: var(--theme-nav) !important;
+    background-image: none !important;
+    position: relative;
+    overflow: hidden;
+    opacity: 1 !important;
+}
+
+/* Step 3: Topographic contour art for LIGHT MODE */
+.bottom-nav::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 0;
+    background-color: var(--theme-main);
+    opacity: 0.3;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='56'%3E%3Cpath d='M0 28 Q50 8 100 28 T200 28' stroke='black' stroke-width='1.2' fill='none'/%3E%3Cpath d='M0 38 Q50 18 100 38 T200 38' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 18 Q50 3 100 18 T200 18' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 48 Q50 32 100 48 T200 48' stroke='black' stroke-width='0.6' fill='none'/%3E%3Cpath d='M0 8 Q50 -3 100 8 T200 8' stroke='black' stroke-width='0.6' fill='none'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='56'%3E%3Cpath d='M0 28 Q50 8 100 28 T200 28' stroke='black' stroke-width='1.2' fill='none'/%3E%3Cpath d='M0 38 Q50 18 100 38 T200 38' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 18 Q50 3 100 18 T200 18' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 48 Q50 32 100 48 T200 48' stroke='black' stroke-width='0.6' fill='none'/%3E%3Cpath d='M0 8 Q50 -3 100 8 T200 8' stroke='black' stroke-width='0.6' fill='none'/%3E%3C/svg%3E");
+    -webkit-mask-size: 200px 56px;
+    mask-size: 200px 56px;
+    -webkit-mask-repeat: repeat-x;
+    mask-repeat: repeat-x;
+}
+
+/* =========================================
+   DARK MODE — Frosted Glass + Theme Glow
+   ========================================= */
+
+/* Step 1: True frosted glass — needs low opacity to show the blur */
+body.dark-mode .bottom-nav {
+    background: rgba(15, 23, 42, 0.4) !important;
+    backdrop-filter: blur(24px) saturate(180%) brightness(1.1) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(180%) brightness(1.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    background-image: none !important;
+}
+
+/* Step 2: Hide topo lines in dark mode */
+body.dark-mode .bottom-nav::before {
+    display: none;
+}
+
+/* Step 3: Theme-colored glow BEHIND the nav bar */
+/* Uses ::before on the mask wrapper since it sits in fixed position above everything */
+.bottom-nav-mask::before {
+    content: '';
+    position: absolute;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 55%;
+    max-width: 380px;
+    height: 30px;
+    background: var(--theme-main);
+    filter: blur(28px);
+    opacity: 0;                /* hidden in light mode */
+    border-radius: 50%;
+    z-index: 9;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+body.dark-mode .bottom-nav-mask::before {
+    opacity: 0.45;              /* glows in dark mode */
+}
+
+/* Step 4: Subtle inner rim light so the glass catches the glow */
+body.dark-mode .bottom-nav {
+    box-shadow: 
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),   /* top rim highlight */
+        inset 0 -1px 0 rgba(255, 255, 255, 0.05);  /* bottom rim */
+}
+/* Step 5: Keep icon buttons above the art layer */
+.bottom-nav .icon-btn {
+    position: relative;
+    z-index: 1;
+}
 .tt-card { background-image: radial-gradient(var(--border-color) 1.5px, transparent 1.5px) !important; }
 #enrolledSubjectsListText { color: var(--text-main) !important; }
 #enrolledSubjectsListText i { color: var(--text-muted) !important; }
@@ -682,7 +803,7 @@ body.dark-mode #animatedRowText { color: #ffffff !important; }
 .close-modal-btn { background-color: var(--bg-main) !important; color: var(--text-main) !important; border: 1px solid var(--border-color) !important; }
 .close-modal-btn:hover { background-color: var(--theme-light) !important; }
 
-.dropdown-select { background-color: var(--theme-main) !important; color: #ffffff !important; border: 1px solid var(--theme-main) !important; }
+.dropdown-select { background-color: var(--theme-main) !important; color: #ededed !important; border: 1px solid var(--theme-main) !important; }
 .dropdown-select option { background-color: var(--bg-card) !important; color: var(--text-main) !important; }
 .marks-header-container { background-color: transparent !important; }
 #marksListContainer .progress-fill { background-color: var(--theme-main) !important; }
