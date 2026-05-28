@@ -322,6 +322,12 @@
 
     <div id="toast" class="toast"></div>
 
+    <!-- SECURE PAYMENT LOADER OVERLAY -->
+    <div id="paymentLoaderOverlay" class="payment-loader-hidden">
+        <div class="payment-loader-spinner"></div>
+        <div id="paymentLoaderText" class="payment-loader-text">Processing...</div>
+    </div>
+
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
