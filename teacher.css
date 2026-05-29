@@ -960,3 +960,43 @@ body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color
         font-size: 3.5rem !important; 
     }
 }
+
+/* =========================================
+   👑 ULTIMATE BADGE (DYNAMIC THEME & RESPONSIVE)
+   ========================================= */
+.ultimate-badge {
+    position: absolute;
+    top: -12px;
+    right: -25px; 
+    /* Dynamically creates a darker shade of the active theme! */
+    background: color-mix(in srgb, var(--brand-red) 60%, black);
+    color: #ffffff;
+    font-size: 8px;
+    font-weight: 800;
+    padding: 3px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+    z-index: 10;
+    white-space: nowrap;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--brand-red);
+}
+
+.ultimate-badge i {
+    margin-right: 3px;
+    font-size: 7px;
+    color: #facc15; 
+}
+
+/* FOLDABLE PHONE FIX */
+@media (max-width: 340px) {
+    .ultimate-badge {
+        right: -10px; 
+        top: -12px;   
+        font-size: 7px;
+        padding: 2px 5px;
+    }
+    .logo-text {
+        font-size: 28px !important; 
+    }
+}
