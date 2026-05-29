@@ -468,7 +468,7 @@ function renderNotifications() {
 }
 
 // ==========================================
-// 🚨 SEMESTER MANAGER
+// 🚨 SEMESTER MANAGER & SUBSCRIPTION CHECK
 // ==========================================
 let currentSemesterType = "Odd";
 let isSemesterInitialized = false;
@@ -477,8 +477,19 @@ async function syncSemesterWithDatabase() {
     if (isSemesterInitialized) return;
     try {
         const collegeSnap = await getDoc(doc(db, "colleges", currentCollegeID));
-        if (collegeSnap.exists() && collegeSnap.data().currentSemesterType) {
-            currentSemesterType = collegeSnap.data().currentSemesterType;
+        if (collegeSnap.exists()) {
+            let data = collegeSnap.data();
+            
+            if (data.currentSemesterType) {
+                currentSemesterType = data.currentSemesterType;
+            }
+
+            // 🚨 SAVE PLAN TIER GLOBALLY AND SHOW THE ULTIMATE BADGE
+            window.collegePlanTier = data.subscription ? (data.subscription.planType || "base").toLowerCase() : "base";
+            const ultBadge = document.getElementById("ultimateBadge");
+            if (ultBadge) {
+                ultBadge.style.display = (window.collegePlanTier === "ultimate") ? "block" : "none";
+            }
         }
         isSemesterInitialized = true;
     } catch (e) {
