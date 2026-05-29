@@ -233,6 +233,13 @@ async function syncCollegeAndListen() {
 
             // 🚨 ADD THIS LINE to save the plan type globally
             window.collegePlanTier = data.subscription ? (data.subscription.planType || "base").toLowerCase() : "base";
+
+            // 🚨 SHOW ULTIMATE BADGE IF APPLICABLE
+            const ultBadge = document.getElementById("ultimateBadge");
+            if (ultBadge) {
+                ultBadge.style.display = (window.collegePlanTier === "ultimate") ? "block" : "none";
+                // Note: We deleted the background and color overrides here so CSS handles it!
+            }
             
             if (!data.subscription) {
                 blockPanel.classList.add("active");
