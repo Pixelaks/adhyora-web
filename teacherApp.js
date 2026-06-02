@@ -1,7 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 // 🚨 ADDED: initializeFirestore, persistentLocalCache, persistentMultipleTabManager
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, getDocs, onSnapshot, collection, query, where, orderBy, limit, writeBatch, increment, serverTimestamp, deleteField, updateDoc, addDoc, setDoc, arrayRemove } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+// 🚨 ADDED: deleteDoc is now imported!
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, getDocs, getDocsFromCache, onSnapshot, collection, query, where, orderBy, limit, startAfter, writeBatch, increment, serverTimestamp, deleteField, updateDoc, addDoc, setDoc, arrayRemove, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getMessaging, getToken, onMessage, deleteToken } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging.js";
 
 // 🚀 OPTIMIZATION: Debounce Function to stop UI lag when searching
@@ -84,19 +85,139 @@ const AdhyoraMasterCache = {
     }
 };
 
-// 🚨 THE MASTER STUDENT RAM CACHE (Zero Cost Reads)
-async function getGlobalStudents() {
-    if (cachedStudents && cachedStudents.length > 0) return cachedStudents;
-    
-    let t = document.getElementById("rcToast");
-    if(t) { t.innerText = "Syncing College Database..."; t.style.bottom = "30px"; setTimeout(() => t.style.bottom = "-100px", 2000); }
-    
-    const snap = await getDocs(collection(db, "colleges", currentCollegeID, "students"));
-    cachedStudents = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    return cachedStudents;
-}
+let forceServerFetch = false; // 🚨 ADDED: Tells IndexedDB to step aside when data changes
+
+// 🚨 THE SMART STUDENT RAM CACHE (Sniper Reads & Zero Cost)
+// 🚨 THE SMART STUDENT RAM CACHE (3-Tier Architecture & Zero Cost)
+const AdhyoraStudentCache = {
+    ramStore: new Map(),
+    loadedYears: new Set(),
+
+    // 1. FOR BATCHES: Fetch exact students by ID
+    async getStudentsByIDs(targetIDsArray) {
+        if (!targetIDsArray || targetIDsArray.length === 0) return [];
+
+        let studentsToReturn = [];
+        let missingIDs = [];
+
+        // 🌊 TIER 1: Check RAM first
+        targetIDsArray.forEach(id => {
+            if (this.ramStore.has(id)) studentsToReturn.push(this.ramStore.get(id));
+            else missingIDs.push(id);
+        });
+
+        if (missingIDs.length === 0) return studentsToReturn;
+
+        // Fetch missing IDs from Firestore in chunks of 30
+        const chunkSize = 30;
+        let fetchPromises = [];
+
+        for (let i = 0; i < missingIDs.length; i += chunkSize) {
+            const chunk = missingIDs.slice(i, i + chunkSize);
+            const q = query(collection(db, "colleges", currentCollegeID, "students"), where(documentId(), "in", chunk));
+            
+            // 🌊 TIER 2 & 3: Try Browser Cache first, fallback to Server
+            fetchPromises.push(
+                getDocsFromCache(q).then(snap => {
+                    if (snap.empty) throw new Error("Not in cache");
+                    return snap;
+                }).catch(() => getDocs(q))
+            );
+        }
+
+        const chunkResults = await Promise.all(fetchPromises);
+        chunkResults.forEach(snap => {
+            snap.forEach(doc => {
+                let data = { id: doc.id, ...doc.data() };
+                this.ramStore.set(doc.id, data);
+                studentsToReturn.push(data);
+            });
+        });
+
+        return studentsToReturn;
+    },
+
+    // 2. FOR COMMON CLASSES: Fetch specifically by Year
+    async getStudentsByYear(yearStr) {
+        // 🌊 TIER 1: Check RAM (Active Session)
+        if (this.loadedYears.has(yearStr)) {
+            return Array.from(this.ramStore.values()).filter(s => s.Year === yearStr || s.year === yearStr);
+        }
+
+        const q = query(collection(db, "colleges", currentCollegeID, "students"), where("Year", "==", yearStr));
+        let snap;
+
+        // 🌊 TIER 2 & 3: Browser Cache -> Firebase Server
+        try {
+            if (forceServerFetch) throw new Error("Forced Server Sync"); // 🚨 ADD THIS!
+            snap = await getDocsFromCache(q);
+            if (snap.empty) throw new Error("Browser cache is empty");
+
+        } catch (e) {
+            // This is the ONLY time you are billed for reads.
+            snap = await getDocs(q);
+            forceServerFetch = false; // 🚨 ADD THIS: Turn it off after fetching!
+        }
+
+        let results = [];
+        snap.forEach(doc => {
+            let data = { id: doc.id, ...doc.data() };
+            this.ramStore.set(doc.id, data);
+            results.push(data);
+        });
+
+        // 🚨 Mark this year as fully loaded so we never pay for it again today
+        this.loadedYears.add(yearStr); 
+        
+        return results;
+    },
+
+    // 3. GLOBAL FALLBACK: Fetch all (Only use for cross-year Search Panels like Events)
+    async getAllStudents() {
+        // 🌊 TIER 1: RAM Check
+        if (this.loadedYears.has("ALL")) return Array.from(this.ramStore.values());
+        
+        const q = collection(db, "colleges", currentCollegeID, "students");
+        let snap;
+
+        // 🌊 TIER 2 & 3: Browser Cache -> Firebase Server
+        try {
+            if (forceServerFetch) throw new Error("Forced Server Sync"); // 🚨 ADD THIS!
+            snap = await getDocsFromCache(q);
+            if (snap.empty) throw new Error("Browser cache is empty");
+
+        } catch (e) {
+            snap = await getDocs(q);
+            forceServerFetch = false; // 🚨 ADD THIS: Turn it off after fetching!
+        }
+
+        let results = [];
+        snap.forEach(doc => {
+            let data = { id: doc.id, ...doc.data() };
+            this.ramStore.set(doc.id, data);
+            results.push(data);
+        });
+        
+        this.loadedYears.add("ALL");
+        return results;
+    }
+};
 
 const messaging = getMessaging(app);
+
+// 🟢 ADD THIS: Foreground Push Notification Handler (The Free Red Dot!)
+onMessage(messaging, (payload) => {
+    console.log("Foreground push received from webhook!", payload);
+    
+    // Show a quick visual toast so they know a message arrived
+    if (typeof showRcToast === "function") {
+        showRcToast("New Message Arrived!");
+    }
+    
+    // Turn on the Red Dots instantly without querying the database!
+    document.querySelectorAll("#btnMessages .notification-dot").forEach(d => d.style.display = "block");
+    document.querySelectorAll("#btnNotifications .notification-dot").forEach(d => d.style.display = "block");
+});
 
 let myCurrentPushToken = ""; // Tracks active session
 
@@ -128,6 +249,82 @@ if (!currentCollegeID) {
         } else { 
             window.location.href = "index.html"; 
         }
+    });
+}
+
+
+// 🟢 ADD THIS FUNCTION: Destroys the database pipelines to save money
+function cleanupInboxAndChats() {
+    if (inboxListenerUnsub) { inboxListenerUnsub(); inboxListenerUnsub = null; }
+    if (globalListenerUnsub) { globalListenerUnsub(); globalListenerUnsub = null; }
+    
+    // Kill all active Private Chat Room listeners
+    activeChatRoomListeners.forEach(unsub => unsub());
+    activeChatRoomListeners.clear();
+}
+
+
+// ==========================================
+// 🚨 SMART CACHE SYNC ENGINE (UPGRADED: DELTA FETCH)
+// ==========================================
+let currentStudentCacheVersion = null;
+let lastStudentSyncTime = new Date(); // 🟢 Tracks exactly when we last pulled data
+let studentVersionListenerUnsub = null;
+
+function initSmartStudentCacheSync() {
+    if (studentVersionListenerUnsub) return;
+
+    const versionRef = doc(db, "colleges", currentCollegeID, "system_flags", "student_version");
+
+    studentVersionListenerUnsub = onSnapshot(versionRef, (snapshot) => {
+        if (snapshot.exists() && snapshot.data().lastUpdated) {
+            let latestVersion = snapshot.data().lastUpdated.toString(); 
+
+            if (currentStudentCacheVersion === null) {
+                // First boot: Just record the version and set the baseline sync time
+                currentStudentCacheVersion = latestVersion;
+                lastStudentSyncTime = new Date(); 
+            } 
+            else if (currentStudentCacheVersion !== latestVersion) {
+                // 🚨 TRIGGER: Principal changed data! 
+                currentStudentCacheVersion = latestVersion;
+                
+                // 🟢 DELTA FETCH: Ask Firestore ONLY for the students edited since our last sync
+                const q = query(
+                    collection(db, "colleges", currentCollegeID, "students"), 
+                    where("updatedAt", ">", lastStudentSyncTime)
+                );
+                
+                getDocs(q).then(deltaSnap => {
+                    deltaSnap.forEach(doc => {
+                    let sData = { id: doc.id, ...doc.data() };
+                    
+                    // 🟢 THE TWEAK: If it's an existing student, update them. 
+                    // If it's a NEW student, only add them if we have already loaded their Year into RAM!
+                    let studentYear = sData.Year || sData.year || "1";
+                    
+                    if (AdhyoraStudentCache.ramStore.has(doc.id) || AdhyoraStudentCache.loadedYears.has(studentYear) || AdhyoraStudentCache.loadedYears.has("ALL")) {
+                        AdhyoraStudentCache.ramStore.set(doc.id, sData);
+                    }
+                });
+                
+                lastStudentSyncTime = new Date(); 
+                    
+                    // If the teacher is currently staring at the student list, visually refresh it
+                    let stuList = document.getElementById("studentListView");
+                    if (stuList && !stuList.classList.contains("hidden-view")) {
+                        let searchTerm = document.getElementById("slSearchInput").value.trim();
+                        document.getElementById("studentListContainer").innerHTML = "";
+                        slRenderedStudents = [];
+                        slLastVisibleDoc = null;
+                        slHasMoreData = true;
+                        fetchNextStudentBatch(searchTerm);
+                    }
+                }).catch(e => console.warn("Delta fetch failed", e));
+            }
+        }
+    }, (error) => {
+        console.warn("Student Sync blocked. Using standard cache.", error);
     });
 }
 
@@ -193,7 +390,7 @@ async function finalizeProfileUI(rawName, email, deptName) {
     if (!hasStartedInbox && teacherDeptRaw !== "") {
         hasStartedInbox = true;
         
-        startInboxListener();
+        //startInboxListener();
         await syncSemesterWithDatabase();
 
         initAttendanceEngine(); 
@@ -201,9 +398,11 @@ async function finalizeProfileUI(rawName, email, deptName) {
         initCalendarEngine(); 
         initAssignmentsEngine(); 
         if (isHOD) setupExportEngine();
+        // 🚨 ADD THIS LINE RIGHT HERE
+        initSmartStudentCacheSync(); 
         
         // 🚨 CRITICAL ORDER CHANGE: Run permission verification AFTER all background engines load
-        await requestPushPermissions(); 
+        await requestPushPermissions();
         updateNotificationToggleUI(); 
     }
 }
@@ -215,6 +414,8 @@ function getSafeTopic(str) {
     if (!str || str === "All") return "ALL";
     return str.replace(/[^a-zA-Z0-9]/g, '');
 }
+
+let activeChatRoomListeners = new Map();
 
 function startInboxListener() {
     const sentMessagesRef = collection(db, "colleges", currentCollegeID, "sent_messages");
@@ -242,29 +443,50 @@ function startInboxListener() {
         updateInboxDot(); 
     });
 
+    // 🟢 REPLACE YOUR CURRENT chatsRef BLOCK WITH THIS:
     const chatsRef = collection(db, "colleges", currentCollegeID, "chats");
     onSnapshot(query(chatsRef, where("participants", "array-contains", currentUserID), orderBy("lastUpdated", "desc"), limit(10)), (snap) => {
+        
         snap.forEach(roomDoc => {
-            onSnapshot(query(collection(db, "colleges", currentCollegeID, "chats", roomDoc.id, "messages"), orderBy("timestamp", "desc"), limit(20)), (msgSnap) => {
-                msgSnap.docChanges().forEach(change => {
-                    const msgDoc = change.doc;
-                    if (change.type === "removed") { allMessagesMap.delete(msgDoc.id); return; }
-                    const md = msgDoc.data();
-                    if ((md.senderID || "") === currentUserID) return; 
-                    allMessagesMap.set(msgDoc.id, {
-                        id: msgDoc.id, title: md.title || "Private Message", body: md.body || "",
-                        time: md.timestamp ? md.timestamp.toDate() : new Date(),
-                        sender: md.senderName || "User", role: md.senderRole || "Student", 
-                        type: "incoming", isMe: false,
-                        // 🚨 FIX: Added the missing link data!
-                        status: md.status || "sent",
-                        linkedChatID: roomDoc.id,
-                        linkedMessageID: msgDoc.id
+            // 🚨 THE SHIELD: Only spawn a listener if we aren't already watching this room!
+            if (!activeChatRoomListeners.has(roomDoc.id)) {
+                
+                let unsub = onSnapshot(query(collection(db, "colleges", currentCollegeID, "chats", roomDoc.id, "messages"), orderBy("timestamp", "desc"), limit(20)), (msgSnap) => {
+                    msgSnap.docChanges().forEach(change => {
+                        const msgDoc = change.doc;
+                        if (change.type === "removed") { allMessagesMap.delete(msgDoc.id); return; }
+                        
+                        const md = msgDoc.data();
+
+                        // MAGIC BRIDGE: Catch the blue ticks silently without duplicating the UI bubble!
+                        if ((md.senderID || "") === currentUserID) {
+                            if (md.status === "read") {
+                                allMessagesMap.forEach((msgData) => {
+                                    if (msgData.linkedMessageID === msgDoc.id) {
+                                        msgData.status = "read";
+                                    }
+                                });
+                            }
+                            return; 
+                        }
+
+                        allMessagesMap.set(msgDoc.id, {
+                            id: msgDoc.id, title: md.title || "Private Message", body: md.body || "",
+                            time: md.timestamp ? md.timestamp.toDate() : new Date(),
+                            sender: md.senderName || "User", role: md.senderRole || "Student", 
+                            type: "incoming", isMe: false,
+                            status: md.status || "sent",
+                            linkedChatID: roomDoc.id,
+                            linkedMessageID: msgDoc.id
+                        });
                     });
+                    renderMessages();
+                    updateInboxDot(); 
                 });
-                renderMessages();
-                updateInboxDot(); 
-            });
+
+                // Save the listener so we never duplicate it!
+                activeChatRoomListeners.set(roomDoc.id, unsub);
+            }
         });
     });
 
@@ -360,25 +582,6 @@ function renderMessages() {
             </div>
         </div>`;
     }).join('');
-
-    // 🚨 ZERO-COST LISTENER: Only watches personal messages that are unread
-    sortedMessages.forEach(m => {
-        if (m.isMe && m.status !== "read" && m.linkedChatID && m.linkedMessageID) {
-            if (!activeReadListeners.has(m.id)) {
-                let msgRef = doc(db, "colleges", currentCollegeID, "chats", m.linkedChatID, "messages", m.linkedMessageID);
-                let unsub = onSnapshot(msgRef, (docSnap) => {
-                    if (docSnap.exists() && docSnap.data().status === "read") {
-                        if (allMessagesMap.has(m.id)) allMessagesMap.get(m.id).status = "read";
-                        let tickEl = document.getElementById(`tick_${m.id}`);
-                        if (tickEl) tickEl.style.color = "#3b82f6"; 
-                        unsub();
-                        activeReadListeners.delete(m.id);
-                    }
-                });
-                activeReadListeners.set(m.id, unsub);
-            }
-        }
-    });
 }
 
 window.markMessageAsRead = async function(chatID, msgID, mapID) {
@@ -590,7 +793,16 @@ function updateDateUI() {
     document.getElementById("attDateText").innerHTML = `${days[attCurrentDate.getDay()]}<br>${yyyy}-${mm}-${dd}`;
 }
 
+let cachedTeacherSubjects = null;
+
 function fetchTeacherSubjects() {
+    // 🚨 RAM CACHE: If already cached, don't ping Firebase again!
+    if (cachedTeacherSubjects) {
+        attTeacherSubjects = cachedTeacherSubjects;
+        filterSubjectsBySemester();
+        return;
+    }
+
     if (attSubjectListenerUnsub) attSubjectListenerUnsub();
     document.getElementById("attSubjDropdown").innerHTML = `<option>Loading...</option>`;
     
@@ -1073,7 +1285,7 @@ async function fetchAndDisplayBatchCount(id, sem, subj, isCommon, bIndex) {
             let cUp = (attSubjectCategories.get(subj) || "").toUpperCase();
             
             // 🚨 COST OPTIMIZED: Uses RAM, prevents infinite query loops!
-            let allStu = await getGlobalStudents();
+            let allStu = await AdhyoraStudentCache.getStudentsByYear(yearStr);
             
             allStu.forEach(data => {
                 if (data.Year !== yearStr && data.year !== yearStr) return;
@@ -1212,11 +1424,18 @@ async function fetchStudentsAndPopulate(semNum, category, subjName, existingData
     let yearStr = "1";
     if(semInt <= 2) yearStr = "1"; else if(semInt <= 4) yearStr = "2"; else if(semInt <= 6) yearStr = "3"; else yearStr = "4";
 
-    // 🚨 COST OPTIMIZED: Pulls instantly from RAM!
-    let allStu = await getGlobalStudents();
-    let yearStudents = allStu.filter(s => s.Year === yearStr || s.year === yearStr);
-    
-    filterAndSpawn(yearStudents, category, subjName, semNum, existingData, batchTeachersMap, filterIDs, ticket);
+    let targetStudents = [];
+
+    // 🚨 SMART FETCH: If we have exact IDs (Batched Class), snipe them!
+    if (filterIDs !== null && filterIDs.length > 0) {
+        targetStudents = await AdhyoraStudentCache.getStudentsByIDs(filterIDs);
+    } 
+    // 🚨 SMART FETCH: If it's a common class, pull only that Year!
+    else {
+        targetStudents = await AdhyoraStudentCache.getStudentsByYear(yearStr);
+    }
+
+    filterAndSpawn(targetStudents, category, subjName, semNum, existingData, batchTeachersMap, filterIDs, ticket);
 }
 
 function filterAndSpawn(allStudents, category, subjName, semNum, existingData, batchTeachersMap, filterIDs, ticket) {
@@ -1714,10 +1933,21 @@ function switchView(targetView, clickedBtn) {
     navButtons.forEach(btn => btn.classList.remove("active-nav"));
     if (clickedBtn && (clickedBtn.classList.contains('nav-icon-btn') || clickedBtn.classList.contains('nav-btn') || clickedBtn.classList.contains('menu-btn'))) clickedBtn.classList.add("active-nav");
     Object.values(views).forEach(v => { if (v) v.classList.add("hidden-view"); });
+
+    // 🚨 MEMORY FIX: Kill the Event Listener if we leave the Event Tab!
+    if (targetView !== views.eventAttendance && evtListenerUnsub) {
+        evtListenerUnsub();
+        evtListenerUnsub = null;
+    }
     
     // 🚨 TEACHER SPECIFIC CLEANUPS
     if (targetView !== views.attendance) cleanupAttendanceView();
     if (targetView !== views.subjects && typeof subjPurgeUnsavedPending === "function") subjPurgeUnsavedPending(); 
+
+    // 🟢 ADD THIS: Kill inbox pipelines if we aren't looking at them!
+    if (targetView !== views.messages && targetView !== views.notifications) {
+        if (typeof cleanupInboxAndChats === "function") cleanupInboxAndChats();
+    }
 
     if (targetView === views.assignments && asnIsInit) {
         asnRenderList(asnCachedData);
@@ -1746,11 +1976,13 @@ attachSafeClick("btnMessages", (e) => {
     switchView(views.messages, e.currentTarget); 
     localStorage.setItem(`lastViewedInbox_${currentUserID}`, Date.now());
     document.querySelectorAll("#btnMessages .notification-dot").forEach(dot => dot.style.display = "none"); 
+    startInboxListener(); // 🟢 ADDED: Fetch the data only when clicked!
 });
 attachSafeClick("btnNotifications", (e) => { 
     switchView(views.notifications, e.currentTarget); 
     localStorage.setItem(`lastViewedNotifs_${currentUserID}`, Date.now());
     document.querySelectorAll("#btnNotifications .notification-dot").forEach(dot => dot.style.display = "none"); 
+    startInboxListener(); // 🟢 ADDED: Fetch the data only when clicked!
 });
 attachSafeClick("btnNavAttendance", (e) => switchView(views.attendance, e.currentTarget));
 attachSafeClick("btnNavTimetable", (e) => switchView(views.timetable, e.currentTarget));
@@ -2103,9 +2335,9 @@ async function histFetchDailyHistory() {
     try {
         let snap = await getDocs(query(
             collection(db, "colleges", currentCollegeID, "attendance"),
-            // 🚨 FIX: Changed documentId() to "__name__" for web compatibility!
-            where("__name__", ">=", docPrefix),
-            where("__name__", "<=", docPrefix + "\uf8ff")
+            // 🚨 EXACT C# MATCH: Using the native Web SDK documentId() function
+            where(documentId(), ">=", docPrefix),
+            where(documentId(), "<=", docPrefix + "\uf8ff")
         ));
 
         if (snap.empty) {
@@ -2226,18 +2458,21 @@ function histBuildPeriodUI() {
     });
 }
 
-function histOpenRecordViewer(data) {
-    // 🚨 Swap to Record Viewer Panel!
+// ==========================================
+// 🚨 UPGRADED: BATCH-AWARE RECORD VIEWER (TIME CAPSULE + GHOST FIX)
+// ==========================================
+async function histOpenRecordViewer(data) {
+    // 1. Swap to Record Viewer Panel!
     document.getElementById("attHistoryScreen").style.display = "none";
     document.getElementById("attRecordScreen").style.display = "flex";
     
     let subjectName = data.subject || "Unknown Subject";
-    let teacherName = data.markedByTeacherName || "Unknown";
+    let defaultTeacherName = data.markedByTeacherName || "Unknown";
     
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     let prettyDate = `${histCurrentDate.getDate()} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][histCurrentDate.getMonth()]} ${histCurrentDate.getFullYear()}`;
     
-    document.getElementById("recordTitleText").innerHTML = `<b>${subjectName}</b><br><span style="font-size:12px; color:var(--text-muted); font-weight:normal;">${prettyDate} | Marked by: ${teacherName}</span>`;
+    document.getElementById("recordTitleText").innerHTML = `<b>${subjectName}</b><br><span style="font-size:12px; color:var(--text-muted); font-weight:normal;">${prettyDate}</span>`;
 
     if (data.stats) {
         let tot = data.stats.totalStudents || "0";
@@ -2247,10 +2482,55 @@ function histOpenRecordViewer(data) {
     }
 
     let container = document.getElementById("recordListContainer");
-    container.innerHTML = "";
+    
+    if (!data.attendance) {
+        container.innerHTML = `<div class="no-data-text" style="text-align:center; color:#94a3b8; padding:20px;">No attendance data found.</div>`;
+        return;
+    }
 
-    if (data.attendance) {
-        // Sort IDs to ensure neat layout
+    // Show loading state while sorting batches
+    container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fas fa-spinner fa-spin" style="font-size:20px; color:var(--brand-red); margin-bottom:10px;"></i><br><b>Structuring batches...</b></div>`;
+
+    try {
+        // 🚨 1. CHECK THE TIME CAPSULE: How was it marked on that specific day?
+        let dbBatchTeachers = data.batch_teachers || {};
+        let wasMarkedAsCommon = dbBatchTeachers["common"] !== undefined;
+
+        let studentToBatch = {};
+        let batchTeacherMap = {};
+        let hasBatches = false;
+
+        // 🚨 2. Only fetch live batches if the class was actually split on that day!
+        if (!wasMarkedAsCommon) {
+            let semDrop = document.getElementById("histSemDropdown");
+            let selectedSemStr = semDrop.options[semDrop.selectedIndex].text.replace("Semester ", "").trim();
+            
+            const batchSnap = await getDocs(query(collection(db, "colleges", currentCollegeID, "subject_batches"), where("semester", "==", selectedSemStr), where("subjectName", "==", subjectName)));
+            
+            if (!batchSnap.empty) {
+                hasBatches = true; // Safe to use batches
+                batchSnap.forEach(bDoc => {
+                    let bData = bDoc.data();
+                    let bName = bData.batchName || "Unknown Batch";
+                    
+                    if (bData.studentIDs) {
+                        bData.studentIDs.forEach(sid => studentToBatch[sid] = bName);
+                    }
+
+                    let bIndex = bName.replace(/[^0-9]/g, ''); 
+                    if (bIndex) {
+                        let arrayIndex = (parseInt(bIndex) - 1).toString();
+                        batchTeacherMap[bName] = dbBatchTeachers[arrayIndex] ? dbBatchTeachers[arrayIndex].name : (bData.teacherName || defaultTeacherName);
+                    }
+                });
+            }
+        }
+
+        // 3. Group the attendance data
+        let groupedHTML = {}; 
+        let groupedCounts = {}; 
+        let commonHTML = "";  
+        
         let sortedIDs = Object.keys(data.attendance).sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
         
         sortedIDs.forEach(key => {
@@ -2258,19 +2538,86 @@ function histOpenRecordViewer(data) {
             if (typeof isPresent === "boolean") {
                 let sName = histStudentNameCache.get(key) || "Unknown Student";
                 
-                let row = document.createElement("div");
-                row.style.cssText = "background:white; border:1px solid var(--border-color); border-radius:10px; margin-bottom:10px; padding:15px; display:flex; justify-content:space-between; align-items:center;";
-                
                 let statusBadge = isPresent 
                     ? `<div style="background:#d1fae5; color:#047857; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:bold;">P</div>`
                     : `<div style="background:#fee2e2; color:#b91c1c; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:bold;">A</div>`;
 
-                row.innerHTML = `<div style="font-size:14px; font-weight:600; color:var(--text-dark);">${sName} <span style="font-size:11px; color:var(--text-muted); font-weight:normal;">(${key})</span></div>
-                                 ${statusBadge}`;
+                let myBatch = studentToBatch[key];
                 
-                container.appendChild(row);
+                if (myBatch) {
+                    // ✅ Student IS assigned to a batch (Normal render)
+                    let rowHTML = `
+                    <div style="background:white; border:1px solid var(--border-color); border-radius:10px; margin-bottom:8px; padding:12px 15px; display:flex; justify-content:space-between; align-items:center;">
+                        <div style="font-size:13px; font-weight:600; color:var(--text-dark);">${sName} <span style="font-size:11px; color:var(--text-muted); font-weight:normal;">(${key})</span></div>
+                        ${statusBadge}
+                    </div>`;
+                    
+                    if (!groupedHTML[myBatch]) { groupedHTML[myBatch] = ""; groupedCounts[myBatch] = 0; }
+                    groupedHTML[myBatch] += rowHTML;
+                    groupedCounts[myBatch]++;
+                } else {
+                    // 🚨 Student is NOT in a batch
+                    // If batches exist, strip the P/A badge to show they are "Ghosted"
+                    if (hasBatches) {
+                        statusBadge = `<div style="background:#f1f5f9; color:#94a3b8; padding:4px 10px; border-radius:12px; font-size:11px; font-weight:bold;"><i class="fas fa-exclamation-circle"></i> Unassigned</div>`;
+                    }
+
+                    let rowHTML = `
+                    <div style="background:white; border:1px solid var(--border-color); border-radius:10px; margin-bottom:8px; padding:12px 15px; display:flex; justify-content:space-between; align-items:center; ${hasBatches ? 'opacity:0.6;' : ''}">
+                        <div style="font-size:13px; font-weight:600; color:var(--text-dark);">${sName} <span style="font-size:11px; color:var(--text-muted); font-weight:normal;">(${key})</span></div>
+                        ${statusBadge}
+                    </div>`;
+                    commonHTML += rowHTML;
+                }
             }
         });
+
+        // 4. Render the Accordions!
+        let finalHTML = "";
+
+        if (hasBatches) {
+            let batchIdx = 0;
+            Object.keys(groupedHTML).sort().forEach(bName => {
+                let rows = groupedHTML[bName];
+                let count = groupedCounts[bName];
+                let tName = batchTeacherMap[bName] || defaultTeacherName;
+                
+                let bodyId = `hist_rec_body_${batchIdx}`;
+                let iconId = `hist_rec_icon_${batchIdx}`;
+
+                finalHTML += `
+                <div style="background:var(--bg-base); border:1px solid var(--border-color); border-radius:12px; margin-bottom:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.02);">
+                    <button onclick="document.getElementById('${bodyId}').style.display = document.getElementById('${bodyId}').style.display === 'none' ? 'block' : 'none'; document.getElementById('${iconId}').style.transform = document.getElementById('${bodyId}').style.display === 'none' ? 'rotate(0deg)' : 'rotate(90deg)';" style="width:100%; padding:15px; background:var(--bg-grid-color); border:none; text-align:left; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+                        <div style="display:flex; flex-direction:column; gap:4px;">
+                            <div style="font-weight:bold; color:var(--brand-red); font-size:14px; display:flex; align-items:center; gap:8px;">
+                                ${bName}
+                                <span style="font-size:11px; font-weight:normal; background:white; padding:2px 8px; border-radius:10px; color:var(--brand-red); border:1px solid var(--border-color);">${count} Students</span>
+                            </div>
+                            <div style="font-size:12px; color:var(--text-muted); font-weight:600;"><i class="fas fa-chalkboard-teacher"></i> Marked by: ${tName}</div>
+                        </div>
+                        <i id="${iconId}" class="fas fa-chevron-right" style="color:var(--text-muted); transition:0.2s; transform:rotate(90deg);"></i>
+                    </button>
+                    <div id="${bodyId}" style="padding:10px; display:block; background:var(--bg-surface); border-top:1px solid var(--border-color);">
+                        ${rows}
+                    </div>
+                </div>`;
+                batchIdx++;
+            });
+
+            if (commonHTML) {
+                // Now cleanly titled "Unassigned Students"
+                finalHTML += `<div style="margin-top:20px;"><div style="font-size:12px; font-weight:bold; color:var(--text-muted); margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;">Unassigned Students</div>${commonHTML}</div>`;
+            }
+        } else {
+            // It's a single Common Class, so just render everything normally
+            if (commonHTML) finalHTML = commonHTML;
+        }
+
+        container.innerHTML = finalHTML;
+
+    } catch (e) {
+        console.error("Error grouping record viewer:", e);
+        container.innerHTML = `<div style="text-align:center; color:var(--brand-red); padding:20px; font-weight:bold;">Error organizing batches.</div>`;
     }
 }
 
@@ -2367,11 +2714,12 @@ async function subjLoadMasterSubjects() {
     }
 
     try {
-        let snap = await getDocs(collection(db, "colleges", currentCollegeID, "subjects"));
+        // 🚨 COST OPTIMIZED: Now routes through the FREE Master Cache instead of raw getDocs!
+        const cachedSubs = await AdhyoraMasterCache.getSubjects(currentCollegeID, db);
+        
         subjAllSubjectsCache = [];
-        snap.forEach(doc => {
-            let d = doc.data();
-            let code = d.code || doc.id;
+        cachedSubs.forEach(d => {
+            let code = d.code || d.id;
             let name = d.Name || d.name || "Unknown";
             let sems = d.semester !== undefined ? String(d.semester) : (d.Semester !== undefined ? String(d.Semester) : "");
             subjAllSubjectsCache.push({ code: code, name: name, semesters: sems });
@@ -2379,7 +2727,9 @@ async function subjLoadMasterSubjects() {
 
         subjIsMasterLoaded = true;
         subjBuildDropdownForSemester(sem);
-    } catch(e) { console.error("Master subjects load failed:", e); }
+    } catch(e) { 
+        console.error("Master subjects load failed:", e); 
+    }
 }
 
 function subjBuildDropdownForSemester(sem) {
@@ -2613,6 +2963,10 @@ async function subjSaveNewSelections() {
         await batch.commit();
         subjIsFirstTimeSetupStatic = false; // Turn off forced-open flag
         showRcToast("Subjects saved successfully!");
+
+        // 🚨 THE FIX: Wipe the cache so the NEXT open forces a fresh fetch!
+        subjIsMasterLoaded = false; 
+        subjAllSubjectsCache = [];
         
         // 🚨 RAM CACHE FIX: Wipe cache for this sem to force 1 fresh read
         subjCachedMySubjectsBySem.delete(sem);
@@ -3037,131 +3391,218 @@ function asnRenderList(dataList) {
 }
 
 // ==========================================
-// 🚨 STUDENT LIST & DASHBOARD ENGINE
+// 🚨 STUDENT LIST & DASHBOARD ENGINE (PAGINATED)
 // ==========================================
 let slLoaded = false; 
-let cachedStudents = [];
-let currentRenderedCount = 0; // 🚨 REPLACES studentRenderLimit
+let slRenderedStudents = [];
+let slLastVisibleDoc = null; 
+let slIsFetching = false;
+let slHasMoreData = true;
 
 function startStudentListListener() {
     if (slLoaded) return;
     slLoaded = true;
 
-    // 🚨 CLEANUP: Kill dashboard listeners if we are looking at the master list
     if (typeof sdAttListenerUnsub === "function") { sdAttListenerUnsub(); sdAttListenerUnsub = null; }
     if (typeof sdMarksListenerUnsub === "function") { sdMarksListenerUnsub(); sdMarksListenerUnsub = null; }
     
-    onSnapshot(collection(db, "colleges", currentCollegeID, "students"), (snap) => {
-        cachedStudents = []; 
-        snap.forEach(doc => { cachedStudents.push({ id: doc.id, ...doc.data() }); });
-        document.getElementById("slTotalStudents").innerText = `Total: ${cachedStudents.length}`; 
-        
-        // False forces a fresh wipe on initial load
-        renderStudentList(document.getElementById("slSearchInput").value, false); 
-    });
+    // Clear list and fetch first 50
+    document.getElementById("studentListContainer").innerHTML = "";
+    slRenderedStudents = [];
+    slLastVisibleDoc = null;
+    slHasMoreData = true;
+    
+    fetchNextStudentBatch("");
 }
 
-function renderStudentList(searchTerm = "", appendOnly = false) {
+async function fetchNextStudentBatch(searchTerm) {
+    if (slIsFetching || (!slHasMoreData && !searchTerm)) return;
+    slIsFetching = true;
+
     const listEl = document.getElementById("studentListContainer"); 
     const noData = document.getElementById("slNoDataText");
-    let filtered = cachedStudents;
+    let t = document.getElementById("rcToast");
     
-    // Filter logic
-    if (searchTerm) { 
-        let terms = searchTerm.toLowerCase().split(':').map(t => t.trim()); 
-        filtered = cachedStudents.filter(s => { 
-            let sStr = `${s.Name || ""} ${s.RollNumber || ""} ${s.Department || ""} year ${s.Year || ""}`.toLowerCase(); 
-            return terms.every(term => sStr.includes(term)); 
-        }); 
-    }
-    
-    if (filtered.length === 0) { 
-        noData.style.display = "block"; 
-        noData.innerText = searchTerm ? `No student matching "${searchTerm}"` : "No students found."; 
-        listEl.innerHTML = ""; 
-        listEl.appendChild(noData); 
-        currentRenderedCount = 0;
-        return; 
-    }
-    
-    noData.style.display = "none";
-    
-    // 🚨 PERFORMANCE FIX 1: Clear the list ONLY if we are starting a fresh search
-    if (!appendOnly) {
-        listEl.innerHTML = "";
-        listEl.appendChild(noData); // Keep the hidden element safe
-        currentRenderedCount = 0;
+    if(t && !slLastVisibleDoc && !searchTerm) { 
+        t.innerText = "Loading Students..."; t.style.bottom = "30px"; setTimeout(() => t.style.bottom = "-100px", 1500); 
     }
 
-    // 🚨 PERFORMANCE FIX 2: Only slice out the NEXT 50 items, not the whole list
-    let nextBatchSize = 50;
-    let itemsToRender = filtered.slice(currentRenderedCount, currentRenderedCount + nextBatchSize);
-    
-    if (itemsToRender.length === 0) return; // Nothing left to append
+    try {
+        if (searchTerm) {
+            // ==========================================
+            // 🚨 HYBRID "PROBE & FILTER" SEARCH ENGINE
+            // ==========================================
+            slHasMoreData = false; // Disable scroll pagination while actively searching
 
-    let htmlChunk = itemsToRender.map(s => {
-        let cleanDept = (s.Department || "Unknown").replace("DEPT_", ""); 
-        let status = s.status || "Approved";
-        
-        let statusLabel = status === "Approved" ? "Active" : status;
-        let statusColor = status === "Approved" ? "var(--brand-red)" : "var(--text-muted)";
-        
-        let tokensArr = []; 
-        if (s.fcmTokens) tokensArr = s.fcmTokens; 
-        else if (s.fcmToken) tokensArr = [s.fcmToken];
-        let tokensJson = JSON.stringify(tokensArr).replace(/"/g, '&quot;');
-        
-        // 🚨 PERFORMANCE FIX: Added GPU Acceleration (translateZ) and will-change
-        return `
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:15px 20px; background:var(--bg-base); border-left: 6px solid ${statusColor}; border-radius: 14px; margin-bottom: 12px; cursor:pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.03); transform: translateZ(0); will-change: transform; transition: transform 0.2s;" onclick="window.SL_OpenDashboard('${s.id}')" onmouseover="this.style.transform='translateY(-2px) translateZ(0)'" onmouseout="this.style.transform='translateY(0) translateZ(0)'">
-            <div style="flex:1;">
-                <div style="margin-bottom:4px;">
-                    <span style="font-weight:800; font-size:15px; color:var(--text-dark);">${s.Name || "Unknown"}</span> 
-                    <span style="font-size:12px; color:var(--text-muted); margin-left:4px;">(${s.RollNumber || "N/A"})</span>
+            // Parse custom search format (e.g., "Computer Science : 2")
+            let terms = searchTerm.toLowerCase().split(':').map(t => t.trim());
+            let primaryTerm = terms[0]; // We use the first term to probe the server
+
+            if (primaryTerm.length > 0) {
+                let termTitle = primaryTerm.charAt(0).toUpperCase() + primaryTerm.slice(1);
+                let termUpper = primaryTerm.toUpperCase();
+
+                // 1. PROBE QUERIES: Ask Firestore for a max of 20 matches per field
+                const queries = [
+                    // 🚨 Replaced the old termTitle one entirely with termUpper!
+                    getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("Name", ">=", termUpper), where("Name", "<=", termUpper + "\uf8ff"), limit(20))),
+                    getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("RollNumber", ">=", termUpper), where("RollNumber", "<=", termUpper + "\uf8ff"), limit(20))),
+                    getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("Department", ">=", termTitle), where("Department", "<=", termTitle + "\uf8ff"), limit(20))),
+                    getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("department", ">=", termTitle), where("department", "<=", termTitle + "\uf8ff"), limit(20)))
+                ];
+
+                // If they typed a number first, probe the Year field too
+                if (!isNaN(primaryTerm)) {
+                    queries.push(getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("Year", "==", primaryTerm), limit(20))));
+                    queries.push(getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("year", "==", primaryTerm), limit(20))));
+                }
+
+                // 2. FETCH & CACHE: Download the small batches and put them in RAM
+                const results = await Promise.all(queries);
+                results.forEach(snap => {
+                    snap.forEach(docSnap => {
+                        let sData = { id: docSnap.id, ...docSnap.data() };
+                        AdhyoraStudentCache.ramStore.set(docSnap.id, sData); // Cache it forever!
+                    });
+                });
+            }
+
+            // 3. APPLY OLD FILTER: Run your exact old multi-filter logic across the RAM Cache
+            let allCachedStudents = Array.from(AdhyoraStudentCache.ramStore.values());
+            
+            let filtered = allCachedStudents.filter(s => { 
+                let sStr = `${s.Name || ""} ${s.RollNumber || ""} ${s.Department || s.department || ""} year ${s.Year || s.year || ""}`.toLowerCase(); 
+                
+                if (s.enrolledSubjects) {
+                    Object.values(s.enrolledSubjects).forEach(semMap => {
+                        if (typeof semMap === 'object') {
+                            Object.keys(semMap).forEach(cat => sStr += ` ${cat.toLowerCase()}`);
+                        }
+                    });
+                }
+                return terms.every(term => sStr.includes(term)); 
+            });
+
+            // Display the top 50 matches
+            slRenderedStudents = filtered.slice(0, 50);
+
+        } else {
+            // ==========================================
+            // 🚨 NORMAL PAGINATION (NO SEARCH)
+            // ==========================================
+            let q;
+            if (slLastVisibleDoc) {
+                q = query(collection(db, "colleges", currentCollegeID, "students"), orderBy("Name"), startAfter(slLastVisibleDoc), limit(50));
+            } else {
+                q = query(collection(db, "colleges", currentCollegeID, "students"), orderBy("Name"), limit(50));
+            }
+
+            const snap = await getDocs(q);
+            
+            if (snap.empty) {
+                slHasMoreData = false;
+                slIsFetching = false;
+                return;
+            }
+
+            slLastVisibleDoc = snap.docs[snap.docs.length - 1];
+            
+            snap.forEach(docSnap => {
+                let s = { id: docSnap.id, ...docSnap.data() };
+                slRenderedStudents.push(s);
+                AdhyoraStudentCache.ramStore.set(docSnap.id, s); // Cache standard scrolls too!
+            });
+        }
+
+        // ==========================================
+        // 🚨 RENDER UI
+        // ==========================================
+        if (slRenderedStudents.length === 0) {
+            if (noData) {
+                noData.style.display = "block"; 
+                noData.innerText = searchTerm ? `No student matching "${searchTerm}"` : "No students found."; 
+            }
+            listEl.innerHTML = "";
+            slIsFetching = false;
+            return;
+        }
+
+        if (noData) noData.style.display = "none";
+
+        // If searching, replace list. If scrolling, append to list.
+        let htmlChunk = "";
+        let arrayToRender = searchTerm ? slRenderedStudents : slRenderedStudents.slice(slRenderedStudents.length - 50);
+
+        arrayToRender.forEach(s => {
+            let sDeptRaw = s.Department || s.department || "";
+            let cleanDept = sDeptRaw.replace("DEPT_", ""); 
+            let sDeptFormatted = "DEPT_" + sDeptRaw.replace(/\s+/g, "");
+            let status = s.status || "Approved";
+            let statusLabel = status === "Approved" ? "Active" : status;
+            let statusColor = status === "Approved" ? "var(--brand-red)" : "var(--text-muted)";
+            
+            let tokensArr = []; 
+            if (s.fcmTokens) tokensArr = s.fcmTokens; 
+            else if (s.fcmToken) tokensArr = [s.fcmToken];
+            let tokensJson = JSON.stringify(tokensArr).replace(/"/g, '&quot;');
+            
+            let isSameDept = (sDeptRaw === teacherDeptRaw || sDeptFormatted === teacherDeptRaw);
+            let medBtnHtml = "";
+            if (isHOD && isSameDept) {
+                medBtnHtml = `<button title="Medical Leave" onclick="event.stopPropagation(); window.medOpenPanel('${s.id}', '${s.RollNumber || ""}', '${sDeptFormatted}', '${s.Year || "1"}', '${(s.Name || "").replace(/'/g, "\\'")}')" style="background: transparent; border: none; font-size: 20px; color: var(--brand-red); cursor: pointer; transition: 0.2s; padding: 5px;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'"><i class="fas fa-notes-medical"></i></button>`;
+            }
+
+            htmlChunk += `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:15px 20px; background:var(--bg-base); border-left: 6px solid ${statusColor}; border-radius: 14px; margin-bottom: 12px; cursor:pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.03); transform: translateZ(0); will-change: transform; transition: transform 0.2s;" onclick="window.SL_OpenDashboard('${s.id}')" onmouseover="this.style.transform='translateY(-2px) translateZ(0)'" onmouseout="this.style.transform='translateY(0) translateZ(0)'">
+                <div style="flex:1;">
+                    <div style="margin-bottom:4px;">
+                        <span style="font-weight:800; font-size:15px; color:var(--text-dark);">${s.Name || "Unknown"}</span> 
+                        <span style="font-size:12px; color:var(--text-muted); margin-left:4px;">(${s.RollNumber || "N/A"})</span>
+                    </div>
+                    <div style="font-size:12px; font-weight:600; color:var(--text-muted); margin-top:4px;">${cleanDept} - Year ${s.Year || s.year || "1"}</div>
                 </div>
-                <div style="font-size:12px; font-weight:600; color:var(--text-muted); margin-top:4px;">${cleanDept} - Year ${s.Year || "1"}</div>
-            </div>
-            <div style="display:flex; gap:15px; align-items:center;">
-                <span style="font-size:12px; font-weight:800; color:${statusColor};">${statusLabel}</span>
-                <button title="Message" onclick="event.stopPropagation(); window.OpenCompose(true, '${s.Name || ""}', ${tokensJson}, '${s.id}')" style="background: transparent; border: none; font-size: 22px; color: var(--text-muted); cursor: pointer; transition: 0.2s; padding: 5px;" onmouseover="this.style.color='var(--brand-red)'" onmouseout="this.style.color='var(--text-muted)'">
-                    <i class="fas fa-comment-dots"></i>
-                </button>
-            </div>
-        </div>`;
-    }).join('');
+                <div style="display:flex; gap:15px; align-items:center;">
+                    <span style="font-size:12px; font-weight:800; color:${statusColor};">${statusLabel}</span>
+                    ${medBtnHtml}
+                    <button title="Message" onclick="event.stopPropagation(); window.OpenCompose(true, '${(s.Name || "").replace(/'/g, "\\'")}', ${tokensJson}, '${s.id}')" style="background: transparent; border: none; font-size: 22px; color: var(--text-muted); cursor: pointer; transition: 0.2s; padding: 5px;" onmouseover="this.style.color='var(--brand-red)'" onmouseout="this.style.color='var(--text-muted)'">
+                        <i class="fas fa-comment-dots"></i>
+                    </button>
+                </div>
+            </div>`;
+        });
+        
+        if (searchTerm) listEl.innerHTML = htmlChunk;
+        else listEl.insertAdjacentHTML('beforeend', htmlChunk);
+        
+        let headerCountEl = document.getElementById("slTotalStudents");
+        if (headerCountEl) headerCountEl.innerText = `Loaded: ${slRenderedStudents.length}`; 
+
+    } catch (error) {
+        console.error("Error fetching students:", error);
+    }
     
-    // 🚨 PERFORMANCE FIX 3: Inject HTML below the existing cards without destroying the DOM!
-    listEl.insertAdjacentHTML('beforeend', htmlChunk);
-    
-    currentRenderedCount += itemsToRender.length;
+    slIsFetching = false;
 }
 
-// Search Input Logic
+// Search Input Logic (Debounced to prevent spamming server)
 document.getElementById("slSearchInput").addEventListener("input", debounce((e) => {
-    // False means we wipe the list and start a fresh search
-    renderStudentList(e.target.value.trim(), false); 
-}, 250));
+    let term = e.target.value.trim();
+    document.getElementById("studentListContainer").innerHTML = "";
+    slRenderedStudents = [];
+    slLastVisibleDoc = null;
+    slHasMoreData = true;
+    
+    fetchNextStudentBatch(term);
+}, 500));
 
-// 🚀 SCROLL DETECTOR: Optimized with a Hardware Lock
-let isFetchingNextBatch = false; // 🚨 THE LOCK
-
+// Scroll Pagination Lock
 document.getElementById("studentListContainer").addEventListener("scroll", (e) => {
-    if (isFetchingNextBatch) return; // 🚨 Ignore scroll events while already building!
-
+    if (slIsFetching || !slHasMoreData) return;
     let el = e.target;
-    // If user scrolls within 150px of the bottom
-    if (el.scrollHeight - el.scrollTop <= el.clientHeight + 150) {
+    // Load next batch when 200px from the bottom
+    if (el.scrollHeight - el.scrollTop <= el.clientHeight + 200) {
         let searchTerm = document.getElementById("slSearchInput").value.trim();
-        let totalCurrentMatches = cachedStudents.length; 
-        
-        // If we haven't rendered all the students yet, append the next batch
-        if (currentRenderedCount < totalCurrentMatches) {
-            isFetchingNextBatch = true; // 🚨 Lock it!
-            renderStudentList(searchTerm, true); 
-            
-            // 🚨 Unlock after 150ms so the browser's DOM has time to push the scrollHeight down
-            setTimeout(() => { isFetchingNextBatch = false; }, 150);
-        }
+        fetchNextStudentBatch(searchTerm);
     }
 });
 
@@ -3626,7 +4067,7 @@ async function saLoadStudents() {
     
     try {
         // 🚨 COST OPTIMIZED: Zero Firebase reads!
-        let allStu = await getGlobalStudents();
+        let allStu = await AdhyoraStudentCache.getStudentsByYear(targetYear);
         saCachedStudents = [];
         
         allStu.forEach(d => {
@@ -3878,6 +4319,9 @@ async function saExecuteAction() {
             updates[`assigned_by.${semKey}.${cat}`] = "HOD";
         }
 
+        // 🟢 ADD THIS LINE:
+        updates["updatedAt"] = serverTimestamp();
+
         wb.update(stuRef, updates);
         ops++;
 
@@ -3888,6 +4332,9 @@ async function saExecuteAction() {
     }
 
     if (ops > 0) await wb.commit();
+
+    // 🚨 ADD THIS LINE: Tell teachers students got assigned/removed from a subject!
+    notifyTeachersOfStudentUpdate();
 
     showRcToast(saIsRemoveMode ? `Removed ${studentsToProcess.length} students!` : `Assigned ${studentsToProcess.length} students!`);
     
@@ -4104,10 +4551,10 @@ window.bchToggleGroup = async (bodyId, iconId, sids) => {
             });
             
             if (missingSids.length > 0) {
-                // 🚨 COST OPTIMIZED: Fetches instantly from RAM!
-                let allStu = await getGlobalStudents();
+                // 🚨 COST OPTIMIZED: Uses Smart Cache Sniper!
+                let fetchedNew = await AdhyoraStudentCache.getStudentsByIDs(missingSids);
                 missingSids.forEach(sid => {
-                    let d = allStu.find(s => s.id === sid);
+                    let d = fetchedNew.find(s => s.id === sid);
                     if (d) {
                         let stuObj = {
                             id: d.id,
@@ -4193,7 +4640,7 @@ function initEventAttendanceEngine() {
     document.getElementById("btnEvtSave").addEventListener("click", evtSaveEventAttendance);
 
     evtUpdateDateUI();
-    evtLoadAllStudentsIntoRAM();
+    evtLoadDataForPeriod();
 }
 
 function evtUpdateDateUI() {
@@ -4218,7 +4665,7 @@ async function evtLoadAllStudentsIntoRAM() {
     }
 
     // 🚨 COST OPTIMIZED: Free RAM pull!
-    evtAllCollegeStudentsCache = await getGlobalStudents();
+    evtAllCollegeStudentsCache = await AdhyoraStudentCache.getAllStudents();
     evtIsCacheLoaded = true;
     evtLoadDataForPeriod();
 }
@@ -4274,18 +4721,21 @@ function evtLoadDataForPeriod() {
             }
 
             if (data.studentIDs && Array.isArray(data.studentIDs)) {
-                data.studentIDs.forEach(sid => {
-                    let sDoc = evtAllCollegeStudentsCache.find(s => s.id === sid);
-                    if (sDoc) {
-                        evtCartStudents.set(sid, {
-                            id: sid,
+                // 🚨 USE THE CACHE SNIPER TO FETCH MISSING IDs FOR ZERO COST
+                AdhyoraStudentCache.getStudentsByIDs(data.studentIDs).then(fetchedStudents => {
+                    fetchedStudents.forEach(sDoc => {
+                        evtCartStudents.set(sDoc.id, {
+                            id: sDoc.id,
                             name: sDoc.Name || sDoc.studentName || "Unknown",
                             roll: sDoc.RollNumber || sDoc.rollNumber || "",
                             dept: (sDoc.Department || sDoc.department || "").replace("DEPT_", ""),
                             year: sDoc.Year || "1"
                         });
-                    }
+                    });
+                    evtRebuildCartUI(); // Update the UI once they are loaded
                 });
+            } else {
+                evtRebuildCartUI();
             }
         }
 
@@ -4331,8 +4781,8 @@ window.evtRemoveFromCart = (id) => {
 };
 
 function evtOpenSearchPanel() {
-    if (!evtIsCacheLoaded) { showRcToast("Still loading students..."); return; }
-    
+    // 🚨 DELETED the evtIsCacheLoaded check here!
+
     document.getElementById("evtSearchInput").value = "";
     evtPendingStudentIDs.clear();
     document.getElementById("evtSearchResultContainer").innerHTML = "";
@@ -4343,11 +4793,13 @@ function evtOpenSearchPanel() {
     document.getElementById("evtSearchModal").classList.add("active");
 }
 
-function evtOnSearchTyped(queryStr) {
+// 🚀 EXACT STUDENT LIST SEARCH LOGIC FOR EVENT ATTENDANCE
+async function evtOnSearchTyped(queryStr) {
     let container = document.getElementById("evtSearchResultContainer");
     let msgObj = document.getElementById("evtSearchMsg");
 
-    if (!queryStr || queryStr.length < 2) {
+    // Allow single-character searches (e.g., "1" for 1st Years)
+    if (!queryStr || queryStr.trim().length === 0) {
         container.innerHTML = "";
         msgObj.style.display = "block";
         msgObj.innerText = "Type a name or roll number to search...";
@@ -4355,63 +4807,113 @@ function evtOnSearchTyped(queryStr) {
     }
 
     let cleanQuery = queryStr.trim().toLowerCase();
-    let matches = evtAllCollegeStudentsCache.filter(s => {
-        let n = (s.Name || "").toLowerCase();
-        let r = (s.RollNumber || "").toLowerCase();
-        return n.includes(cleanQuery) || r.includes(cleanQuery);
-    });
+    let terms = cleanQuery.split(':').map(t => t.trim());
+    let primaryTerm = terms[0]; // Mirroring the Student List logic exactly
 
-    if (matches.length === 0) {
-        container.innerHTML = "";
-        msgObj.style.display = "block";
-        msgObj.innerText = `No students found matching '${queryStr}'!`;
-        return;
-    }
+    if (primaryTerm.length === 0) return;
 
-    msgObj.style.display = "none";
-    let html = "";
-    
-    // Hard limit for smooth UI
-    let renderBatch = matches.slice(0, 20);
+    let termTitle = primaryTerm.charAt(0).toUpperCase() + primaryTerm.slice(1);
+    let termUpper = primaryTerm.toUpperCase();
 
-    renderBatch.forEach(s => {
-        let name = s.Name || s.studentName || "Unknown";
-        let roll = s.RollNumber || s.rollNumber || "";
-        let dept = (s.Department || s.department || "").replace("DEPT_", "");
-        let year = s.Year || "1";
-        
-        let isAlreadyInCart = evtCartStudents.has(s.id);
-        let isPending = evtPendingStudentIDs.has(s.id);
+    msgObj.style.display = "block";
+    msgObj.innerText = "Searching database...";
 
-        let chkHtml = "";
-        let clickAction = "";
-        let cursorStyle = "";
-        let bgStyle = isPending ? "rgba(220, 38, 38, 0.05)" : "var(--bg-surface)";
-        let borderStyle = isPending ? "var(--brand-red)" : "var(--border-color)";
+    try {
+        // 1. PROBE QUERIES: 1:1 Match with fetchNextStudentBatch
+        const queries = [
+            // 🚨 Replaced the old termTitle one entirely with termUpper!
+            getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("Name", ">=", termUpper), where("Name", "<=", termUpper + "\uf8ff"), limit(20))),
+            getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("RollNumber", ">=", termUpper), where("RollNumber", "<=", termUpper + "\uf8ff"), limit(20))),
+            getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("Department", ">=", termTitle), where("Department", "<=", termTitle + "\uf8ff"), limit(20))),
+            getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("department", ">=", termTitle), where("department", "<=", termTitle + "\uf8ff"), limit(20)))
+        ];
 
-        if (isAlreadyInCart) {
-            // Locked State
-            chkHtml = `<input type="checkbox" checked disabled style="width:18px; height:18px; accent-color:var(--text-muted); pointer-events:none;">`;
-            cursorStyle = "cursor:not-allowed; opacity:0.6;";
-            bgStyle = "var(--bg-base)";
-        } else {
-            // Interactive State
-            chkHtml = `<input type="checkbox" id="pend_chk_${s.id}" ${isPending ? 'checked' : ''} style="width:18px; height:18px; accent-color:var(--brand-red); pointer-events:none;">`;
-            cursorStyle = "cursor:pointer;";
-            clickAction = `onclick="evtTogglePendingCard('${s.id}')"`;
+        // Probe Year fields if the user types a number
+        if (!isNaN(primaryTerm) && primaryTerm.length > 0) {
+            queries.push(getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("Year", "==", primaryTerm), limit(20))));
+            queries.push(getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("year", "==", primaryTerm), limit(20))));
         }
 
-        html += `
-        <div id="evt_search_card_${s.id}" style="display:flex; justify-content:space-between; align-items:center; background:${bgStyle}; border:1px solid ${borderStyle}; border-radius:10px; padding:12px; margin-bottom:5px; ${cursorStyle} transition: 0.2s;" ${clickAction}>
-            <div>
-                <div style="font-size:13px; font-weight:bold; color:var(--text-dark); margin-bottom:2px;">${name}</div>
-                <div style="font-size:11px; color:var(--text-muted); font-weight:600;">${roll} - ${dept} - Year ${year}</div>
-            </div>
-            ${chkHtml}
-        </div>`;
-    });
+        const results = await Promise.all(queries);
+        
+        // 2. MERGE INTO RAM STORE: Push everything to your global cache
+        results.forEach(snap => {
+            snap.forEach(docSnap => {
+                let sData = { id: docSnap.id, ...docSnap.data() };
+                AdhyoraStudentCache.ramStore.set(docSnap.id, sData);
+            });
+        });
 
-    container.innerHTML = html;
+        // 3. MULTI-FILTER RAM: Scan using your exact smart filter parameters
+        let allCachedStudents = Array.from(AdhyoraStudentCache.ramStore.values());
+        let filtered = allCachedStudents.filter(s => { 
+            let sStr = `${s.Name || s.studentName || ""} ${s.RollNumber || s.rollNumber || ""} ${s.Department || s.department || ""} year ${s.Year || s.year || ""}`.toLowerCase(); 
+            
+            if (s.enrolledSubjects) {
+                Object.values(s.enrolledSubjects).forEach(semMap => {
+                    if (typeof semMap === 'object') {
+                        Object.keys(semMap).forEach(cat => sStr += ` ${cat.toLowerCase()}`);
+                    }
+                });
+            }
+            return terms.every(term => sStr.includes(term)); 
+        });
+
+        // 4. CAP DISPLAY BATCH: Locked to 20 students as requested
+        let renderBatch = filtered.slice(0, 20);
+
+        if (renderBatch.length === 0) {
+            container.innerHTML = "";
+            msgObj.style.display = "block";
+            msgObj.innerText = `No students found matching "${queryStr}"`;
+            return;
+        }
+
+        msgObj.style.display = "none";
+        let html = "";
+        
+        // 5. GENERATE CARDS
+        renderBatch.forEach(s => {
+            let name = s.Name || s.studentName || "Unknown";
+            let roll = s.RollNumber || s.rollNumber || "";
+            let dept = (s.Department || s.department || "").replace("DEPT_", "");
+            let year = s.Year || s.year || "1";
+            
+            let isAlreadyInCart = evtCartStudents.has(s.id);
+            let isPending = evtPendingStudentIDs.has(s.id);
+
+            let chkHtml = "";
+            let clickAction = "";
+            let cursorStyle = "";
+            let bgStyle = isPending ? "rgba(220, 38, 38, 0.05)" : "var(--bg-surface)";
+            let borderStyle = isPending ? "var(--brand-red)" : "var(--border-color)";
+
+            if (isAlreadyInCart) {
+                chkHtml = `<input type="checkbox" checked disabled style="width:18px; height:18px; accent-color:var(--text-muted); pointer-events:none;">`;
+                cursorStyle = "cursor:not-allowed; opacity:0.6;";
+                bgStyle = "var(--bg-base)";
+            } else {
+                chkHtml = `<input type="checkbox" id="pend_chk_${s.id}" ${isPending ? 'checked' : ''} style="width:18px; height:18px; accent-color:var(--brand-red); pointer-events:none;">`;
+                cursorStyle = "cursor:pointer;";
+                clickAction = `onclick="evtTogglePendingCard('${s.id}')"`;
+            }
+
+            html += `
+            <div id="evt_search_card_${s.id}" style="display:flex; justify-content:space-between; align-items:center; background:${bgStyle}; border:1px solid ${borderStyle}; border-radius:10px; padding:12px; margin-bottom:5px; ${cursorStyle} transition: 0.2s;" ${clickAction}>
+                <div>
+                    <div style="font-size:13px; font-weight:bold; color:var(--text-dark); margin-bottom:2px;">${name}</div>
+                    <div style="font-size:11px; color:var(--text-muted); font-weight:600;">${roll} - ${dept} - Year ${year}</div>
+                </div>
+                ${chkHtml}
+            </div>`;
+        });
+
+        container.innerHTML = html;
+
+    } catch (e) {
+        console.error("Event Search Error:", e);
+        msgObj.innerText = "Connection error while searching.";
+    }
 }
 
 // 🚨 NEW: This handles the entire card click!
@@ -4439,7 +4941,9 @@ function evtAddSelectedToCart() {
     let added = 0;
     evtPendingStudentIDs.forEach(id => {
         if (!evtCartStudents.has(id)) {
-            let sDoc = evtAllCollegeStudentsCache.find(s => s.id === id);
+            // 🚨 PULL DIRECTLY FROM THE SMART RAM CACHE
+            let sDoc = AdhyoraStudentCache.ramStore.get(id); 
+            
             if (sDoc) {
                 evtCartStudents.set(id, {
                     id: id,
@@ -4666,10 +5170,10 @@ async function imLoadStudents() {
             batchSnap.forEach(d => batches.push({ id: d.id, ...d.data() }));
         }
 
-        // 🚨 COST OPTIMIZED: Zero Firebase reads!
+        // 🚨 COST OPTIMIZED: Fetches only the needed year!
         if (!imCachedStudentsByYear[year]) {
-            let allStu = await getGlobalStudents();
-            imCachedStudentsByYear[year] = allStu.filter(s => s.Year === year.toString() || s.year === year.toString());
+            let yearStu = await AdhyoraStudentCache.getStudentsByYear(year.toString());
+            imCachedStudentsByYear[year] = yearStu;
         }
 
         imProcessAndSpawnStudents(imCachedStudentsByYear[year], selectedSemText, selectedSubject, batches);
@@ -5363,9 +5867,8 @@ async function asnLoadData() {
     // 3. Cache Students for Splitting Logic
     let yearStr = Math.ceil(parseInt(asnCurrentSem) / 2).toString();
     
-    // 🚨 COST OPTIMIZED: Free RAM pull!
-    let allStu = await getGlobalStudents();
-    asnCachedYearStudents = allStu.filter(s => s.Year === yearStr || s.year === yearStr);
+    // 🚨 COST OPTIMIZED: Fetch only the specific year using the new Cache Engine!
+    asnCachedYearStudents = await AdhyoraStudentCache.getStudentsByYear(yearStr);
 
     asnRenderLayout();
 }
@@ -7621,6 +8124,253 @@ document.addEventListener("visibilitychange", () => {
         }
     }
 });
+
+// ==========================================
+// 🚨 MEDICAL LEAVE ENGINE (HOD ONLY)
+// ==========================================
+let medTargetStudentID = "";
+let medTargetRollNo = "";
+let medTargetDeptID = "";
+let medTargetYear = "";
+let medTargetName = "";
+let medStartDateStr = ""; // YYYY-MM-DD
+let medIsSelectingStartDate = true;
+let medPendingDeleteDocID = ""; // 🚨 Tracks the doc ID for the Custom Confirmation Modal
+
+// 1. Dynamic UI Generator (100% Red Theme & Custom Delete Modal)
+function getMedicalModals() {
+    let modal = document.getElementById("medLeaveModal");
+    if (!modal) {
+        const modalHTML = `
+        <div class="modal-overlay" id="medLeaveModal" style="z-index: 20000;">
+            <div class="compose-modal" style="background: white; width: 90%; max-width: 400px; margin: auto; border-radius: 20px; padding: 30px; text-align: center; border: 1px solid var(--border-color); box-shadow: 0 20px 50px rgba(0,0,0,0.1);">
+                <button class="close-settings" onclick="document.getElementById('medLeaveModal').classList.remove('active')"><i class="fas fa-times"></i></button>
+                <i class="fas fa-notes-medical" style="font-size: 40px; color: var(--brand-red); margin-bottom: 10px;"></i>
+                <h4 id="medStudentNameText" style="color: var(--text-dark); margin-bottom: 5px; font-size:16px;">Student Name</h4>
+                <h3 id="medTitleText" style="color: var(--brand-red); margin-bottom: 20px; font-size:18px;">Select FROM Date</h3>
+                
+                <input type="date" id="medDatePicker" class="asn-input" style="width:100%; padding:15px; border-radius:12px; font-size:16px; margin-bottom:15px; font-weight:bold; color:var(--text-dark); text-align:center;">
+                
+                <button id="medRangeBtn" style="background:transparent; color:#64748b; border:none; text-decoration:underline; font-size:12px; margin-bottom:20px; cursor:pointer;" onclick="window.medRestartSelection()">Select Range</button>
+                
+                <div style="display:flex; gap:10px;">
+                    <button onclick="window.medOpenHistory()" style="flex:1; padding:12px; border-radius:12px; border:1px solid #cbd5e1; background:#f8fafc; color:#475569; font-weight:bold; cursor:pointer;"><i class="fas fa-history"></i> History</button>
+                    <button id="medSubmitBtn" onclick="window.medHandleSubmit()" style="flex:1; padding:12px; border-radius:12px; border:none; background:var(--brand-red); color:white; font-weight:bold; cursor:pointer; box-shadow:0 4px 10px rgba(220,38,38,0.3);">Next</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="medHistoryModal" style="z-index: 20001;">
+            <div class="compose-modal" style="background: white; width: 90%; max-width: 400px; margin: auto; border-radius: 20px; padding: 25px; border: 1px solid var(--border-color); box-shadow: 0 20px 50px rgba(0,0,0,0.1);">
+                <h3 style="color: var(--brand-red); margin-bottom: 15px; text-align:center;"><i class="fas fa-history"></i> Medical History</h3>
+                <div id="medHistoryList" class="scrollable-list" style="max-height: 40vh; overflow-y: auto; padding-right: 5px; margin-bottom:15px;"></div>
+                <button onclick="document.getElementById('medHistoryModal').classList.remove('active')" style="width:100%; padding:12px; border-radius:12px; background:#f1f5f9; color:#475569; font-weight:bold; border:1px solid #cbd5e1; cursor:pointer;">Close</button>
+            </div>
+        </div>
+        
+        <div class="modal-overlay" id="medDeleteConfirmModal" style="z-index: 20002;">
+            <div class="compose-modal" style="background: white; width: 90%; max-width: 350px; margin: auto; border-radius: 20px; padding: 30px; text-align: center; border: 1px solid var(--border-color); box-shadow: 0 20px 50px rgba(0,0,0,0.2);">
+                <i class="fas fa-exclamation-triangle" style="font-size: 40px; color: var(--brand-red); margin-bottom: 15px;"></i>
+                <h4 id="medDeleteConfirmText" style="color: var(--text-dark); margin-bottom: 20px; line-height: 1.5; font-size:14px;">Confirm?</h4>
+                <div style="display:flex; gap:10px;">
+                    <button onclick="window.medCancelDelete()" style="flex:1; padding:12px; border-radius:10px; border:1px solid #cbd5e1; background:white; color:#64748b; font-weight:bold; cursor:pointer;">No</button>
+                    <button onclick="window.medOnConfirmDelete()" style="flex:1; padding:12px; border-radius:10px; border:none; background:var(--brand-red); color:white; font-weight:bold; cursor:pointer;">Yes</button>
+                </div>
+            </div>
+        </div>`;
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+        if (typeof modalObserver !== 'undefined') {
+            modalObserver.observe(document.getElementById("medLeaveModal"), { attributes: true, attributeFilter: ['class'] });
+            modalObserver.observe(document.getElementById("medHistoryModal"), { attributes: true, attributeFilter: ['class'] });
+            modalObserver.observe(document.getElementById("medDeleteConfirmModal"), { attributes: true, attributeFilter: ['class'] });
+        }
+    }
+}
+
+window.medOpenPanel = (sid, roll, dept, year, name) => {
+    getMedicalModals();
+    medTargetStudentID = sid;
+    medTargetRollNo = roll;
+    medTargetDeptID = dept;
+    medTargetYear = year;
+    medTargetName = name;
+    
+    document.getElementById("medStudentNameText").innerText = name;
+    window.medRestartSelection();
+    document.getElementById("medLeaveModal").classList.add("active");
+};
+
+window.medRestartSelection = () => {
+    medIsSelectingStartDate = true;
+    medStartDateStr = "";
+    
+    let dInput = document.getElementById("medDatePicker");
+    let today = new Date();
+    dInput.value = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    
+    document.getElementById("medTitleText").innerText = "Select FROM Date";
+    document.getElementById("medRangeBtn").innerText = "Select Range";
+    document.getElementById("medSubmitBtn").innerText = "Next";
+};
+
+window.medHandleSubmit = () => {
+    let dateVal = document.getElementById("medDatePicker").value;
+    if (!dateVal) return;
+
+    if (medIsSelectingStartDate) {
+        medStartDateStr = dateVal;
+        medIsSelectingStartDate = false; 
+        
+        document.getElementById("medTitleText").innerText = "Select TO Date";
+        document.getElementById("medRangeBtn").innerText = `From: ${dateVal}`;
+        document.getElementById("medSubmitBtn").innerText = "Save Leave";
+    } else {
+        if (dateVal < medStartDateStr) dateVal = medStartDateStr; 
+        medCheckAndSave(medStartDateStr, dateVal);
+    }
+};
+
+async function medCheckAndSave(startStr, endStr) {
+    let btn = document.getElementById("medSubmitBtn");
+    btn.innerText = "Checking..."; btn.disabled = true;
+
+    try {
+        const medSnap = await getDocs(query(collection(db, "colleges", currentCollegeID, "medical_leaves"), where("studentID", "==", medTargetStudentID)));
+        let hasOverlap = false;
+        medSnap.forEach(d => {
+            let data = d.data();
+            if (data.startDate && data.endDate) {
+                if (startStr <= data.endDate && endStr >= data.startDate) {
+                    hasOverlap = true;
+                }
+            }
+        });
+
+        if (hasOverlap) {
+            showRcToast("❌ Student is already on Medical Leave during this time!");
+            window.medRestartSelection();
+            btn.disabled = false;
+            return;
+        }
+
+        const attSnap = await getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("date", ">=", startStr), where("date", "<=", endStr)));
+        let attendanceBlocked = false;
+        let blockReason = "";
+
+        attSnap.forEach(docSnap => {
+            if (attendanceBlocked) return;
+            let d = docSnap.data();
+            for (let i = 1; i <= 6; i++) {
+                let pData = d[`period_${i}`];
+                if (pData && pData.attendance) {
+                    if (pData.attendance[medTargetRollNo] === true || pData.attendance[medTargetStudentID] === true) {
+                        attendanceBlocked = true;
+                        blockReason = `Marked Present on ${docSnap.data().date}`;
+                        break;
+                    }
+                }
+            }
+        });
+
+        if (attendanceBlocked) {
+            showRcToast(`❌ Conflict: ${blockReason}`);
+            window.medRestartSelection();
+            btn.disabled = false;
+            return;
+        }
+
+        btn.innerText = "Saving...";
+        let docID = `${medTargetStudentID}_${Date.now()}`;
+        let payload = {
+            studentID: medTargetStudentID,
+            departmentID: medTargetDeptID,
+            year: medTargetYear,
+            startDate: startStr,
+            endDate: endStr,
+            approvedBy: currentUserID,
+            approvedByName: currentTeacherName,
+            timestamp: serverTimestamp(),
+            reason: "Medical"
+        };
+
+        await setDoc(doc(db, "colleges", currentCollegeID, "medical_leaves", docID), payload);
+        showRcToast("✅ Medical Leave Saved!");
+        document.getElementById("medLeaveModal").classList.remove("active");
+
+    } catch (e) {
+        console.error("Medical Leave Error:", e);
+        showRcToast("❌ Database Error.");
+        window.medRestartSelection();
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+window.medOpenHistory = async () => {
+    let listEl = document.getElementById("medHistoryList");
+    listEl.innerHTML = `<div class="no-data-text">Loading...</div>`;
+    document.getElementById("medHistoryModal").classList.add("active");
+
+    try {
+        const snap = await getDocs(query(collection(db, "colleges", currentCollegeID, "medical_leaves"), where("studentID", "==", medTargetStudentID)));
+        if (snap.empty) {
+            listEl.innerHTML = `<div class="no-data-text">No history found.</div>`;
+            return;
+        }
+
+        let html = "";
+        snap.forEach(d => {
+            let data = d.data();
+            html += `
+            <div id="med_row_${d.id}" style="background:var(--bg-surface); border:1px solid var(--border-color); border-radius:10px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; transition: 0.3s;">
+                <div style="font-size:13px; font-weight:bold; color:var(--text-dark);">
+                    ${data.startDate} <span style="color:var(--text-muted); font-weight:normal;">to</span> ${data.endDate}
+                </div>
+                <button onclick="window.medOpenDeleteConfirmation('${d.id}', '${data.startDate}', '${data.endDate}')" style="background:#fee2e2; color:var(--brand-red); border:none; padding:6px 10px; border-radius:6px; cursor:pointer; transition: 0.2s;"><i class="fas fa-trash"></i></button>
+            </div>`;
+        });
+        listEl.innerHTML = html;
+    } catch(e) {
+        listEl.innerHTML = `<div class="no-data-text">Error loading history.</div>`;
+    }
+};
+
+// ==========================================
+// 🚨 EXACT C# LOGIC MATCH: DELETE CONFIRMATION
+// ==========================================
+window.medOpenDeleteConfirmation = (docID, start, end) => {
+    medPendingDeleteDocID = docID;
+    document.getElementById("medDeleteConfirmText").innerHTML = `Delete leave from <b>${start}</b> to <b>${end}</b>?`;
+    document.getElementById("medDeleteConfirmModal").classList.add("active");
+};
+
+window.medCancelDelete = () => {
+    medPendingDeleteDocID = "";
+    document.getElementById("medDeleteConfirmModal").classList.remove("active");
+};
+
+window.medOnConfirmDelete = async () => {
+    if (!medPendingDeleteDocID) return;
+    let docId = medPendingDeleteDocID;
+    medPendingDeleteDocID = ""; // Reset immediately
+    
+    // 1. Hide the confirmation modal instantly
+    document.getElementById("medDeleteConfirmModal").classList.remove("active");
+
+    try {
+        // 2. Delete from Firebase (Mirrors C# DeleteAsync)
+        await deleteDoc(doc(db, "colleges", currentCollegeID, "medical_leaves", docId));
+        showRcToast("✅ Record Deleted!");
+        
+        // 3. Refresh the UI (Mirrors C# LoadMedicalHistory)
+        window.medOpenHistory(); 
+
+    } catch (e) {
+        console.error("Deletion Error:", e);
+        showRcToast("❌ Error deleting record.");
+    }
+};
 
 // ==========================================
 // 🚨 BANK-GRADE ANTI-SNOOPING SHIELD 
