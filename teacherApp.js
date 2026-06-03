@@ -203,14 +203,31 @@ const messaging = getMessaging(app);
 onMessage(messaging, (payload) => {
     console.log("Foreground push received from webhook!", payload);
     
-    // Show a quick visual toast so they know a message arrived
+    let pushType = payload.data?.type || "chat";
+    let pushTitle = payload.notification?.title || payload.data?.title || "New Notification";
+    let pushBody = payload.notification?.body || payload.data?.message || "";
+
+    // Show a quick visual toast
     if (typeof showRcToast === "function") {
-        showRcToast("New Message Arrived!");
+        showRcToast(pushTitle);
     }
     
-    // Turn on the Red Dots instantly without querying the database!
-    document.querySelectorAll("#btnMessages .notification-dot").forEach(d => d.style.display = "block");
-    document.querySelectorAll("#btnNotifications .notification-dot").forEach(d => d.style.display = "block");
+    // 🚨 THE FIX: Smart Routing for Red Dots!
+    if (pushType === 'admin_broadcast' || pushType === 'system' || pushType === 'general' || pushType === 'event_approved') {
+        // System / Principal Notices
+        document.querySelectorAll("#btnNotifications .notification-dot").forEach(d => d.style.display = "block");
+    } else {
+        // Chats, Assignments, and Teacher Broadcasts
+        document.querySelectorAll("#btnMessages .notification-dot").forEach(d => d.style.display = "block");
+    }
+
+    // Force the OS notification to spawn while the tab is open!
+    if (Notification.permission === 'granted') {
+        new Notification(pushTitle, {
+            body: pushBody,
+            icon: "https://pixelaks.in/AdhyoraWeb/AdhyoraRedSplashIcon.png"
+        });
+    }
 });
 
 let myCurrentPushToken = ""; // Tracks active session
@@ -384,7 +401,7 @@ async function finalizeProfileUI(rawName, email, deptName) {
     if (!hasStartedInbox && teacherDeptRaw !== "") {
         hasStartedInbox = true;
         
-        //startInboxListener();
+        startInboxListener();
         await syncSemesterWithDatabase();
 
         initAttendanceEngine(); 
