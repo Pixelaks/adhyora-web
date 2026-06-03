@@ -3,7 +3,7 @@ import { getAuth, onAuthStateChanged, signOut, EmailAuthProvider, reauthenticate
 import { getFirestore, doc, getDoc, getDocs, collection, query, where, orderBy, limit, onSnapshot, addDoc, serverTimestamp, setDoc, updateDoc, deleteDoc, writeBatch, deleteField, arrayUnion, arrayRemove, increment, enableIndexedDbPersistence, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 // 🚀 OPTIMIZATION 1: Imported enableIndexedDbPersistence to cut refresh costs to ZERO
 // Add getMessaging, getToken, deleteToken to your imports
-import { getMessaging, getToken, deleteToken } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging.js";
+import { getMessaging, getToken, deleteToken, onMessage } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-functions.js";
 
 // ==========================================
@@ -40,6 +40,38 @@ const messaging = getMessaging(app);
 const functions = getFunctions(app, "asia-south1");// 👈 ADD THIS LINE
 
 const principalAPI = httpsCallable(functions, 'principalAPI');
+
+// ==========================================
+// 🚨 FOREGROUND PUSH NOTIFICATION HANDLER
+// ==========================================
+onMessage(messaging, (payload) => {
+    console.log("Foreground push received!", payload);
+    
+    let pushType = payload.data?.type || payload.notification?.title?.toLowerCase() || "general";
+    let pushTitle = payload.notification?.title || payload.data?.title || "New Notification";
+    let pushBody = payload.notification?.body || payload.data?.message || "";
+
+    // 1. Show a quick visual toast inside the app
+    if (typeof showRcToast === "function") {
+        showRcToast("🔔 " + pushTitle);
+    }
+    
+    // 2. Smart Routing for Red Dots
+    // If it's a chat/personal message, light up the Inbox. Otherwise, light up general Notifications.
+    if (pushType === 'chat' || pushType === 'message' || pushTitle.includes("Message")) {
+        document.querySelectorAll("#btnMessages .notification-dot").forEach(d => d.style.display = "block");
+    } else {
+        document.querySelectorAll("#btnNotifications .notification-dot").forEach(d => d.style.display = "block");
+    }
+
+    // 3. Force the OS-level notification to spawn while the tab is open
+    if (Notification.permission === 'granted') {
+        new Notification(pushTitle, {
+            body: pushBody,
+            icon: "https://raw.githubusercontent.com/Pixelaks/pixelaks.in/4c9dc43b4b3fd2c66679498581de26d690053f61/AdhyoraSplashLogo5.png"
+        });
+    }
+});
 
 // 🚀 OPTIMIZATION 2: Enable Local Disk Caching. This prevents the massive Firebase read spike when you refresh the page.
 try {
@@ -369,20 +401,62 @@ async function registerWebSession() {
         localStorage.setItem("myWebDeviceID", myWebDeviceID);
     }
     
+    // 🚨 Check if this is the very first time this browser is logging in
+    let isFirstLoginOnThisDevice = !localStorage.getItem("myWebDeviceID_Registered");
+    
     let osName = "Web Browser";
-    if (navigator.userAgent.indexOf("Win") != -1) osName = "Windows PC";
-    if (navigator.userAgent.indexOf("Mac") != -1) osName = "Mac OS";
-    if (navigator.userAgent.indexOf("Linux") != -1) osName = "Linux PC";
+    if (navigator.userAgent.indexOf("Win") !== -1) osName = "Windows PC";
+    if (navigator.userAgent.indexOf("Mac") !== -1) osName = "Mac OS";
+    if (navigator.userAgent.indexOf("Linux") !== -1) osName = "Linux PC";
+    if (navigator.userAgent.indexOf("Android") !== -1) osName = "Android Browser";
+    if (navigator.userAgent.indexOf("like Mac") !== -1) osName = "iOS Browser";
 
     try {
         const sessionRef = doc(db, "colleges", currentCollegeID, "principals", currentUserID, "sessions", myWebDeviceID);
-        await setDoc(sessionRef, { deviceName: osName, loginTime: serverTimestamp() }, {merge: true});
+        await setDoc(sessionRef, { deviceName: osName, loginTime: serverTimestamp() }, { merge: true });
         
+        // ========================================================
+        // 🚨 THE FIX: FIRE THE "NEW LOGIN" PUSH NOTIFICATION
+        // ========================================================
+        if (isFirstLoginOnThisDevice) {
+            localStorage.setItem("myWebDeviceID_Registered", "true"); // Lock it so it doesn't spam on refresh
+            
+            const principalRef = doc(db, "colleges", currentCollegeID, "principals", currentUserID);
+            const pSnap = await getDoc(principalRef);
+            
+            if (pSnap.exists()) {
+                let tokens = [];
+                // Grab all known tokens for this principal
+                if (pSnap.data().fcmTokens) tokens.push(...pSnap.data().fcmTokens);
+                else if (pSnap.data().fcmToken) tokens.push(pSnap.data().fcmToken);
+                
+                if (pSnap.data().webFcmTokens) tokens.push(...pSnap.data().webFcmTokens);
+                else if (pSnap.data().webFcmToken) tokens.push(pSnap.data().webFcmToken);
+
+                if (tokens.length > 0) {
+                    fetch("https://script.google.com/macros/s/AKfycbxVL1MGATuPxN4cmAkWbd8GsY5YaoWBkyVTkjfDV-f4jJrWBnMvZ-gXdMZU5pnhHmlPHw/exec", {
+                        method: "POST", mode: "no-cors",
+                        body: JSON.stringify({
+                            title: "Security Alert 🔒",
+                            body: `A new login was detected on ${osName}.`,
+                            image: "https://raw.githubusercontent.com/Pixelaks/pixelaks.in/4c9dc43b4b3fd2c66679498581de26d690053f61/AdhyoraSplashLogo5.png",
+                            type: "login", // 🚨 Triggers the Session UI when clicked
+                            priority: "high",
+                            tokens: tokens
+                        })
+                    }).catch(e => console.warn("Failed to send login alert", e));
+                }
+            }
+        }
+        // ========================================================
+
         // Listen for remote kick
         onSnapshot(sessionRef, (docSnap) => {
             if (!docSnap.exists()) signOut(auth).then(() => window.location.href = "index.html");
         });
-    } catch(e) {}
+    } catch(e) {
+        console.error("Session registration rejected:", e);
+    }
 }
 
 function startSessionListener() {
@@ -506,10 +580,11 @@ el.btnTerms.addEventListener("click", () => window.open("https://pixelaks.in/ter
 // ==========================================
 async function handlePrincipalSignOut() {
     try {
-        // 1. REMOVE PUSH TOKEN FROM BROWSER
+        // 1. DESTROY PUSH TOKEN FROM DEVICE (Kills Ghost Notifications)
         if (myCurrentPushToken) {
             try {
                 await deleteToken(messaging);
+                console.log("Push token destroyed from device.");
             } catch(e) {
                 console.warn("Push Token Delete Error:", e);
             }
