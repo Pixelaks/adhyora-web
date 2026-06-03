@@ -2726,13 +2726,64 @@ const DataParser = {
     parseStudents: (lines) => {
         let students = [];
         const spellFixer = { "botony": "Botany", "computerscience": "Computer Science", "maths": "Mathematics", "commerce": "Commerce", "economics": "Economics" };
+        
+        if (lines.length < 2) return students;
+
+        // 🚀 ADVANCED LOGIC: Dynamically find the optional columns by reading the header (Row 0)
+        let headers = lines[0].toLowerCase().split(csvSplitter).map(h => h.trim().replace(/^"|"$/g, ''));
+        
+        // Find indices. Returns -1 if the college didn't include these columns.
+        let phoneIndex = headers.findIndex(h => h.includes("phone") || h.includes("parent") || h.includes("mobile"));
+        let regIndex = headers.findIndex(h => h.includes("register") || h.includes("reg no"));
+        
         for (let i = 1; i < lines.length; i++) {
             if (!lines[i].trim()) continue;
             let row = lines[i].split(csvSplitter).map(v => v.trim().replace(/^"|"$/g, ''));
-            if (row.length < 6) continue;
-            let rawDept = row[3]; let courseType = row[5];
+            
+            // Standard columns from your base template
+            if (row.length < 6) continue; 
+            
+            let rawDept = row[3]; 
+            let courseType = row[5];
             let finalDept = generateDeptName(rawDept, courseType, spellFixer);
-            students.push({ SLNumber: row[0], RollNumber: row[1], Name: row[2].replace(/\./g, " "), Department: finalDept, Year: row[4], CourseType: courseType });
+
+            let studentObj = {
+                SLNumber: row[0],
+                RollNumber: row[1],
+                Name: row[2].replace(/\./g, " "),
+                Department: finalDept,
+                Year: row[4],
+                CourseType: courseType
+            };
+
+            // 🛡️ SAFE EXTRACTION: Register Number (Only grabs it if the column actually exists)
+            if (regIndex !== -1 && row[regIndex]) {
+                studentObj.RegisterNumber = row[regIndex];
+            } else {
+                studentObj.RegisterNumber = ""; // Default empty
+            }
+
+            // 🛡️ SAFE EXTRACTION: Parent / Phone Number (Only grabs it if the column actually exists)
+            if (phoneIndex !== -1 && row[phoneIndex]) {
+                studentObj.ParentNumber = row[phoneIndex];
+            } else {
+                studentObj.ParentNumber = ""; // Default empty
+            }
+
+            // 🚨 CRITICAL FIRESTORE SHIELD: 
+            // Firestore uses RollNumber as the Document ID. If a college ONLY provides a 
+            // "Register No" and leaves "Roll No" blank, we must fallback to Register No 
+            // to prevent the database from crashing due to an empty document ID.
+            if (!studentObj.RollNumber || studentObj.RollNumber.trim() === "") {
+                if (studentObj.RegisterNumber && studentObj.RegisterNumber.trim() !== "") {
+                    studentObj.RollNumber = studentObj.RegisterNumber;
+                } else {
+                    // If BOTH are completely missing, skip this invalid row
+                    continue; 
+                }
+            }
+
+            students.push(studentObj);
         }
         return students;
     },
