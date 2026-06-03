@@ -139,38 +139,32 @@ const AdhyoraStudentCache = {
 
     // 2. FOR COMMON CLASSES: Fetch specifically by Year
     async getStudentsByYear(yearStr) {
-        // 🌊 TIER 1: Check RAM (Active Session)
-        if (this.loadedYears.has(yearStr)) {
-            return Array.from(this.ramStore.values()).filter(s => s.Year === yearStr || s.year === yearStr);
-        }
 
-        const q = query(collection(db, "colleges", currentCollegeID, "students"), where("Year", "==", yearStr));
-        let snap;
+    if (this.loadedYears.has(yearStr)) {
+        return Array.from(this.ramStore.values())
+            .filter(s => s.Year === yearStr || s.year === yearStr);
+    }
 
-        // 🌊 TIER 2 & 3: Browser Cache -> Firebase Server
-        try {
-            if (forceServerFetch) throw new Error("Forced Server Sync"); // 🚨 ADD THIS!
-            snap = await getDocsFromCache(q);
-            if (snap.empty) throw new Error("Browser cache is empty");
+    const q = query(
+        collection(db, "colleges", currentCollegeID, "students"),
+        where("Year", "==", yearStr)
+    );
 
-        } catch (e) {
-            // This is the ONLY time you are billed for reads.
-            snap = await getDocs(q);
-            forceServerFetch = false; // 🚨 ADD THIS: Turn it off after fetching!
-        }
+    let snap = await getDocs(q);
+    forceServerFetch = false;
 
-        let results = [];
-        snap.forEach(doc => {
-            let data = { id: doc.id, ...doc.data() };
-            this.ramStore.set(doc.id, data);
-            results.push(data);
-        });
+    let results = [];
 
-        // 🚨 Mark this year as fully loaded so we never pay for it again today
-        this.loadedYears.add(yearStr); 
-        
-        return results;
-    },
+    snap.forEach(doc => {
+        let data = { id: doc.id, ...doc.data() };
+        this.ramStore.set(doc.id, data);
+        results.push(data);
+    });
+
+    this.loadedYears.add(yearStr);
+
+    return results;
+},
 
     // 3. GLOBAL FALLBACK: Fetch all (Only use for cross-year Search Panels like Events)
     async getAllStudents() {
@@ -412,7 +406,9 @@ async function finalizeProfileUI(rawName, email, deptName) {
 // ==========================================
 function getSafeTopic(str) {
     if (!str || str === "All") return "ALL";
-    return str.replace(/[^a-zA-Z0-9]/g, '');
+    // 🚨 FIX: Auto-strip database prefixes so registration and blasts match perfectly
+    let cleanStr = str.replace("DEPT_", ""); 
+    return cleanStr.replace(/[^a-zA-Z0-9]/g, '');
 }
 
 let activeChatRoomListeners = new Map();
@@ -526,11 +522,26 @@ function startInboxListener() {
 }
 
 function IsMessageForMe(targetText, senderID) {
+    // 1. Always show messages you sent yourself
     if (senderID === currentUserID) return true;
     if (!targetText) return false;
-    if (targetText.includes("Everyone")) return true;
-    if (targetText.includes("Teachers (All)")) return true;
-    if (teacherDeptRaw && targetText.includes(`Teachers (${teacherDeptRaw})`)) return true;
+
+    // 2. Normalize the target text to be indestructible against spaces and casing
+    let safeTarget = targetText.replace(/\s+/g, "").toLowerCase();
+    
+    // Catch global broadcasts
+    if (safeTarget.includes("everyone") || safeTarget.includes("teachers(all)")) {
+        return true;
+    }
+    
+    // 3. Normalize the local department variables
+    let safeDeptRaw = (teacherDeptRaw || "").replace("DEPT_", "").replace(/\s+/g, "").toLowerCase();
+    let safeCurrentDept = (currentDeptName || "").replace(/\s+/g, "").toLowerCase();
+
+    // 4. Bulletproof check
+    if (safeDeptRaw && safeTarget.includes(`teachers(${safeDeptRaw})`)) return true;
+    if (safeCurrentDept && safeTarget.includes(`teachers(${safeCurrentDept})`)) return true;
+
     return false;
 }
 
@@ -993,9 +1004,10 @@ async function checkTimetableAllocation(ticket, dateStr) {
     const globalDocID = `${dateStr}_Semester${selectedSem}_GLOBAL`;
 
     try {
-        const globalSnap = await getDoc(doc(db, "colleges", currentCollegeID, "attendance", globalDocID));
-        if(globalSnap.exists()) {
-            const data = globalSnap.data();
+        // 🚨 V2: Read the new lightweight lock sheet instead of GLOBAL
+        const lockSnap = await getDoc(doc(db, "colleges", currentCollegeID, "daily_locks", dateStr));
+        if(lockSnap.exists()) {
+            const data = lockSnap.data();
             if(data.teacher_locks) {
                 let lockedSubj = data.teacher_locks[`p${pIndex}_${currentUserID}`];
                 if(lockedSubj && lockedSubj !== selectedSubject) {
@@ -1379,9 +1391,10 @@ async function loadAttendanceRegister(filterStudentIDs, ticket, trueCategory, da
     attCurrentPeriodEvents.clear();
 
     try {
-        const gSnap = await getDoc(doc(db, "colleges", currentCollegeID, "attendance", globalDocID));
-        if(gSnap.exists() && gSnap.data().student_claims) {
-            let claims = gSnap.data().student_claims;
+        // 🚨 V2: Pull student claims from the daily lock sheet
+        const lockSnap = await getDoc(doc(db, "colleges", currentCollegeID, "daily_locks", dateStr));
+        if(lockSnap.exists() && lockSnap.data().student_claims) {
+            let claims = lockSnap.data().student_claims;
             let prefix = `p${pIndex}_`;
             for(let key in claims) {
                 if(key.startsWith(prefix)) attCurrentPeriodClaims.set(key.substring(prefix.length), claims[key]);
@@ -1622,7 +1635,7 @@ function renderStudentRows(students, existingData, batchTeachersMap, ticket) {
 }
 
 // ==========================================
-// 🚨 SAVE ATTENDANCE ENGINE
+// 🚨 SAVE ATTENDANCE ENGINE (V2: CLOUD QUEUE)
 // ==========================================
 async function saveAttendance() {
     let activeRows = attIsSubstitutePanelOpen ? attSubActiveRows : attMainActiveRows;
@@ -1631,8 +1644,8 @@ async function saveAttendance() {
     if(activeRows.length === 0) return;
     
     document.getElementById("updateProgressModal").classList.add("active");
-    document.getElementById("updateProgressFill").style.width = "0%";
-    document.getElementById("updateStatusText").innerText = "Saving Attendance...";
+    document.getElementById("updateProgressFill").style.width = "20%";
+    document.getElementById("updateStatusText").innerText = "Sending to Server...";
     
     if (attIsSubstitutePanelOpen) {
         document.getElementById(`subCardSaveBtn_${attPendingSubCardId}`).style.pointerEvents = "none";
@@ -1643,188 +1656,55 @@ async function saveAttendance() {
     const dateStr = `${attCurrentDate.getFullYear()}-${String(attCurrentDate.getMonth()+1).padStart(2,'0')}-${String(attCurrentDate.getDate()).padStart(2,'0')}`;
     const selectedSem = document.getElementById("attSemDropdown").value;
     const selectedSubject = document.getElementById("attSubjDropdown").value;
-    const semName = `Semester${selectedSem}`;
-    const semKey = `Semester_${selectedSem}`;
-    const cleanSubjectID = selectedSubject.replace(/ /g, "").replace(/\//g, "-").replace(/\./g, "");
-    const dailyDocID = `${dateStr}_${semName}_${cleanSubjectID}`;
-    const globalDocID = `${dateStr}_${semName}_GLOBAL`;
     const pIndex = parseInt(document.getElementById("attPeriodDropdown").value) + 1;
-    const periodKey = `period_${pIndex}`;
+
+    let presentIDs = [];
+    let absentIDs = [];
+    
+    // Sort students into Present or Absent arrays
+    activeRows.forEach(id => {
+        let el = document.getElementById(`tog_${prefix}${id}`);
+        if(!attCurrentPeriodEvents.has(id)) {
+            if (el.dataset.state === "true") presentIDs.push(id);
+            else absentIDs.push(id);
+        }
+    });
 
     const targetTeacherID = attIsSubstitutePanelOpen ? attPendingSubTeacherID : currentUserID;
     const targetTeacherName = attIsSubstitutePanelOpen ? attPendingSubTeacherName : currentTeacherName;
     const myKey = attCurrentSessionBatchIndex === -1 ? "common" : String(attCurrentSessionBatchIndex);
 
+    // Create a unique submission ID to prevent accidental double-clicks
+    let submissionId = `${dateStr}_P${pIndex}_${myKey}_${currentUserID}`;
+
+    // Build the Queue Ticket
+    let payload = {
+        teacherID: currentUserID,
+        teacherName: targetTeacherName,
+        departmentID: teacherDeptRaw,
+        subject: selectedSubject,
+        category: attSubjectCategories.get(selectedSubject) || "UNKNOWN",
+        semester: `Semester ${selectedSem}`,
+        semesterKey: `Semester_${selectedSem}`,
+        date: dateStr,
+        period: pIndex,
+        batchKey: myKey,
+        isSubstitute: attIsSubstitutePanelOpen,
+        presentStudents: presentIDs,
+        absentStudents: absentIDs,
+        status: "pending",
+        timestamp: serverTimestamp()
+    };
+
     try {
-        const globalRef = doc(db, "colleges", currentCollegeID, "attendance", globalDocID);
-        const subjectRef = doc(db, "colleges", currentCollegeID, "attendance", dailyDocID);
+        document.getElementById("updateProgressFill").style.width = "70%";
         
-        const [gSnap, sSnap] = await Promise.all([getDoc(globalRef), getDoc(subjectRef)]);
+        // Drop it into the Cloud Function Queue!
+        const queueRef = doc(db, "colleges", currentCollegeID, "attendance_submissions", submissionId);
+        await setDoc(queueRef, payload);
 
-        document.getElementById("updateProgressFill").style.width = "30%";
-
-        let gData = gSnap.exists() ? gSnap.data() : {};
-        let sData = sSnap.exists() ? sSnap.data() : {};
-
-        if(gData.teacher_locks) {
-            let tLock = gData.teacher_locks[`p${pIndex}_${currentUserID}`];
-            if(tLock && tLock !== selectedSubject) {
-                alert(`Double Booking: You already marked '${tLock}' for Period ${pIndex}!`); document.getElementById("updateProgressModal").classList.remove("active"); updateMainButtonState(); return;
-            }
-        }
-
-        // 🚨 C# PORT: Department-Wide Lock Check (Common Classes Only)
-        if (attCurrentSessionBatchIndex === -1 && !attIsSubstitutePanelOpen) {
-            if (gData.dept_locks) {
-                let dLock = gData.dept_locks[`p${pIndex}_${teacherDeptRaw}`];
-                if (dLock && dLock.teacherID !== currentUserID) {
-                    let lockedName = dLock.teacherName || "another teacher";
-                    alert(`Conflict: Period ${pIndex} was just claimed by ${lockedName}!`); 
-                    document.getElementById("updateProgressModal").classList.remove("active"); 
-                    updateMainButtonState(); 
-                    return;
-                }
-            }
-        }
-
-        let pData = sData[periodKey] || {};
-        let batchTeachers = pData.batch_teachers || {};
-        let isFirstTimeMarking = !batchTeachers[myKey];
-
-        if(batchTeachers[myKey] && batchTeachers[myKey].id !== currentUserID) {
-            alert(`LOCKED: Batch already marked by ${batchTeachers[myKey].name}`); document.getElementById("updateProgressModal").classList.remove("active"); updateMainButtonState(); return;
-        }
-
-        let attendanceMap = pData.attendance || {};
-        let myBatchPresent = 0; let myBatchTotal = 0;
-
-        // 🚨 Using the correct array and prefix to grab toggles
-        // 🚨 Using the correct array and prefix to grab toggles
-        activeRows.forEach(id => {
-            let el = document.getElementById(`tog_${prefix}${id}`);
-            if(attCurrentPeriodEvents.has(id)) {
-                // 🚨 EXACT C# PORT: Forces Firebase to wipe the field from the cloud database
-                attendanceMap[id] = deleteField();
-            } else {
-                let isPresent = el.dataset.state === "true";
-                attendanceMap[id] = isPresent;
-                if(isPresent) myBatchPresent++;
-                myBatchTotal++;
-            }
-        });
-
-        let myBatchAbsent = myBatchTotal - myBatchPresent;
-        let globalTotal = Object.keys(attendanceMap).length;
-        let globalPresent = Object.values(attendanceMap).filter(v => v===true).length;
-        let globalAbsent = globalTotal - globalPresent;
-
-        let displayMarkerName = currentTeacherName;
-        if(targetTeacherID !== currentUserID) displayMarkerName += " (Sub)";
-
-        batchTeachers[myKey] = { name: displayMarkerName, id: currentUserID, timestamp: serverTimestamp() };
-
-        let periodPayload = {
-            subject: selectedSubject, category: attSubjectCategories.get(selectedSubject) || "UNKNOWN",
-            markedByTeacherID: currentUserID, markedByTeacherName: displayMarkerName,
-            batch_teachers: batchTeachers, timestamp: serverTimestamp(),
-            stats: { totalStudents: globalTotal, presentCount: globalPresent, absentCount: globalAbsent },
-            attendance: attendanceMap
-        };
-
-        if((periodPayload.category.includes("MJD") || periodPayload.category.includes("CORE")) && !attIsSubstitutePanelOpen) periodPayload.departmentID = teacherDeptRaw;
-        sData[periodKey] = periodPayload;
-        sData.date = dateStr; sData.semester = `Semester ${selectedSem}`;
-
-        let allStudentPeriods = gData.student_periods || {};
-        let oldStrictScores = gData.strict_scores_cache || {};
-        let newStrictScoresCache = {...oldStrictScores};
-        let studentClaims = gData.student_claims || {};
-
-        document.getElementById("updateProgressFill").style.width = "60%";
-
-        let batch = writeBatch(db);
-        let batchPromises = [];
-        let opCount = 0;
-
-        if(isFirstTimeMarking) {
-            const tRef = doc(db, "colleges", currentCollegeID, "teachers", currentUserID);
-            batch.update(tRef, { 
-                "total_hours_taught": increment(1), 
-                [`semester_hours.${semKey}.total`]: increment(1),
-                [`semester_hours.${semKey}.subjects.${selectedSubject}`]: increment(1)
-            });
-            opCount++;
-        }
-
-        // 🚨 THE FIX: Changed 'attActiveRows' to 'activeRows' here!
-        for(let id of activeRows) {
-            if(attCurrentPeriodClaims.has(id) && attCurrentPeriodClaims.get(id) !== selectedSubject) {
-                alert("Save aborted. Students locked by another subject."); document.getElementById("updateProgressModal").classList.remove("active"); updateMainButtonState(); return;
-            }
-            if(attCurrentPeriodEvents.has(id)) continue;
-
-            studentClaims[`p${pIndex}_${id}`] = selectedSubject;
-            
-            let el = document.getElementById(`tog_${prefix}${id}`);
-            let isPresent = el.dataset.state === "true";
-            let initPresent = el.dataset.init === "true";
-            let isNew = el.dataset.new === "true";
-
-            let simpleChange = 0; let totalChange = isNew ? 1 : 0;
-            if(isNew) { simpleChange = isPresent ? 1 : 0; } 
-            else { if(!initPresent && isPresent) simpleChange = 1; else if(initPresent && !isPresent) simpleChange = -1; }
-
-            let stuRef = doc(db, "colleges", currentCollegeID, "students", id);
-            let updates = {};
-
-            if(simpleChange !== 0) updates[`attendance_stats.${semKey}.${cleanSubjectID}.present`] = increment(simpleChange);
-            if(totalChange !== 0) updates[`attendance_stats.${semKey}.${cleanSubjectID}.total`] = increment(totalChange);
-
-            let myPeriods = allStudentPeriods[id] || {};
-            myPeriods[`p${pIndex}`] = isPresent;
-            allStudentPeriods[id] = myPeriods;
-
-            let mLoss = false; let eLoss = false;
-            [1,2,3].forEach(p => { if(myPeriods[`p${p}`] === false) mLoss = true; });
-            [4,5,6].forEach(p => { if(myPeriods[`p${p}`] === false) eLoss = true; });
-            let newStrict = 0; if(!mLoss) newStrict += 0.5; if(!eLoss) newStrict += 0.5;
-
-            newStrictScoresCache[id] = newStrict;
-            let isNewDay = oldStrictScores[id] === undefined;
-            let oldStrict = isNewDay ? 0 : parseFloat(oldStrictScores[id]);
-            let strictDelta = newStrict - oldStrict;
-
-            if(strictDelta !== 0) updates[`attendance_stats.${semKey}.Strict_Global.present`] = increment(strictDelta);
-            if(isNewDay) updates[`attendance_stats.${semKey}.Strict_Global.total`] = increment(1);
-
-            if(Object.keys(updates).length > 0) {
-                batch.update(stuRef, updates);
-                opCount++;
-                if(opCount >= 400) { batchPromises.push(batch.commit()); batch = writeBatch(db); opCount = 0; }
-            }
-        }
-
-        batch.set(subjectRef, sData, {merge:true});
-        
-        let tLocks = gData.teacher_locks || {};
-        tLocks[`p${pIndex}_${currentUserID}`] = selectedSubject;
-        
-        let gUpdateObj = { student_periods: allStudentPeriods, strict_scores_cache: newStrictScoresCache, student_claims: studentClaims, teacher_locks: tLocks };
-
-        if(attCurrentSessionBatchIndex === -1 && !attIsSubstitutePanelOpen) {
-            let dLocks = gData.dept_locks || {};
-            dLocks[`p${pIndex}_${teacherDeptRaw}`] = { subject: selectedSubject, teacherName: currentTeacherName, teacherID: currentUserID };
-            gUpdateObj.dept_locks = dLocks;
-        }
-
-        batch.set(globalRef, gUpdateObj, {merge:true});
-        batchPromises.push(batch.commit());
-
-        document.getElementById("updateProgressFill").style.width = "90%";
-        await Promise.all(batchPromises);
-        
         document.getElementById("updateProgressFill").style.width = "100%";
-        document.getElementById("updateStatusText").innerHTML = `Attendance Saved!<br><span style="font-size:14px; color:#10b981;">(P: ${myBatchPresent}, A: ${myBatchAbsent})</span>`;
+        document.getElementById("updateStatusText").innerHTML = `Attendance Sent!<br><span style="font-size:14px; color:#10b981;">(P: ${presentIDs.length}, A: ${absentIDs.length})</span>`;
         
         setTimeout(() => {
             document.getElementById("updateProgressModal").classList.remove("active");
@@ -1833,7 +1713,7 @@ async function saveAttendance() {
                 document.getElementById(`subCardIcon_${attPendingSubCardId}`).style.transform = "rotate(0deg)";
                 document.getElementById(`subCardSaveBtn_${attPendingSubCardId}`).style.pointerEvents = "auto";
                 attIsSubstitutePanelOpen = false;
-                updateMainButtonState(); // Re-enables the main button automatically!
+                updateMainButtonState();
             } else {
                 document.getElementById("attSaveBtn").style.pointerEvents = "auto";
                 loadSessionData(); 
@@ -1842,7 +1722,7 @@ async function saveAttendance() {
 
     } catch(e) {
         console.error("Save Crash", e);
-        document.getElementById("updateStatusText").innerText = "Save Failed!";
+        document.getElementById("updateStatusText").innerText = "Network Error! Please try again.";
         setTimeout(() => { 
             document.getElementById("updateProgressModal").classList.remove("active");
             if(attIsSubstitutePanelOpen) document.getElementById(`subCardSaveBtn_${attPendingSubCardId}`).style.pointerEvents = "auto";
@@ -3542,8 +3422,14 @@ async function fetchNextStudentBatch(searchTerm) {
             let statusColor = status === "Approved" ? "var(--brand-red)" : "var(--text-muted)";
             
             let tokensArr = []; 
-            if (s.fcmTokens) tokensArr = s.fcmTokens; 
+            // 1. Grab Mobile Tokens safely
+            if (s.fcmTokens) tokensArr = [...s.fcmTokens]; 
             else if (s.fcmToken) tokensArr = [s.fcmToken];
+
+            // 2. 🚨 ADDED: Grab Web Tokens too!
+            if (s.webFcmTokens) tokensArr.push(...s.webFcmTokens);
+            else if (s.webFcmToken) tokensArr.push(s.webFcmToken);
+
             let tokensJson = JSON.stringify(tokensArr).replace(/"/g, '&quot;');
             
             let isSameDept = (sDeptRaw === teacherDeptRaw || sDeptFormatted === teacherDeptRaw);
@@ -3806,8 +3692,7 @@ function SD_UpdateWaveUI(percentage) {
     circleFill.style.setProperty('--wave-color', col);
     circleFill.style.top = `${105 - visualPercent}%`; 
     
-    // 🚨 PERFORMANCE FIX: Force GPU Acceleration on the Liquid Wave!
-    circleFill.style.transform = "translateZ(0)";
+    // 🚨 FIX: Removed the inline transform override so the CSS rotation animation can run!
     circleFill.style.willChange = "transform, top"; 
     
     document.getElementById("sdCircleText").innerHTML = `<span style="font-size: 11px; display: block; line-height: 1; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px;">Projected</span><span id="sdCirclePercentVal" style="font-size: 26px;">${txt}</span>`;
@@ -7557,23 +7442,28 @@ async function executeCreateAssignment() {
 
         const cachedSubs = await AdhyoraMasterCache.getSubjects(currentCollegeID, db);
         for (let data of cachedSubs) {
-            let dName = data.name || data.Name || "";
+            // 🚨 Check subjectName just like studentApp.js
+            let dName = data.Name || data.name || data.subjectName || "";
 
             if (dName.replace(/\s+/g, "").toLowerCase() === selectedSubject.replace(/\s+/g, "").toLowerCase()) {
-                let type = (data.type || data.Type || "").toUpperCase();
-                if (type.includes("MJD") || type.includes("CORE") || type.includes("MAJOR")) {
+                
+                // 🚨 Strip spaces from type
+                let type = (data.Type || data.type || "").toUpperCase().replace(/\s+/g, "");
+                
+                if (type.includes("MJD") || type.includes("CORE") || type.includes("MAJOR") || type.includes("TUTORIAL")) {
                     isMjdOrCore = true;
                 }
                 
-                let fetchedDept = data.Department || data.department || "";
+                // 🚨 Check departmentID just like studentApp.js
+                let fetchedDept = data.Department || data.department || data.departmentID || "";
                 if (fetchedDept) {
-                    let safeFetch = fetchedDept.replace(/\s+/g, "").toLowerCase();
-                    let safeCurrent = currentDeptName.replace(/\s+/g, "").toLowerCase();
+                    let safeFetch = fetchedDept.replace(/\s+/g, "").toLowerCase().replace("dept_", "");
+                    let safeCurrent = currentDeptName.replace(/\s+/g, "").toLowerCase().replace("dept_", "");
                     
-                    if (safeCurrent.includes(safeFetch) || safeFetch.includes(safeCurrent)) {
+                    if (safeFetch === safeCurrent || (safeCurrent.includes(safeFetch) && safeFetch.length > 3) || (safeFetch.includes(safeCurrent) && safeCurrent.length > 3)) {
                         targetDeptName = currentDeptName; 
                     } else {
-                        targetDeptName = fetchedDept; 
+                        targetDeptName = fetchedDept.replace("DEPT_", ""); 
                     }
                 }
                 break;
