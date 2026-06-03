@@ -1083,6 +1083,74 @@ body.dark-mode #feeLiveStructureGrid span {
     color: #f87171 !important;
 }
 
+/* =========================================
+   🎨 PRINCIPAL NAV ART & DARK MODE GLOW
+   ========================================= */
+.icon-nav {
+    position: relative;
+    overflow: hidden; /* Keeps the art perfectly inside the rounded pill */
+    z-index: 10;
+}
+
+/* Light Mode Topographic Art */
+.icon-nav::before {
+    content: '';
+    position: absolute;
+    inset: 0; /* Flawless here because the Principal nav doesn't scroll! */
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 0;
+    background-color: var(--brand-green);
+    opacity: 0.15; /* Slightly lighter opacity for the green theme */
+    
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='56'%3E%3Cpath d='M0 28 Q50 8 100 28 T200 28' stroke='black' stroke-width='1.2' fill='none'/%3E%3Cpath d='M0 38 Q50 18 100 38 T200 38' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 18 Q50 3 100 18 T200 18' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 48 Q50 32 100 48 T200 48' stroke='black' stroke-width='0.6' fill='none'/%3E%3Cpath d='M0 8 Q50 -3 100 8 T200 8' stroke='black' stroke-width='0.6' fill='none'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='56'%3E%3Cpath d='M0 28 Q50 8 100 28 T200 28' stroke='black' stroke-width='1.2' fill='none'/%3E%3Cpath d='M0 38 Q50 18 100 38 T200 38' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 18 Q50 3 100 18 T200 18' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 48 Q50 32 100 48 T200 48' stroke='black' stroke-width='0.6' fill='none'/%3E%3Cpath d='M0 8 Q50 -3 100 8 T200 8' stroke='black' stroke-width='0.6' fill='none'/%3E%3C/svg%3E");
+    -webkit-mask-size: 200px 56px;
+    mask-size: 200px 56px;
+    -webkit-mask-repeat: repeat-x;
+    mask-repeat: repeat-x;
+}
+
+/* Elevate the icons above the background art */
+.nav-icon-btn {
+    position: relative;
+    z-index: 2;
+}
+
+/* --- Dark Mode Frosted Glass & Hide Art --- */
+body.dark-mode .icon-nav::before {
+    display: none;
+}
+
+body.dark-mode .icon-nav {
+    background: rgba(30, 41, 59, 0.4) !important; 
+    backdrop-filter: blur(24px) saturate(180%) brightness(1.1) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(180%) brightness(1.1) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 -1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+/* --- Green Glow Behind the Nav in Dark Mode --- */
+.icon-nav-container::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    height: 100%;
+    background: var(--brand-green);
+    filter: blur(35px);
+    opacity: 0; 
+    border-radius: 50%;
+    z-index: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+body.dark-mode .icon-nav-container::before {
+    opacity: 0.35; /* Glows green in dark mode */
+}
+
 /* ==========================================================================
    MASTER MOBILE OVERRIDES (Everything under 900px consolidated)
    ========================================================================== */
@@ -1132,15 +1200,6 @@ body.dark-mode #feeLiveStructureGrid span {
        margin-bottom: 15px;
        padding: 0 10px;
        overflow: visible; /* Important: allows the badge to exist outside if needed without scrolling */
-   }
-   
-   /* Responsive adjustment for badges on very small screens */
-   @media (max-width: 350px) {
-       #ultimateBadge {
-           right: -25px !important; /* Pull it closer if screen is tiny */
-           font-size: 7px !important;
-           padding: 1px 4px !important;
-       }
    }
 
     .nav-grid {
@@ -1459,5 +1518,47 @@ body.dark-mode #feeLiveStructureGrid span {
 
     body.dark-mode .main-content {
         background-color: var(--bg-base) !important;
+    }
+}
+
+/* =========================================
+   👑 ULTIMATE BADGE (DYNAMIC THEME & RESPONSIVE)
+   ========================================= */
+.ultimate-badge {
+    position: absolute;
+    top: -8px;
+    right: -25px; /* Pulls it closer to the text */
+    
+    /* 🚨 MAGIC: Dynamically creates a darker shade of the Principal's green theme! */
+    background: color-mix(in srgb, var(--brand-green) 60%, black);
+    
+    color: #ffffff;
+    font-size: 8px;
+    font-weight: 800;
+    padding: 3px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+    z-index: 10;
+    white-space: nowrap;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--brand-green);
+}
+
+.ultimate-badge i {
+    margin-right: 3px;
+    font-size: 7px;
+    color: #facc15; /* Gold crown */
+}
+
+/* 🚨 FOLDABLE PHONE FIX (Screens smaller than 340px) */
+@media (max-width: 340px) {
+    .ultimate-badge {
+        right: -10px; /* Pull it almost completely inside the text */
+        top: -12px;   /* Push it up slightly to avoid covering letters */
+        font-size: 7px;
+        padding: 2px 5px;
+    }
+    .logo-text {
+        font-size: 28px !important; /* Shrink logo slightly to make room */
     }
 }
