@@ -1199,7 +1199,14 @@ window.TL_UpdateStatus = async (tID, newStatus) => {
         // Send Push Notification
         let teacher = cachedTeachers.find(t => t.id === tID);
         if (teacher) {
-            let tokens = teacher.fcmTokens || (teacher.fcmToken ? [teacher.fcmToken] : []);
+            // 🚨 THE FIX: Grab BOTH Mobile and Web Tokens securely!
+            let tokens = [];
+            if (teacher.fcmTokens) tokens.push(...teacher.fcmTokens);
+            else if (teacher.fcmToken) tokens.push(teacher.fcmToken);
+            
+            if (teacher.webFcmTokens) tokens.push(...teacher.webFcmTokens);
+            else if (teacher.webFcmToken) tokens.push(teacher.webFcmToken);
+
             if (tokens.length > 0) {
                 fetch(APPS_SCRIPT_URL, {
                     method: "POST", mode: "no-cors",
@@ -3964,10 +3971,19 @@ window.EVT_Accept = async (id) => {
 
         showRcToast("✅ Event Approved & Attendance Saved!");
 
-        // Send Push Notification (Leave this in frontend to not break your script)
+        // Send Push Notification
         let tSnap = await getDoc(doc(db, "colleges", currentCollegeID, "teachers", res.data.teacherId));
         if (tSnap.exists()) {
-            let tokens = tSnap.data().fcmTokens || (tSnap.data().fcmToken ? [tSnap.data().fcmToken] : []);
+            let tData = tSnap.data();
+            
+            // 🚨 THE FIX: Grab BOTH Mobile and Web Tokens securely!
+            let tokens = [];
+            if (tData.fcmTokens) tokens.push(...tData.fcmTokens);
+            else if (tData.fcmToken) tokens.push(tData.fcmToken);
+            
+            if (tData.webFcmTokens) tokens.push(...tData.webFcmTokens);
+            else if (tData.webFcmToken) tokens.push(tData.webFcmToken);
+
             if (tokens.length > 0) {
                 fetch(APPS_SCRIPT_URL, {
                     method: "POST", mode: "no-cors",
@@ -5944,6 +5960,44 @@ window.ExecuteSaveRazorpayKeys = async function() {
     } catch(e) {
         showRcToast("❌ Error: " + e.message);
     }
+}
+
+
+// ==========================================
+// 🚀 ENTER KEY BINDINGS (KEYBOARD & MOBILE)
+// ==========================================
+
+// 1. Lock Screen PIN (App Boot & Auto-Lock)
+const mainPinInput = document.getElementById("lockPinInput");
+if (mainPinInput) {
+    mainPinInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault(); // Stops the keyboard from jumping/refreshing
+            document.getElementById("btnLockSubmit").click();
+        }
+    });
+}
+
+// 2. Action Verification PIN (Deleting, Moving, Exporting, etc.)
+const actionPinInput = document.getElementById("pinInput");
+if (actionPinInput) {
+    actionPinInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            document.getElementById("btnVerifyPin").click();
+        }
+    });
+}
+
+// 3. Re-Auth Password Input (Forgot PIN)
+const reAuthInput = document.getElementById("reAuthPasswordInput");
+if (reAuthInput) {
+    reAuthInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            document.getElementById("btnReAuthSubmit").click();
+        }
+    });
 }
 
 // ==========================================
