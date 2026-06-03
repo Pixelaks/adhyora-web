@@ -1,0 +1,361 @@
+/* =======================================================
+   💸 ADHYORA ACCOUNTANT PORTAL SPECIFIC STYLES
+   ======================================================= */
+html { scroll-behavior: smooth; }
+
+.acc-stat-card {
+    background: var(--bg-base); 
+    border: 1px solid var(--border-color); 
+    border-radius: 15px; 
+    padding: 20px; 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03); 
+    flex: 1; 
+    min-width: 200px; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 10px;
+}
+
+.acc-stat-title { font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; }
+.acc-stat-value { font-size: 28px; font-weight: 800; color: var(--text-green); }
+
+.acc-stats-grid { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px; }
+
+/* The Blur Lock Screen */
+#pendingLockOverlay {
+    position: fixed; inset: 0; 
+    background: rgba(15, 23, 42, 0.85); 
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    z-index: 999999; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+#pendingLockOverlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+.lock-icon { font-size: 60px; color: var(--brand-green); margin-bottom: 20px; text-shadow: 0 0 20px rgba(74, 222, 128, 0.5); }
+.lock-title { color: white; font-family: 'Yatra One', cursive; letter-spacing: 2px; font-size: 32px; margin-bottom: 10px; }
+.lock-desc { color: #cbd5e1; max-width: 400px; line-height: 1.6; font-size: 14px; margin-bottom: 30px; font-family: 'Poppins', sans-serif; }
+.lock-btn { background: transparent; border: 1px solid #ef4444; color: #ef4444; padding: 10px 25px; border-radius: 12px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+.lock-btn:hover { background: #ef4444; color: white; }
+
+/* Layout Adjustments */
+.view-header { color: var(--text-green); font-family: 'Yatra One', cursive; font-size: 32px; margin-bottom: 20px; letter-spacing: 1px; }
+
+.acc-profile-footer { margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 10px; }
+.acc-profile-info { display: flex; align-items: center; gap: 10px; padding: 10px; }
+.acc-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--bg-grid-color); color: var(--brand-green); display: flex; justify-content: center; align-items: center; font-size: 18px; }
+.acc-name { font-weight: bold; color: var(--text-green); font-size: 13px; }
+.acc-role { font-size: 11px; color: #64748b; }
+
+.acc-recent-activity { background: var(--bg-base); border: 1px solid var(--border-color); border-radius: 15px; padding: 20px; flex: 1; }
+.activity-list { height: 100%; max-height: 400px; overflow-y: auto; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+
+/* 🚨 Strict Box Sizing so padding doesn't overflow inputs */
+.acc-search-input { width: 100%; padding: 12px 15px; border-radius: 12px; border: 1px solid #cbd5e1; background: var(--bg-base); color: var(--text-green); outline: none; font-family: 'Poppins'; font-weight: 600; margin-bottom: 20px; box-sizing: border-box !important; max-width: 100%; }
+.acc-search-input:focus { border-color: var(--brand-green); }
+
+.acc-back-btn { align-self: flex-start; background: #e2e8f0; color: #334155; padding: 8px 15px; border-radius: 8px; font-size: 13px; font-weight: bold; margin-bottom: 15px; cursor: pointer; transition: 0.2s; border: none; }
+.acc-back-btn:active { transform: scale(0.95); }
+
+.acc-student-header { background: var(--bg-base); border: 1px solid var(--border-color); border-radius: 15px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
+.acc-stu-name { color: var(--text-green); font-size: 22px; margin-bottom: 5px; text-transform: uppercase; }
+.acc-stu-detail { color: #64748b; font-size: 13px; margin-bottom: 2px; }
+.acc-stu-detail.bold { color: #334155; font-weight: bold; }
+
+.acc-ledger-container { background: var(--bg-base); border: 1px solid var(--border-color); border-radius: 15px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); display: flex; flex-direction: column; flex: 1; }
+.acc-ledger-header { display: flex; justify-content: space-between; align-items: center; background: var(--bg-grid-color); padding: 12px; border-radius: 8px; margin-bottom: 15px; flex-shrink: 0; }
+.acc-ledger-header .title { font-weight: bold; color: var(--text-green); font-size: 16px; }
+.acc-export-btn { background: var(--brand-green); color: white; border: none; padding: 6px 15px; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+.acc-export-btn:active { transform: scale(0.95); }
+.acc-ledger-list { display: flex; flex-direction: column; gap: 10px; flex: 1; overflow-y: auto; padding-right: 5px; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+
+/* 🚨 CSS GRID FOR LEDGER SUMMARY (FIXES BREATHING SPACE) */
+.ledger-summary-box { background: rgba(74, 222, 128, 0.05); border: 1px dashed var(--brand-green); border-radius: 12px; padding: 15px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; align-items: center; }
+.summary-col { display: flex; flex-direction: column; gap: 4px; }
+.summary-col.bordered { border-left: 1px solid rgba(100,116,139,0.2); border-right: 1px solid rgba(100,116,139,0.2); }
+.summary-lbl { color:#64748b; font-size:10px; text-transform:uppercase; font-weight:bold; letter-spacing: 0.5px; }
+.summary-val { font-size:16px; font-weight: bold; word-break: break-word; }
+.summary-val.amt-due { color: #1e293b; }
+.summary-val.amt-paid { color: var(--brand-green); }
+.summary-val.amt-rem { color: #ef4444; }
+
+/* Utilities */
+.acc-toast { position: fixed; bottom: -100px; left: 50%; transform: translateX(-50%); background: #1e293b; color: white; padding: 12px 25px; border-radius: 30px; font-size: 13px; font-weight: bold; box-shadow: 0 10px 25px rgba(0,0,0,0.2); transition: bottom 0.3s; z-index: 999999; text-align: center; width: max-content; max-width: 90vw; }
+.acc-loader-overlay { position: fixed; inset: 0; background: rgba(11, 17, 30, 0.85); backdrop-filter: blur(5px); z-index: 99999; display: flex; flex-direction: column; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+.acc-loader-overlay .spinner { border: 4px solid rgba(255, 255, 255, 0.2); border-top: 4px solid #2ecc71; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+.acc-loader-overlay .spinner-text { color: #ffffff; font-size: 16px; font-weight: 600; letter-spacing: 1px; }
+
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* ==========================================================================
+   🌙 DARK MODE INJECTIONS & OVERRIDES
+   ========================================================================== */
+body.dark-mode .acc-stat-card,
+body.dark-mode .acc-recent-activity,
+body.dark-mode .acc-student-header,
+body.dark-mode .acc-ledger-container { background-color: #1e293b !important; border-color: #334155 !important; }
+
+body.dark-mode .acc-search-input { background-color: #0f172a !important; border-color: #334155 !important; }
+
+/* 🚨 Mute Dropdown Options Text */
+body.dark-mode select.acc-search-input { color: #94a3b8 !important; }
+body.dark-mode select.acc-search-input option { background-color: #0f172a !important; color: #cbd5e1 !important; }
+
+/* 🚨 Back button muting */
+body.dark-mode .acc-back-btn { background-color: #334155 !important; color: #cbd5e1 !important; }
+
+/* 🚨 Convert pure white DIV background colors for Voided blocks to dark transparent tints */
+body.dark-mode div[style*="background:#fff5f5"], body.dark-mode div[style*="background: #fff5f5"],
+body.dark-mode div[style*="background:#fef2f2"], body.dark-mode div[style*="background: #fef2f2"] {
+    background-color: rgba(239, 68, 68, 0.1) !important; border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+/* 🚨 Convert inline SPAN badges (Paid/Unpaid/Partial) to soft neon dark-theme styles */
+body.dark-mode span[style*="background:#dcfce7"], body.dark-mode span[style*="background: #dcfce7"] { background-color: rgba(34, 197, 94, 0.15) !important; color: #4ade80 !important; border: 1px solid rgba(34, 197, 94, 0.3) !important; }
+body.dark-mode span[style*="background:#fef2f2"], body.dark-mode span[style*="background: #fef2f2"] { background-color: rgba(239, 68, 68, 0.15) !important; color: #f87171 !important; border: 1px solid rgba(239, 68, 68, 0.3) !important; }
+body.dark-mode span[style*="background:#fef3c7"], body.dark-mode span[style*="background: #fef3c7"] { background-color: rgba(245, 158, 11, 0.15) !important; color: #fbbf24 !important; border: 1px solid rgba(245, 158, 11, 0.3) !important; }
+
+/* 🚨 FIX: Force text coloring inside the Ledger Box to be a SOFTER Slate Silver (#cbd5e1) */
+body.dark-mode .acc-ledger-container strong,
+body.dark-mode .acc-ledger-container b { color: #cbd5e1 !important; }
+
+/* Protect Red/Green Overrides */
+body.dark-mode .acc-ledger-container strong[style*="color:#ef4444"], 
+body.dark-mode .acc-ledger-container strong[style*="color: #ef4444"],
+body.dark-mode .acc-ledger-container b[style*="color:#ef4444"], 
+body.dark-mode .acc-ledger-container b[style*="color: #ef4444"] { color: #f87171 !important; }
+
+body.dark-mode .acc-ledger-container strong[style*="color:var(--brand-green)"], 
+body.dark-mode .acc-ledger-container strong[style*="color: var(--brand-green)"],
+body.dark-mode .acc-ledger-container b[style*="color:var(--brand-green)"], 
+body.dark-mode .acc-ledger-container b[style*="color: var(--brand-green)"] { color: #4ade80 !important; }
+
+/* 🚨 FIX: Ensure the Paid and Remaining stats KEEP their green/red colors in dark mode! */
+body.dark-mode .summary-val.amt-due { color: #cbd5e1 !important; } /* Soft silver */
+body.dark-mode .summary-val.amt-paid { color: #4ade80 !important; } /* Neon green */
+body.dark-mode .summary-val.amt-rem { color: #f87171 !important; } /* Neon red */
+
+/* Target inline text colors */
+body.dark-mode *[style*="color:var(--text-main)"] { color: #cbd5e1 !important; }
+body.dark-mode div[style*="background:#fff5f5"] div, body.dark-mode div[style*="background: #fff5f5"] div { color: #fca5a5 !important; }
+
+/* 🚨 Collect Button Dark Mode Override */
+body.dark-mode button[onclick*="PromptCollectOffline"] {
+    background-color: rgba(34, 197, 94, 0.15) !important;
+    color: #4ade80 !important;
+    border: 1px solid rgba(34, 197, 94, 0.4) !important;
+}
+
+/* 🚨 FIX: Void Button Dark Mode Override */
+body.dark-mode button[onclick*="VoidOfflineTransaction"] {
+    background-color: #560d0d !important;
+    color: #fca5a5 !important; /* Soft red text to stay readable against the dark background */
+    border: 1px solid #7f1d1d !important; /* Darker red border */
+}
+
+
+/* ==========================================================================
+   📱 MOBILE RESPONSIVE OVERRIDES
+   ========================================================================== */
+@media (max-width: 900px) {
+    html, body { height: 100%; overflow: hidden !important; }
+    
+    .dashboard-wrapper { flex-direction: column !important; height: 100dvh !important; max-height: 100dvh !important; overflow: hidden !important; }
+    .sidebar { width: 100% !important; flex: 1 !important; border-right: none !important; padding: 20px !important; padding-bottom: 120px !important; justify-content: center !important; overflow-y: auto !important; }
+    .sidebar.mobile-hidden { display: none !important; }
+    .nav-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; max-width: 500px; margin: 0 auto; }
+    .menu-btn { flex-direction: row-reverse; justify-content: center; gap: 10px; padding: 25px 10px; text-align: center; }
+    .acc-profile-footer { display: none !important; }
+
+    .main-content { display: none; flex: 1 1 0% !important; flex-direction: column !important; min-height: 0 !important; padding: 15px !important; padding-bottom: calc(80px + env(safe-area-inset-bottom)) !important; box-sizing: border-box !important; overflow: hidden !important; }
+    .main-content.mobile-active { display: flex !important; }
+    .welcome-card { flex: 1 1 0% !important; min-height: 0 !important; margin: 0 !important; overflow: hidden !important; display: flex !important; flex-direction: column !important; }
+
+    /* 🚀 CRITICAL FIX: Ensure all views can actually scroll vertically, overriding the hidden locks! */
+    .dashboard-view { flex: 1 1 0px !important; height: auto !important; min-height: 0 !important; overflow-y: auto !important; overflow-x: hidden !important; padding-bottom: 20px !important; -webkit-overflow-scrolling: touch !important; box-sizing: border-box !important; }
+    .dashboard-view .scrollable-list { min-height: 0 !important; flex: 1 1 0px !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch !important; padding-bottom: 20px !important; }
+}
+
+/* 🚨 FIX: FOLD PHONE / NARROW SCREEN RESPONSIVE FIXES */
+@media (max-width: 500px) {
+    .view-header { font-size: 26px; width: 100%; }
+    
+    /* 🚨 FIX: Smart Grid for Stats (Bulletproof Mobile & Fold Phones) */
+    .acc-stats-grid {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)) !important;
+        gap: 12px !important;
+        padding-bottom: 0 !important;
+    }
+
+    .acc-stat-card {
+        width: 100% !important;
+        min-width: 0 !important;
+        padding: 15px 10px !important;
+        gap: 5px !important;
+        align-items: center !important; 
+        justify-content: center !important;
+    }
+
+    .acc-stat-title { 
+        font-size: 10px !important; 
+        line-height: 1.2; 
+        text-align: center; 
+    }
+
+    .acc-stat-value { 
+        font-size: 18px !important;
+        text-align: center; 
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+    }
+    
+    /* 🚨 FIX: Fold Phone Grid Overrides for Summary Box */
+    .ledger-summary-box {
+        grid-template-columns: 1fr !important;
+        gap: 15px !important;
+        padding: 20px !important;
+    }
+    .summary-col.bordered {
+        border-left: none !important;
+        border-right: none !important;
+        border-top: 1px solid rgba(100,116,139,0.2) !important;
+        border-bottom: 1px solid rgba(100,116,139,0.2) !important;
+        padding: 10px 0 !important;
+    }
+    
+    /* 🚨 FIX: Completely lock the Search Bar inside its box on Fold Phones */
+    .acc-recent-activity > div:first-child > div {
+        width: 100% !important;
+        flex-direction: column !important;
+    }
+    #ledgerSearchInput, #ledgerMethodFilter {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    
+    /* Transaction Overflow Fixes */
+    .acc-ledger-container * { word-wrap: break-word; }
+    .acc-ledger-container div[style*="padding:10px; background:"] { flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; }
+    .acc-ledger-container div[style*="padding:10px; background:"] > div:nth-child(2) { width: 100% !important; justify-content: space-between !important; flex-wrap: wrap !important; gap: 8px !important; }
+    .acc-ledger-container div[style*="margin-left:20px"] { margin-left: 0 !important; margin-top: 8px !important; padding: 10px !important; border-radius: 8px !important; border-left: 3px dashed #fca5a5 !important; }
+}
+
+/* =======================================================
+   📉 EXPENSE TRACKER STYLES
+   ======================================================= */
+#collegeExpenseForm .acc-search-input {
+    background: rgba(241, 245, 249, 0.5); /* Slight tint to differentiate from search bars */
+}
+
+body.dark-mode #collegeExpenseForm .acc-search-input {
+    background: rgba(15, 23, 42, 0.5) !important;
+}
+
+body.dark-mode div[style*="background:var(--bg-base)"] span[style*="color:#ef4444"] {
+    color: #f87171 !important; /* Soften the red in dark mode */
+}
+
+body.dark-mode #expenseTrackerView .acc-stat-card {
+    background: rgba(239, 68, 68, 0.05) !important;
+    border-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+/* =======================================================
+   📈 ANALYTICS & CHART RESPONSIVENESS
+   ======================================================= */
+#expenseWaveChart {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* 🚀 CRITICAL FIX: Forbid Flexbox from squishing the chart containers on mobile */
+div[style*="height: 300px"] {
+    min-height: 300px !important;
+    flex-shrink: 0 !important; /* Forces the browser to respect the height */
+}
+
+/* 🚀 CRITICAL FIX: Fixes pie charts blowing out the edges of narrow Fold screens */
+div[style*="min-width: 250px"] {
+    min-width: 100% !important; 
+}
+
+body.dark-mode #expenseTrackerView .acc-stat-card[style*="border-color: #10b981"] {
+    background: rgba(16, 185, 129, 0.1) !important;
+    border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+body.dark-mode #expenseTrackerView .acc-stat-card[style*="border-color: #ef4444"] {
+    background: rgba(239, 68, 68, 0.1) !important;
+    border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+body.dark-mode #expenseTrackerView .acc-stat-card[style*="border-color: #3b82f6"] {
+    background: rgba(59, 130, 246, 0.1) !important;
+    border-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+/* =======================================================
+   🚀 EMERGENCY FOLD PHONE OVERRIDES (FORM & HISTORY)
+   ======================================================= */
+@media (max-width: 500px) {
+    /* 1. Stop the Ledger History box from getting squished */
+    .acc-recent-activity {
+        min-height: 400px !important;
+        flex-shrink: 0 !important;
+        height: auto !important;
+    }
+
+    /* 2. Fix the Log Transaction form so inputs stop overflowing */
+    #collegeExpenseForm {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+    }
+    
+    #collegeExpenseForm > div {
+        min-width: 100% !important;
+        width: 100% !important;
+        flex: none !important;
+    }
+
+    /* 3. Make the submit button full width for easier tapping */
+    #btnLogTransaction {
+        width: 100% !important;
+        margin-top: 5px !important;
+    }
+}
+
+/* =======================================================
+   🚀 EMERGENCY FOLD PHONE OVERRIDES (LEDGER TRANSACTIONS)
+   ======================================================= */
+@media (max-width: 500px) {
+    /* 1. Force the transaction row to stack vertically */
+    #expenseListContainer > div {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 12px !important;
+        padding: 15px !important;
+    }
+
+    /* 2. Ensure the left side (Text/Descriptions) takes full width and wraps */
+    #expenseListContainer > div > div:first-child {
+        width: 100% !important;
+    }
+    
+    #expenseListContainer * {
+        word-break: break-word !important;
+        white-space: normal !important;
+    }
+
+    /* 3. Reformat the right side (Amount + Trash) into a sleek bottom bar */
+    #expenseListContainer > div > div:nth-child(2) {
+        width: 100% !important;
+        flex-direction: row !important; /* Put them side by side */
+        justify-content: space-between !important; /* Amount left, Trash right */
+        align-items: center !important;
+        border-top: 1px dashed var(--border-color) !important;
+        padding-top: 10px !important;
+        gap: 0 !important;
+    }
+}
