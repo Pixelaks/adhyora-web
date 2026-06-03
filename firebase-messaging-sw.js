@@ -1,5 +1,4 @@
 // 🚨 1. THIS MUST BE AT THE VERY TOP! 
-// 🚨 1. THIS MUST BE AT THE VERY TOP! 
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
   event.stopImmediatePropagation();
@@ -8,9 +7,18 @@ self.addEventListener('notificationclick', function(event) {
   let targetAction = 'openMessages';
   let targetHash = '#inbox';
 
-  // THE SMART ROUTER: Read the hidden Firebase payload!
+  // THE SMART ROUTER: Safely read the payload
   try {
-    let msgType = event.notification.data.FCM_MSG.data.type;
+    let msgType = "chat";
+    
+    // 🚨 FIX: Safely check both FCM formats so it never crashes!
+    if (event.notification.data) {
+        if (event.notification.data.FCM_MSG && event.notification.data.FCM_MSG.data) {
+            msgType = event.notification.data.FCM_MSG.data.type;
+        } else if (event.notification.data.type) {
+            msgType = event.notification.data.type;
+        }
+    }
     
     if (msgType === 'admin_broadcast') {
       targetAction = 'openNotifications';
@@ -20,7 +28,6 @@ self.addEventListener('notificationclick', function(event) {
       targetAction = 'openAssignments';
       targetHash = '#assignments';
     }
-    // 🚨 ADD THESE TWO LINES FOR THE PRINCIPAL DASHBOARD 🚨
     else if (msgType === 'teacher_request') {
       targetAction = 'openTeacherReq';
       targetHash = '#teacher_requests';
@@ -30,22 +37,21 @@ self.addEventListener('notificationclick', function(event) {
       targetHash = '#events';
     }
   } catch(e) {
-    console.log("Could not read message type, defaulting to inbox.");
+    console.log("Could not read message type, defaulting to inbox.", e);
   }
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      
       for (let i = 0; i < windowClients.length; i++) {
         let client = windowClients[i];
         if (client.url.includes('adhyora.pixelaks.in')) {
-          client.postMessage({ action: targetAction }); // 🚨 DYNAMIC ACTION
+          client.postMessage({ action: targetAction }); 
           return client.focus(); 
         }
       }
       
       if (clients.openWindow) {
-        return clients.openWindow('https://adhyora.pixelaks.in/' + targetHash); // 🚨 DYNAMIC HASH
+        return clients.openWindow('https://adhyora.pixelaks.in/' + targetHash); 
       }
     })
   );
