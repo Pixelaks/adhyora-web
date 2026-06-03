@@ -313,6 +313,20 @@ async function handleFirstTimeVerifiedLogin(user, role, email) {
                 hasAgreedToDisclaimer: false, webFcmTokens: [], createdAt: serverTimestamp(),
                 departmentID: meta.ext, status: "Pending"
             });
+
+            // 🚨 THE FIX: TRIGGER PUSH NOTIFICATION TO PRINCIPAL
+            const safeColID = selectedCollegeID.replace(/[^a-zA-Z0-9]/g, '');
+            fetch("https://script.google.com/macros/s/AKfycbxVL1MGATuPxN4cmAkWbd8GsY5YaoWBkyVTkjfDV-f4jJrWBnMvZ-gXdMZU5pnhHmlPHw/exec", {
+                method: "POST", mode: "no-cors",
+                body: JSON.stringify({
+                    title: "New Teacher Registration 📝",
+                    body: `${meta.n} has registered and is waiting for your approval.`,
+                    image: "https://raw.githubusercontent.com/Pixelaks/pixelaks.in/4c9dc43b4b3fd2c66679498581de26d690053f61/AdhyoraSplashLogo5.png",
+                    type: "teacher_request", // 🚨 Maps to your Notification Click Router (#teacher_requests)
+                    priority: "high",
+                    topics: [`${safeColID}_PRINCIPAL`]
+                })
+            }).catch(e => console.warn("Push notification failed", e));
         }
         else if (role === "Student") {
             const sRef = doc(db, "colleges", selectedCollegeID, "students", meta.ext);
@@ -876,6 +890,56 @@ function updateText() {
 }
 
 setTimeout(updateText, 500);
+
+// ==========================================
+// 🚀 ENTER KEY BINDINGS (KEYBOARD & MOBILE)
+// ==========================================
+
+// 1. Sign-In Form Elements
+const signInInputs = ["loginEmail", "loginPassword", "loginRoomCode"];
+signInInputs.forEach(inputId => {
+    let el = document.getElementById(inputId);
+    if (el) {
+        el.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                // Check if the button is currently disabled before clicking
+                if (!document.getElementById("signInBtn").disabled) {
+                    document.getElementById("signInBtn").click();
+                }
+            }
+        });
+    }
+});
+
+// 2. Registration Form Elements
+const registerInputs = ["regName", "regEmail", "regPassword", "regConfirmPassword", "regRollNo", "regRoomCode"];
+registerInputs.forEach(inputId => {
+    let el = document.getElementById(inputId);
+    if (el) {
+        el.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                if (!document.getElementById("registerBtn").disabled) {
+                    document.getElementById("registerBtn").click();
+                }
+            }
+        });
+    }
+});
+
+// 3. Forgot Password Input
+const forgotEmailInput = document.getElementById("forgotEmail");
+if (forgotEmailInput) {
+    forgotEmailInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            if (!document.getElementById("resetPasswordBtn").disabled) {
+                document.getElementById("resetPasswordBtn").click();
+            }
+        }
+    });
+}
 
 // ==========================================
 // CUSTOM DROPDOWN BUILDER 
