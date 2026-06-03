@@ -1,7 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-import { getFirestore, doc, setDoc, addDoc, deleteDoc, serverTimestamp, onSnapshot, collection, query, where, getDoc, getDocs, orderBy, limit, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-import { getMessaging, getToken, onMessage, deleteToken } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging.js";
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, serverTimestamp, onSnapshot, collection, query, where, getDocs, orderBy, limit, arrayUnion, arrayRemove, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getMessaging, getToken, deleteToken } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging.js";
+
 // 🚨 PASTE YOUR REAL CONFIG HERE 🚨
 const firebaseConfig = {
   apiKey: "AIzaSyD_ixI42lNdSqWxHj2EZNpXDLBZ2U8coLA",
@@ -16,13 +17,26 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const messaging = getMessaging(app); // <-- MOVED HERE AFTER 'app' EXISTS!
+const messaging = getMessaging(app);
+
+// 🚀 OPTIMIZATION: Enable Local Disk Caching
+try {
+    enableIndexedDbPersistence(db).catch((err) => {
+        console.warn("Firebase Offline Persistence Notice: ", err.code);
+    });
+} catch(e) {}
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(err => console.log('SW registration failed: ', err));
+    });
+}
 
 // ==========================================
 // 🚨 ZERO-COST RAM CACHES 🚨
 // ==========================================
 
-let myCurrentPushToken = ""; // Remembers the token for this session
+let myCurrentPushToken = ""; 
 let collegeID = ""; let studentUID = ""; let currentRollNo = "";
 let collegeSemesterType = "Odd"; 
 let loadedSemesters = {}; let sortedSemesterKeys = []; let currentSemesterIndex = 0;
@@ -49,13 +63,11 @@ let activeTimetableUnsubscribe = null;
 let calendarMode = "global"; let currentDisplayDate = new Date(); 
 let cachedCalYear = ""; let calWorkingDays = new Set(); let calNonWorkingDays = new Map(); let semStarts = new Map(); let semEnds = new Map();
 
-// 🚨 ADDED MISSING GLOBAL DATA FLAG 🚨
 let isGlobalDataLoaded = false; 
 
 let myWebDeviceID = localStorage.getItem("myWebDeviceID");
 let currentStudentProfileData = null; 
 
-// 🚨 LEAVE PREDICTOR STATES 🚨
 let actualProjectedPercent = 0;
 let savedStrictPresent = 0;
 let savedStrictTotal = 0;
@@ -64,32 +76,34 @@ let attendanceCalculationMode = "SIMPLE";
 let isStrictCollege = false;
 
 // ==========================================
+// 🚨 BANK-GRADE ANTI-SNOOPING SHIELD 
+// ==========================================
+document.addEventListener('contextmenu', event => event.preventDefault());
+
+document.onkeydown = function(e) {
+    if (e.keyCode === 123) return false; 
+    if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) return false; 
+    if (e.ctrlKey && e.keyCode === 85) return false; 
+};
+
+
+// ==========================================
 // 🚨 DYNAMIC PHONE STATUS BAR CONTROLLER
 // ==========================================
 function updateStatusBar() {
     const themeMeta = document.querySelector('meta[name="theme-color"]');
-
     const loader = document.getElementById("initialAppLoader");
     const paywall = document.getElementById("subscriptionBlockPanel");
 
-    // Check if splash screen or paywall are visible
     const isLoaderActive = loader && !loader.classList.contains("hidden") && loader.style.display !== "none";
     const isPaywallActive = paywall && paywall.classList.contains("active");
 
     if (isLoaderActive || isPaywallActive) {
-        // 1. TOP STATUS BAR: Keep it Dark Navy for Loading & Paywall
         if (themeMeta) themeMeta.setAttribute("content", "#0b111e"); 
-        
-        // 2. BOTTOM NAV BAR: Force Dark Navy background
         document.body.style.backgroundColor = "#0b111e";
     } else {
-        // We are on the Dashboard! Let the Theme Engine decide (White or Dark Mode)
         const isDark = document.body.classList.contains("dark-mode");
-        
-        // 1. TOP STATUS BAR
         if (themeMeta) themeMeta.setAttribute("content", isDark ? "#0f172a" : "#ffffff"); 
-        
-        // 2. BOTTOM NAV BAR: Clear inline style so CSS takes over!
         document.body.style.backgroundColor = "";
     }
 }
@@ -97,16 +111,14 @@ function updateStatusBar() {
 function hideAppLoader() {
     const loader = document.getElementById("initialAppLoader");
     if (loader && !loader.classList.contains("hidden")) {
-        // Add a tiny 800ms delay so the loading screen feels smooth
         setTimeout(() => {
             loader.classList.add("hidden");
-            updateStatusBar(); // 🚨 Trigger color change when loader fades!
+            updateStatusBar(); 
         }, 800);
     }
 }
 
 function showToast(msg) {
-    // Uses a simple alert since studentApp doesn't have the custom toast UI
     alert(msg);
 }
 
@@ -194,51 +206,41 @@ async function registerWebSession() {
         
         onSnapshot(sessionRef, (docSnap) => {
             if (!docSnap.exists()) {
-    signOut(auth).then(() => {
-        localStorage.clear();
-        sessionStorage.clear();
-        window.location.replace("index.html");
-    });
-}
+                signOut(auth).then(() => {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    window.location.replace("index.html");
+                });
+            }
         });
     } catch(e) {}
 }
 
 async function syncCollegeAndListen() {
-    
-    // 1. Listen for College Settings & Subscription changes
     onSnapshot(doc(db, "colleges", collegeID), (colSnap) => {
         if (colSnap.exists()) {
             let data = colSnap.data();
             
-            // Update Semester Type
             if (data.currentSemesterType) { 
                 collegeSemesterType = data.currentSemesterType; 
             }
 
-            // 🚨 DYNAMIC ATTENDANCE MODE ENGINE
-            // 🚨 DYNAMIC ATTENDANCE MODE ENGINE
             if (data.settings && data.settings.attendanceCalculationMode) {
                 isStrictCollege = (data.settings.attendanceCalculationMode === "STRICT_SESSION");
                 
-                // ✅ FIX: Only trigger the UI update if the student's semester data has actually loaded
                 if (typeof updateUIForCurrentSemester === 'function' && sortedSemesterKeys && sortedSemesterKeys.length > 0) {
                     updateUIForCurrentSemester();
                 }
             }
 
-            // Subscription/Lock Logic
             const blockPanel = document.getElementById("subscriptionBlockPanel");
             const dashboardUI = document.querySelector(".dashboard-container"); 
 
-            // 🚨 ADD THIS LINE to save the plan type globally
             window.collegePlanTier = data.subscription ? (data.subscription.planType || "base").toLowerCase() : "base";
 
-            // 🚨 SHOW ULTIMATE BADGE IF APPLICABLE
             const ultBadge = document.getElementById("ultimateBadge");
             if (ultBadge) {
                 ultBadge.style.display = (window.collegePlanTier === "ultimate") ? "block" : "none";
-                // Note: We deleted the background and color overrides here so CSS handles it!
             }
             
             if (!data.subscription) {
@@ -263,7 +265,6 @@ async function syncCollegeAndListen() {
         }
     });
 
-    // 2. Load Student Profile
     const secureUID = auth.currentUser.uid; 
     const q = query(collection(db, "colleges", collegeID, "students"), where("userID", "==", secureUID));
 
@@ -276,7 +277,6 @@ async function syncCollegeAndListen() {
         
         registerWebSession();
 
-        // 🚨 ONLY FETCH HEAVY ARRAYS ONCE
         if (isFirstBoot) {
             fetchGlobalCalendarData(); 
             
@@ -295,7 +295,6 @@ async function syncCollegeAndListen() {
         processStudentData(docSnap.data());
         loadDailyAttendance(); 
 
-        // Initial Loading Cleanup
         hideAppLoader();
         
         if (!isDataListening) {
@@ -315,7 +314,6 @@ async function syncCollegeAndListen() {
     });
 }
 
-// 🚨 ADDED MISSING GLOBAL CACHE FUNCTION 🚨
 async function fetchGlobalCalendarData() {
     let now = new Date();
     let startYear = (now.getMonth() >= 5) ? now.getFullYear() : now.getFullYear() - 1;
@@ -333,12 +331,9 @@ async function fetchGlobalCalendarData() {
         
         isGlobalDataLoaded = true;
         
-        // Triggers UI reload now that the calendar data is ready!
         if (sortedSemesterKeys.length > 0) updateUIForCurrentSemester();
     } catch(e) { console.error("Error fetching global data", e); }
 }
-
-// 🚨 REPLACE YOUR ENTIRE startBackgroundListeners FUNCTION WITH THIS 🚨
 
 function startBackgroundListeners() {
     let cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
@@ -349,7 +344,8 @@ function startBackgroundListeners() {
             let isExplicitMatch = enrolledSubjectsList.some(s => s.trim().toLowerCase() === sub.trim().toLowerCase());
             let isDepartmentMatch = (d.teacherDeptID || "").trim().toLowerCase() === myDepartmentID.toLowerCase() && (d.semester || "").trim().toLowerCase() === mySemStr.toLowerCase();
             if (isExplicitMatch || isDepartmentMatch || enrolledSubjectsList.length === 0) {
-                cachedAssignments.push({ title: `Assignment: ${sub}`, body: d.topic || "No Topic", teach: d.teacherName || "Teacher", due: d.dueDate || "N/A", time: d.createdAt ? d.createdAt.toDate() : new Date() });
+                // 🚨 FIX: Injected doc.id into the cache so we can uniquely track completions
+                cachedAssignments.push({ id: doc.id, title: `Assignment: ${sub}`, body: d.topic || "No Topic", teach: d.teacherName || "Teacher", due: d.dueDate || "N/A", time: d.createdAt ? d.createdAt.toDate() : new Date() });
             }
         });
         if (!el.assignView.classList.contains("hidden-view")) loadAssignments();
@@ -392,7 +388,6 @@ function startBackgroundListeners() {
         updateMsgUI();
     });
 
-    // 🚨 OPTIMIZED CHAT LISTENER 🚨
     let activeMessageListeners = new Map(); 
 
     onSnapshot(query(collection(db, "colleges", collegeID, "chats"), where("participants", "array-contains", auth.currentUser.uid)), (snap) => {
@@ -433,8 +428,6 @@ function startBackgroundListeners() {
     onSnapshot(query(collection(db, "colleges", collegeID, "students", currentRollNo, "sessions")), snap => updateSessionCache(snap, currentRollNo));
     onSnapshot(query(collection(db, "colleges", collegeID, "students", auth.currentUser.uid, "sessions")), snap => updateSessionCache(snap, auth.currentUser.uid));
 }
-
-// (Make sure function processStudentData(data) is right below this!)
 
 function processStudentData(data) {
     currentStudentProfileData = data; 
@@ -504,7 +497,6 @@ function updateUIForCurrentSemester(optionalDept) {
     if (optionalDept) el.sbSub.innerHTML = `${optionalDept} &nbsp; <span class="sem-text">${semData.name}</span>`;
     else el.sbSub.innerHTML = el.sbSub.innerHTML.split("&nbsp;")[0] + `&nbsp; <span class="sem-text">${semData.name}</span>`;
 
-    // ✅ REPLACE THIS LINE:
     let simplePercent = (semData.simpleTotal > 0) ? (semData.simplePresent / semData.simpleTotal) * 100 : 0;
     
     let projectedStrictPercent = 0;
@@ -553,7 +545,6 @@ function updateUIForCurrentSemester(optionalDept) {
     actualProjectedPercent = projectedStrictPercent;
     let currentOverallPercent = isStrictCollege ? currentStrictPercent : simplePercent;
 
-    // ✅ REPLACE WITH THIS:
     el.pctText.innerText = `${projectedStrictPercent.toFixed(2)}%`;
     el.curPctText.innerText = `Current: ${currentOverallPercent.toFixed(2)}%`;
     el.attClasses.innerText = `Attended: ${semData.strictPresent}`; el.totClasses.innerText = `Total: ${semData.strictTotal}`;
@@ -616,7 +607,6 @@ function updateUIForCurrentSemester(optionalDept) {
     startTimetableListener(); 
 }
 
-// 🚨 PREDICTOR MATH HELPER 🚨
 function GetPredictorColor(percentage) {
     if (percentage >= 85) return {r: 76, g: 175, b: 80};      // Green
     else if (percentage >= 70) return {r: 255, g: 193, b: 7}; // Yellow
@@ -654,9 +644,6 @@ function drawMarksUI(marksArray) {
     el.noMarks.style.display = (!marksArray || marksArray.length === 0) ? "block" : "none";
 }
 
-// ==========================================
-// ENROLLED SUBJECTS BUILDER
-// ==========================================
 async function buildEnrolledSubjectsUI(semesterName) {
     let listEl = document.getElementById("enrolledSubjectsListText");
     listEl.innerHTML = "<i>Loading subjects...</i>";
@@ -671,20 +658,26 @@ async function buildEnrolledSubjectsUI(semesterName) {
     }
 
     if (!optimizedSubjectCache) {
-        optimizedSubjectCache = [];
-        try {
-            const subSnap = await getDocs(collection(db, "colleges", collegeID, "subjects"));
-            subSnap.forEach(doc => {
-                let d = doc.data();
-                optimizedSubjectCache.push({
-                    cleanType: (d.Type || d.type || "").toUpperCase().replace(/\s/g, ""),
-                    cleanSubDept: (d.Department || d.department || d.departmentID || "").replace(/\s/g, "").toLowerCase().replace("dept_", ""),
-                    semesterArray: (d.Semester || d.semester || "1").toString().split(",").map(s => s.trim()),
-                    displayName: d.Name || d.name || d.subjectName || "Unnamed",
-                    rawType: d.Type || d.type || ""
+        let localCache = sessionStorage.getItem(`adhyora_subjects_${collegeID}`);
+        if (localCache) {
+            optimizedSubjectCache = JSON.parse(localCache);
+        } else {
+            optimizedSubjectCache = [];
+            try {
+                const subSnap = await getDocs(collection(db, "colleges", collegeID, "subjects"));
+                subSnap.forEach(doc => {
+                    let d = doc.data();
+                    optimizedSubjectCache.push({
+                        cleanType: (d.Type || d.type || "").toUpperCase().replace(/\s/g, ""),
+                        cleanSubDept: (d.Department || d.department || d.departmentID || "").replace(/\s/g, "").toLowerCase().replace("dept_", ""),
+                        semesterArray: (d.Semester || d.semester || "1").toString().split(",").map(s => s.trim()),
+                        displayName: d.Name || d.name || d.subjectName || "Unnamed",
+                        rawType: d.Type || d.type || ""
+                    });
                 });
-            });
-        } catch(e) { console.error("Error fetching subjects", e); }
+                sessionStorage.setItem(`adhyora_subjects_${collegeID}`, JSON.stringify(optimizedSubjectCache));
+            } catch(e) { console.error("Error fetching subjects", e); }
+        }
     }
 
     let cleanStuDept = rawDept.replace(/\s/g, "").toLowerCase().replace("dept_", "");
@@ -704,9 +697,6 @@ async function buildEnrolledSubjectsUI(semesterName) {
     else listEl.innerHTML = finalSubjects.join("<br>");
 }
 
-// ==========================================
-// PROFILE MODAL
-// ==========================================
 document.getElementById("btnProfileDetails").addEventListener("click", () => {
     let d = currentStudentProfileData;
     if(!d) return;
@@ -727,9 +717,6 @@ document.getElementById("btnProfileDetails").addEventListener("click", () => {
 });
 document.getElementById("closeProfileBtn").addEventListener("click", () => el.profileModal.classList.remove("active"));
 
-// ==========================================
-// 🚨 LEAVE PREDICTOR LOGIC 🚨
-// ==========================================
 document.getElementById("attendanceWater").addEventListener("click", () => {
     el.predictorModal.classList.add("active");
     el.leaveDaysInput.value = "";
@@ -811,17 +798,14 @@ const btnNavMsg = document.getElementById("btnNavMsg");
 const btnNavTimetable = document.getElementById("btnNavTimetable");
 const btnNavDaily = document.getElementById("btnNavDaily");
 
-// 🚨 ADDED: pushToHistory parameter
 function switchView(activeBtn, viewToShow, pushToHistory = true) {
     [btnNavMain, btnNavAssign, btnNavNotif, btnNavMsg, btnNavTimetable, btnNavDaily, document.getElementById("btnNavFees")].forEach(btn => btn.classList.remove("active"));
     
-    // 🚨 ADD el.feesView TO THIS LIST:
     [el.mainView, el.assignView, el.actualNotifView, el.msgView, el.ttView, el.dailyView, el.feesView].forEach(view => view.classList.add("hidden-view"));
     
     activeBtn.classList.add("active");
     viewToShow.classList.remove("hidden-view");
 
-    // Tell the browser we moved to a new tab
     if (pushToHistory) {
         window.history.pushState({ panelId: viewToShow.id }, "", "");
     }
@@ -851,10 +835,84 @@ document.getElementById("btnNavFees").addEventListener("click", () => {
 // ==========================================
 // 🚨 ZERO-COST RENDER FUNCTIONS 🚨
 // ==========================================
+
+// 🚨 UPDATED ASSIGNMENT ENGINE 🚨
 function loadAssignments() {
-    if (cachedAssignments.length === 0) { el.assignList.innerHTML = `<div class="no-data-text">No Recent Assignments</div>`; return; }
-    el.assignList.innerHTML = cachedAssignments.map(n => `<div class="data-card assign"><div class="card-title">${n.title}</div><div class="card-body">${n.body}</div><div class="card-meta"><span>${n.teach}</span><span class="card-due">Due: ${n.due}</span></div></div>`).join('');
+    if (cachedAssignments.length === 0) { 
+        el.assignList.innerHTML = `<div class="no-data-text">No Recent Assignments</div>`; 
+        return; 
+    }
+
+    // Pull local completion map from LocalStorage
+    let completedMap = JSON.parse(localStorage.getItem(`completed_assign_${currentRollNo}`) || "{}");
+    
+    // Set up Date checking for automatic strikes
+    let today = new Date();
+    today.setHours(0,0,0,0);
+
+    el.assignList.innerHTML = cachedAssignments.map(n => {
+        let isDone = completedMap[n.id] === true;
+
+        // Check if overdue
+        let isClosed = false;
+        if (n.due && n.due !== "N/A") {
+            let dDate = new Date(n.due);
+            dDate.setHours(0,0,0,0);
+            if (today > dDate) isClosed = true;
+        }
+
+        // Default Styles
+        let cardStyle = "";
+        let titleStyle = "";
+        let badge = "";
+        let actionBtn = "";
+
+        // Determine State
+        if (isDone) {
+            // Local Marked Done
+            cardStyle = "opacity: 0.6; background: var(--bg-base);";
+            titleStyle = "text-decoration: line-through; color: var(--text-muted);";
+            badge = `<span style="color:#10b981; font-size:11px; font-weight:bold; letter-spacing:0.5px;"><i class="fas fa-check-circle"></i> Completed</span>`;
+            actionBtn = `<button onclick="window.toggleAssignment('${n.id}', false)" style="background:transparent; border:1px solid var(--border-color); color:var(--text-muted); padding:4px 8px; border-radius:6px; font-size:10px; cursor:pointer;">Undo</button>`;
+        } 
+        else if (isClosed) {
+            // Overdue
+            cardStyle = "opacity: 0.7; background: #fff5f5;";
+            titleStyle = "text-decoration: line-through; color: #ef4444;";
+            badge = `<span style="color:#ef4444; font-size:11px; font-weight:bold; letter-spacing:0.5px;"><i class="fas fa-lock"></i> Closed</span>`;
+            actionBtn = `<span style="font-size:10px; color:#ef4444; font-weight:bold;">Past Deadline</span>`;
+        } 
+        else {
+            // Active
+            badge = `<span class="card-due" style="color:#f59e0b; font-size:11px; font-weight:bold; letter-spacing:0.5px;">Due: ${n.due}</span>`;
+            actionBtn = `<button onclick="window.toggleAssignment('${n.id}', true)" style="background:var(--brand-green); border:none; color:white; padding:4px 10px; border-radius:6px; font-size:10px; font-weight:bold; cursor:pointer; box-shadow:0 2px 5px rgba(74, 222, 128, 0.4);">Mark Done</button>`;
+        }
+
+        return `
+        <div class="data-card assign" style="margin-bottom:10px; border:1px solid var(--border-color); border-radius:12px; padding:15px; transition:0.3s; ${cardStyle}">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; flex-wrap:wrap; gap:5px;">
+                <div class="card-title" style="${titleStyle} margin-bottom:0; font-size:14px; flex:1; min-width:60%;">${n.title}</div>
+                <div>${badge}</div>
+            </div>
+            <div class="card-body" style="font-size:12px; color:#475569; margin-bottom:10px; line-height:1.5;">${n.body}</div>
+            <div class="card-meta" style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border-color); padding-top:8px;">
+                <span style="font-size:11px; color:#64748b;"><i class="fas fa-chalkboard-teacher"></i> ${n.teach}</span>
+                ${actionBtn}
+            </div>
+        </div>`;
+    }).join('');
 }
+
+// Attach the toggle function to the global window object so HTML buttons can click it
+window.toggleAssignment = function(id, status) {
+    let completedMap = JSON.parse(localStorage.getItem(`completed_assign_${currentRollNo}`) || "{}");
+    if (status) completedMap[id] = true;
+    else delete completedMap[id];
+    localStorage.setItem(`completed_assign_${currentRollNo}`, JSON.stringify(completedMap));
+    
+    // Refresh the view instantly
+    loadAssignments();
+};
 
 function loadActualNotifications() {
     if (cachedNotifs.length === 0) { el.actualNotifList.innerHTML = `<div class="no-data-text">No Notifications</div>`; return; }
@@ -864,13 +922,11 @@ function loadActualNotifications() {
     }).join('');
 }
 
-// ❌ Replace your existing loadMessages() function with this:
 function loadMessages() {
     if (cachedMessages.length === 0) { el.msgList.innerHTML = `<div class="no-data-text">Inbox is empty</div>`; return; }
     
     el.msgList.innerHTML = cachedMessages.map(m => {
-        // Evaluate the sender role and assign the correct CSS class!
-        let roleClass = "msg-student"; // Defaults to student (Theme Color)
+        let roleClass = "msg-student"; 
         let r = (m.senderRole || "").toLowerCase();
         
         if (r.includes("principal") || r.includes("admin")) roleClass = "msg-principal";
@@ -908,7 +964,6 @@ async function loadDailyAttendance() {
     el.dailyStatus.innerText = "Checking..."; 
     el.periodsGrid.innerHTML = ""; 
     
-    // 🚨 FIX: Attached to 'window' to prevent strict mode crashes!
     window.dailyData = []; 
     for(let i=0; i<6; i++) { 
         window.dailyData.push({hasData: false}); 
@@ -928,7 +983,7 @@ async function loadDailyAttendance() {
 }
 
 function renderDailyData(docs) {
-    window.dailyData = []; // 🚨 FIX
+    window.dailyData = []; 
     for(let i=0; i<6; i++) { window.dailyData.push({hasData: false}); }
 
     if (docs.length === 0) {
@@ -959,7 +1014,7 @@ function renderDailyData(docs) {
     
     el.periodsGrid.innerHTML = "";
     for(let i=0; i<6; i++) {
-        let d = window.dailyData[i]; // 🚨 FIX
+        let d = window.dailyData[i]; 
         if(!d.hasData) { el.periodsGrid.innerHTML += `<button class="period-btn btn-nodata">${i+1}</button>`; continue; }
         let css = d.isMedical ? "btn-medical" : (d.isPresent ? "btn-present" : "btn-absent");
         let txt = d.isMedical ? "M" : (d.isPresent ? "P" : "A");
@@ -968,7 +1023,7 @@ function renderDailyData(docs) {
 }
 
 window.openPeriodDetail = function(index) {
-    let d = window.dailyData[index]; // 🚨 FIX
+    let d = window.dailyData[index]; 
     if(!d.hasData) return;
     el.dSub.innerText = d.subject; el.dTeach.innerText = `${d.teacher} • ${d.time}`;
     el.dStat.innerHTML = d.isMedical ? "<color style='color:#3b82f6'>Medical Leave</color>" : (d.isPresent ? "<color style='color:#4caf50'>Present</color>" : "<color style='color:#f44336'>Absent</color>");
@@ -1020,7 +1075,6 @@ function loadTimetableForDay(selectedDay) {
     let htmlBuffer = "";
     let semStr = (currentSemesterIndex + 1).toString();
 
-    // 🚨 Extracting directly from RAM 🚨
     let docs = timetableCache.filter(d => d.day === selectedDay);
 
     for (let i = 0; i < 6; i++) {
@@ -1080,54 +1134,39 @@ setInterval(updateTimelineVisuals, 60000);
 // ==========================================
 document.getElementById("openSettingsBtn").addEventListener("click", () => { el.sidebar.classList.add("open"); el.overlay.classList.add("active"); });
 el.overlay.addEventListener("click", () => { el.sidebar.classList.remove("open"); el.overlay.classList.remove("active"); });
+
 // ==========================================
 // 🚨 UNIFIED MASTER SIGN-OUT ENGINE
 // ==========================================
 async function handleSignOut() {
     try {
-        // 1. REMOVE PUSH TOKEN FROM BROWSER
         if (myCurrentPushToken) {
-            try {
-                await deleteToken(messaging);
-            } catch(e) {
-                console.warn("Push Token Delete Error:", e);
-            }
+            try { await deleteToken(messaging); } catch(e) { console.warn("Push Token Delete Error:", e); }
         }
 
-        // 2. REMOVE TOKEN FROM FIRESTORE PROFILE
         if (myCurrentPushToken && currentRollNo && collegeID) {
             try {
                 const studentRef = doc(db, "colleges", collegeID, "students", currentRollNo);
-                await setDoc(studentRef, {
-                    webFcmTokens: arrayRemove(myCurrentPushToken)
-                }, { merge: true });
-            } catch(e) {
-                console.warn("Firestore Token Remove Error:", e);
-            }
+                await setDoc(studentRef, { webFcmTokens: arrayRemove(myCurrentPushToken) }, { merge: true });
+            } catch(e) { console.warn("Firestore Token Remove Error:", e); }
         }
 
-        // 3. REMOVE ACTIVE BROWSER SESSION
         if (myWebDeviceID && currentRollNo && collegeID) {
             try {
                 await deleteDoc(doc(db, "colleges", collegeID, "students", currentRollNo, "sessions", myWebDeviceID));
-            } catch(e) {
-                console.warn("Session Delete Error:", e);
-            }
+            } catch(e) { console.warn("Session Delete Error:", e); }
         }
 
-        // 4. FIREBASE AUTH SIGNOUT
-        await signOut(auth);
-
-        // 5. NUKE ALL BREADCRUMBS & CACHE
         localStorage.clear();
         sessionStorage.clear();
-
-        // 6. HARD REDIRECT
+        await signOut(auth);
+        
         window.location.replace("index.html");
 
     } catch (e) {
         console.error("Signout Error:", e);
         localStorage.clear();
+        sessionStorage.clear();
         window.location.replace("index.html");
     }
 }
@@ -1137,25 +1176,20 @@ document.getElementById("btnBlockSignOut").addEventListener("click", handleSignO
 document.getElementById("btnContact").addEventListener("click", () => window.open(`mailto:pixelaks.technologies@gmail.com`, '_blank'));
 
 // --- NATIVE BACK BUTTON TRAP (TAB HISTORY & SIGN OUT WARNING) ---
-// 1. Set an invisible "trap" at the very bottom of the history
 window.history.replaceState({ panelId: "base_trap" }, "", "");
-// 2. Put the main dashboard on top of it as our starting point
 window.history.pushState({ panelId: "mainDashboardView" }, "", "");
 
 window.addEventListener("popstate", (e) => {
     if (e.state && e.state.panelId) {
         let pid = e.state.panelId;
 
-        // If they back out of the Main Dashboard, ask to sign out!
         if (pid === "base_trap") {
             if (confirm("Do you want to sign out?")) {
-                handleSignOut(); // 🚨 CHANGED TO SMART SIGN-OUT
+                handleSignOut(); 
             } else {
-                // They canceled. Put the Main Dashboard back onto the history stack so the trap works again!
                 window.history.pushState({ panelId: "mainDashboardView" }, "", "");
             }
         }
-        // Otherwise, figure out which tab they went back to, and load it WITHOUT pushing a new state
         else if (pid === "mainDashboardView") { switchView(btnNavMain, el.mainView, false); }
         else if (pid === "assignmentsView") { switchView(btnNavAssign, el.assignView, false); loadAssignments(); }
         else if (pid === "actualNotifView") { switchView(btnNavNotif, el.actualNotifView, false); loadActualNotifications(); }
@@ -1171,23 +1205,13 @@ window.addEventListener("popstate", (e) => {
         }
     }
 });
-// --------------------------------------------------
 
 // ==========================================
 // SIDEBAR EXTERNAL LINKS
 // ==========================================
-document.getElementById("btnPrivacy").addEventListener("click", () => {
-    window.open("https://pixelaks.in/privacy-adhyora", "_blank");
-});
-
-document.getElementById("btnTerms").addEventListener("click", () => {
-    window.open("https://pixelaks.in/terms-adhyora", "_blank");
-});
-
-document.getElementById("btnCompany").addEventListener("click", () => {
-    window.open("https://pixelaks.in", "_blank");
-});
-
+document.getElementById("btnPrivacy").addEventListener("click", () => window.open("https://pixelaks.in/privacy-adhyora", "_blank"));
+document.getElementById("btnTerms").addEventListener("click", () => window.open("https://pixelaks.in/terms-adhyora", "_blank"));
+document.getElementById("btnCompany").addEventListener("click", () => window.open("https://pixelaks.in", "_blank"));
 document.getElementById("btnDevices").addEventListener("click", () => {
     el.sidebar.classList.remove("open"); el.overlay.classList.remove("active");
     el.sessionsModal.classList.add("active"); loadSessions();
@@ -1197,13 +1221,10 @@ document.getElementById("closeSessionsBtn").addEventListener("click", () => el.s
 // ==========================================
 // 🚨 NOTIFICATION TOGGLE LOGIC
 // ==========================================
-
-// 1. Function to update the visual switch
 function updateNotificationToggleUI() {
     const toggle = document.getElementById("notifToggleSwitch");
     if (!toggle) return;
     
-    // It's considered ON if the browser allows it AND we successfully saved a token in RAM
     if (Notification.permission === "granted" && myCurrentPushToken !== "") {
         toggle.classList.add("active");
     } else {
@@ -1213,77 +1234,98 @@ function updateNotificationToggleUI() {
 
 async function requestPushPermissions() {
     try {
-        console.log("Requesting notification permissions...");
         const permission = await Notification.requestPermission();
         
         if (permission === 'granted') {
-            console.log('Notification permission granted.');
-
-            // 🚨 FIX 1: Explicitly register the Service Worker first
             const swRegistration = await navigator.serviceWorker.register('firebase-messaging-sw.js');
-
-            // 🚨 FIX 2: Pass the VAPID key and Service Worker registration to getToken
             const currentToken = await getToken(messaging, { 
                 vapidKey: "BNO8RVA-R1iOy19P2rbVYPBzlCSnptpq13ybtqqO0IgHhDOXhkauOXEWm2hGN6yIUz2_fHL-Iv7IG9cpRZv2YkU",
                 serviceWorkerRegistration: swRegistration 
             });
 
             if (currentToken) {
-                myCurrentPushToken = currentToken; // Save to global RAM cache
-                console.log("Push token generated successfully.");
+                myCurrentPushToken = currentToken; 
 
-                // Save the token to the student's Firestore document
                 if (currentRollNo && collegeID) {
                     const studentRef = doc(db, "colleges", collegeID, "students", currentRollNo);
-                    await setDoc(studentRef, {
-                        webFcmTokens: arrayUnion(currentToken)
-                    }, { merge: true });
+                    
+                    const sSnap = await getDoc(studentRef);
+                    let activeTokens = [];
+                    
+                    if (sSnap.exists() && sSnap.data().webFcmTokens) {
+                        activeTokens = sSnap.data().webFcmTokens;
+                    }
+
+                    activeTokens = activeTokens.filter(t => t !== currentToken);
+                    activeTokens.push(currentToken);
+                    
+                    if (activeTokens.length > 3) {
+                        activeTokens = activeTokens.slice(activeTokens.length - 3);
+                    }
+
+                    await setDoc(studentRef, { webFcmTokens: activeTokens }, { merge: true });
+
+                    // ========================================================
+                    // 🚨 ADD THIS ENTIRE MISSING BLOCK: THE LOOPHOLE SYNC 🚨
+                    // ========================================================
+                    function getSafeTopicLocal(input) { return (!input || input === "All") ? "ALL" : input.replace(/[^a-zA-Z0-9]/g, ''); }
+                    
+                    let safeCol = getSafeTopicLocal(collegeID);
+                    let safeDept = getSafeTopicLocal(rawDept.replace("DEPT_", ""));
+                    let safeYear = getSafeTopicLocal(myYearStr);
+
+                    // Replicate the exact C# GetMyTopics() logic!
+                    let topicsToJoin = [
+                        `${safeCol}_ALL`,
+                        `${safeCol}_STUDENTS_ALL_ALL`,
+                        `${safeCol}_STUDENTS_${safeDept}_ALL`,
+                        `${safeCol}_STUDENTS_${safeDept}_${safeYear}`,
+                        `ADHYORA_GLOBAL_USERS`
+                    ];
+
+                    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxVL1MGATuPxN4cmAkWbd8GsY5YaoWBkyVTkjfDV-f4jJrWBnMvZ-gXdMZU5pnhHmlPHw/exec";
+
+                    fetch(APPS_SCRIPT_URL, {
+                        method: "POST",
+                        mode: "no-cors",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            action: "subscribe",
+                            token: currentToken,
+                            topics: topicsToJoin
+                        })
+                    }).then(() => {
+                        console.log("✅ Loophole Complete: Student Web Dashboard bound to Native Topics!");
+                    }).catch(err => console.error("Apps Script Hook Rejected:", err));
+                    // ========================================================
                 }
-            } else {
-                console.warn("No registration token available. Check Firebase config.");
-            }
-        } else {
-            console.warn("Notification permission denied by user.");
-        }
-        
-        // Update the UI switch based on the result
+            } 
+        } 
         updateNotificationToggleUI();
-        
-    } catch (error) {
-        console.error("Error retrieving push token: ", error);
-        updateNotificationToggleUI();
+    } catch (error) { 
+        console.error("Error retrieving push token: ", error); 
+        updateNotificationToggleUI(); 
     }
 }
 
-// 2. Function to safely destroy the token and unsubscribe
 async function unsubscribePushNotifications() {
     try {
         const toggle = document.getElementById("notifToggleSwitch");
-        toggle.style.opacity = "0.5"; // Show it's loading
+        toggle.style.opacity = "0.5"; 
 
-        // A. Tell Google Firebase to delete this browser's notification link
         await deleteToken(messaging);
 
-        // B. Remove the token from your Firestore Database so you don't send to dead devices
         if (myCurrentPushToken && currentRollNo && collegeID) {
             const studentRef = doc(db, "colleges", collegeID, "students", currentRollNo);
-            await setDoc(studentRef, {
-                webFcmTokens: arrayRemove(myCurrentPushToken)
-            }, { merge: true });
+            await setDoc(studentRef, { webFcmTokens: arrayRemove(myCurrentPushToken) }, { merge: true });
         }
         
-        myCurrentPushToken = ""; // Clear from RAM
-        console.log("Successfully unsubscribed from notifications.");
-        
+        myCurrentPushToken = ""; 
         toggle.style.opacity = "1";
         updateNotificationToggleUI();
-    } catch (e) {
-        console.error("Error unsubscribing:", e);
-        alert("Failed to turn off notifications. Please try again.");
-    }
+    } catch (e) {}
 }
 
-// 3. The Click Event for the Sidebar Button
 document.getElementById("btnToggleNotifications").addEventListener("click", async () => {
     if (Notification.permission === "denied") {
         alert("Notifications are completely blocked by your browser. Please click the lock icon in your address bar to allow them.");
@@ -1293,12 +1335,8 @@ document.getElementById("btnToggleNotifications").addEventListener("click", asyn
     const toggle = document.getElementById("notifToggleSwitch");
     
     if (toggle.classList.contains("active")) {
-        // Switch is ON -> Turn it OFF
-        if (confirm("Are you sure you want to disable notifications for this device?")) {
-            await unsubscribePushNotifications();
-        }
+        if (confirm("Are you sure you want to disable notifications for this device?")) await unsubscribePushNotifications();
     } else {
-        // Switch is OFF -> Turn it ON (This triggers your existing Firebase permission function)
         toggle.style.opacity = "0.5";
         await requestPushPermissions();
         toggle.style.opacity = "1";
@@ -1474,7 +1512,6 @@ btnThemes.addEventListener("click", () => {
 });
 closeThemesBtn.addEventListener("click", () => themesModal.classList.remove("active"));
 
-// Stores where the ripple should originate from
 function setRippleOrigin(x, y) {
     document.documentElement.style.setProperty('--ripple-x', `${x}px`);
     document.documentElement.style.setProperty('--ripple-y', `${y}px`);
@@ -1507,7 +1544,6 @@ function applyTheme(colorKey, isDark, animated = true) {
         updateStatusBar();
     };
 
-    // Skip animation on page load or unsupported browsers
     if (!animated || !document.startViewTransition) {
         executeThemeUpdate();
         return;
@@ -1516,7 +1552,6 @@ function applyTheme(colorKey, isDark, animated = true) {
     document.startViewTransition(executeThemeUpdate);
 }
 
-// Color swatch clicks — ripple originates from the swatch itself
 document.querySelectorAll('.color-swatch').forEach(swatch => {
     swatch.addEventListener('click', (e) => {
         const rect = e.currentTarget.getBoundingClientRect();
@@ -1528,7 +1563,6 @@ document.querySelectorAll('.color-swatch').forEach(swatch => {
     });
 });
 
-// Dark/Light mode buttons — ripple originates from the button
 document.getElementById("btnDarkMode").addEventListener("click", (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setRippleOrigin(rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -1545,11 +1579,10 @@ document.getElementById("btnLightMode").addEventListener("click", (e) => {
     applyTheme(currentColor, false);
 });
 
-// Load saved theme silently on boot (no animation)
 function loadSavedTheme() {
     let savedColor = localStorage.getItem("adhyora_theme_color") || "blue";
     let savedMode = localStorage.getItem("adhyora_theme_mode") || "light";
-    applyTheme(savedColor, savedMode === "dark", false); // false = no animation on load
+    applyTheme(savedColor, savedMode === "dark", false); 
 }
 
 loadSavedTheme();
@@ -1557,8 +1590,6 @@ loadSavedTheme();
 // ==========================================
 // 🚨 NOTIFICATION CLICK HANDLERS 🚨
 // ==========================================
-
-// 1. If the app was already open in the background:
 navigator.serviceWorker.addEventListener('message', (event) => {
     if (event.data && event.data.action === 'openMessages') {
         const btn = document.getElementById("btnNavMsg");
@@ -1568,16 +1599,13 @@ navigator.serviceWorker.addEventListener('message', (event) => {
         const btn = document.getElementById("btnNavNotif");
         if (btn) btn.click();
     }
-    // 🚨 NEW: Handle background assignment click
     else if (event.data && event.data.action === 'openAssignments') {
         const btn = document.getElementById("btnNavAssign");
         if (btn) btn.click();
     }
 });
 
-// 2. If the app was completely closed:
 window.addEventListener('load', () => {
-    // Check for Inbox requests
     if (window.location.hash === "#inbox" || localStorage.getItem("pendingInboxOpen") === "true") {
         localStorage.removeItem("pendingInboxOpen");
         setTimeout(() => {
@@ -1585,7 +1613,6 @@ window.addEventListener('load', () => {
             if (btn) btn.click();
         }, 1500); 
     }
-    // Check for Admin Notification requests
     if (window.location.hash === "#notifications" || localStorage.getItem("pendingNotifOpen") === "true") {
         localStorage.removeItem("pendingNotifOpen");
         setTimeout(() => {
@@ -1593,7 +1620,6 @@ window.addEventListener('load', () => {
             if (btn) btn.click();
         }, 1500); 
     }
-    // 🚨 NEW: Check for Assignment requests
     if (window.location.hash === "#assignments" || localStorage.getItem("pendingAssignOpen") === "true") {
         localStorage.removeItem("pendingAssignOpen");
         setTimeout(() => {
@@ -1627,12 +1653,10 @@ async function renderFeeDashboard() {
         let deptName = currentStudentProfileData.Department.replace("DEPT_", "");
         let deptID = "DEPT_" + deptName.replace(/\s+/g, '');
         
-        // 1. Updated Data Aggregators to capture transaction lists
         let feeMap = {}; 
         let totalDue = 0;
         let totalPaid = 0;
 
-        // 2. Fetch Fee Structures
         const feeSnap = await getDocs(collection(db, "colleges", collegeID, "fee_structures"));
         
         feeSnap.forEach(d => {
@@ -1643,13 +1667,12 @@ async function renderFeeDashboard() {
                     dueDate: data.dueDate || "N/A", 
                     paid: 0, 
                     status: "Pending",
-                    transactions: [] // 🚨 Added to cache receipts for this semester
+                    transactions: [] 
                 };
                 totalDue += (data.semesterFee || 0);
             }
         });
 
-        // 3. Fetch Student's Payment records
         const paySnap = await getDocs(collection(db, "colleges", collegeID, "students", currentRollNo, "payments"));
         paySnap.forEach(d => {
             let p = d.data();
@@ -1658,7 +1681,6 @@ async function renderFeeDashboard() {
             if (feeMap[p.semester]) {
                 feeMap[p.semester].paid += (p.amount || 0);
                 
-                // 🚨 Format and push transaction records into the semester container
                 let tTime = "N/A";
                 if (p.timestamp) {
                     tTime = p.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1674,31 +1696,27 @@ async function renderFeeDashboard() {
             }
         });
 
-        // 4. Calculate statuses
         Object.keys(feeMap).forEach(sem => {
             if (feeMap[sem].paid >= feeMap[sem].amount) feeMap[sem].status = "Paid";
             else if (feeMap[sem].paid > 0) feeMap[sem].status = "Partial";
         });
 
-        // 5. Render Overview Layout
         let pendingOverall = totalDue - totalPaid;
         let isBasePlan = (window.collegePlanTier === "base");
 
-        // 🚨 THE EDGE CASE: Base Plan + Zero History
         if (isBasePlan && totalPaid === 0) {
             container.innerHTML = `
-                <div style="text-align: center; padding: 60px 20px; color: #64748b; background: white; border-radius: 16px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-top: 10px;">
+                <div style="text-align: center; padding: 60px 20px; color: #64748b; background: var(--bg-base); border-radius: 16px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-top: 10px;">
                     <i class="fas fa-wallet" style="font-size: 48px; color: #cbd5e1; margin-bottom: 15px;"></i>
                     <h3 style="color: var(--text-main); margin-bottom: 5px;">Fee Portal Offline</h3>
                     <p style="font-size: 13px; line-height: 1.6;">Your institution does not use Adhyora for online fee collection. Please contact your administration office directly for any fee inquiries.</p>
                 </div>
             `;
-            return; // Stop rendering right here!
+            return; 
         }
 
         let html = "";
 
-        // 🚨 ONLY SHOW INSTITUTIONAL SUMMARY IF PRO/ULTIMATE
         if (!isBasePlan) {
             html += `
                 <div class="data-card" style="border-left-color: var(--theme-main); background: var(--theme-light);">
@@ -1715,7 +1733,6 @@ async function renderFeeDashboard() {
                 </div>
             `;
         } else {
-            // 🚨 THEY ARE ON BASE PLAN, BUT HAVE OLD RECEIPTS!
             html += `
                 <div class="info-banner" style="padding: 15px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 12px; margin-bottom: 20px; font-size: 13px; color: #b91c1c;">
                     <i class="fas fa-info-circle"></i> Online fee collection is currently disabled for this institution. Your past digital receipts are safely preserved below.
@@ -1725,10 +1742,8 @@ async function renderFeeDashboard() {
 
         html += `<h4 style="margin: 20px 0 10px 0; font-size: 14px;">${isBasePlan ? "Past Payment Records" : "Semester Details"}</h4>`;
 
-        // 6. Enhanced Renderer for Cards
         let semKeysToRender = Object.keys(feeMap).sort((a,b) => a-b);
         
-        // If Base Plan, ONLY render semesters that actually have past transactions
         if (isBasePlan) {
             semKeysToRender = semKeysToRender.filter(sem => feeMap[sem].transactions && feeMap[sem].transactions.length > 0);
         }
@@ -1738,23 +1753,30 @@ async function renderFeeDashboard() {
             let color = f.status === "Paid" ? "#10b981" : (f.status === "Partial" ? "#f59e0b" : "#ef4444");
             let pendingAmt = f.amount - f.paid;
             
-            // Construct a beautiful transaction breakdown UI block if records exist
             let receiptBlockHTML = "";
             if (f.transactions && f.transactions.length > 0) {
                 receiptBlockHTML = `
                     <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-color); font-size: 11px; color: #64748b; line-height: 1.6;">
-                        ${f.transactions.map((t) => `
+                        ${f.transactions.map((t) => {
                             
+                            let isOffline = (t.method === "Cash/Offline" || t.method === "Office Payment (Cash/Cheque)" || t.id.startsWith("OFFLINE_") || t.id.startsWith("RCPT-"));
+                            
+                            let idLabel = isOffline ? "Receipt Ref" : "TXN ID";
+                            let methodBadge = isOffline 
+                                ? `<span style="background: #fffbeb; color: #d97706; border: 1px solid #fde68a; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: bold;"><i class="fas fa-building"></i> Paid at Office</span>` 
+                                : `<span style="background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: bold;"><i class="fas fa-globe"></i> Online</span>`;
+
+                            return `
                             <div id="receipt-${t.id}" style="margin-bottom: 12px; padding: 12px; background: var(--theme-light); border-radius: 8px; border: 1px solid rgba(0,0,0,0.05);">
                                 
                                 <div style="display:flex; justify-content:space-between; font-weight:600; color:var(--text-main); margin-bottom:8px;">
                                     <span style="font-size: 13px;">🧾 Fee Receipt (Sem ${sem})</span>
-                                    <span>${t.method}</span>
+                                    ${methodBadge}
                                 </div>
                                 
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 2px;">
-                                    <div><b>TXN ID:</b> <span style="font-family: monospace; color:var(--text-main); font-size:12px;">${t.id}</span></div>
-                                    <button onclick="navigator.clipboard.writeText('${t.id}'); showToast('✅ TXN ID Copied!');" style="background:none; border:none; cursor:pointer; color:var(--theme-main); padding:5px;">
+                                    <div><b>${idLabel}:</b> <span style="font-family: monospace; color:var(--text-main); font-size:12px;">${t.id}</span></div>
+                                    <button onclick="navigator.clipboard.writeText('${t.id}'); showToast('✅ ${idLabel} Copied!');" style="background:none; border:none; cursor:pointer; color:var(--theme-main); padding:5px;">
                                         <i class="fas fa-copy" style="font-size: 14px;"></i>
                                     </button>
                                 </div>
@@ -1766,17 +1788,16 @@ async function renderFeeDashboard() {
                                     <span style="color: #10b981; font-weight:bold;">₹${t.amount || f.amount}</span>
                                 </div>
                                 
-                                <button onclick="shareReceiptImage('receipt-${t.id}', '${t.id}')" style="width:100%; margin-top:10px; padding:8px; background: white; border: 1px solid var(--theme-main); border-radius:6px; font-weight:bold; cursor:pointer; color:var(--theme-main); display:flex; justify-content:center; align-items:center; gap:8px;">
+                                <button onclick="shareReceiptImage('receipt-${t.id}', '${t.id}')" style="width:100%; margin-top:10px; padding:8px; background: var(--bg-base); border: 1px solid var(--theme-main); border-radius:6px; font-weight:bold; cursor:pointer; color:var(--theme-main); display:flex; justify-content:center; align-items:center; gap:8px;">
                                     <i class="fas fa-share-nodes"></i> Share Digital Receipt
                                 </button>
                                 
-                            </div>
-                        `).join('')}
+                            </div>`;
+                        }).join('')}
                     </div>
                 `;
             }
             
-            // 🚨 SECURITY GATE: Only render the "Pay" button if it's NOT the base plan
             let payButtonHTML = "";
             if (!isBasePlan && f.status !== "Paid") {
                 payButtonHTML = `<button onclick="FEES_PayNow('${sem}', ${pendingAmt})" style="width:100%; padding:10px; border:none; background:var(--theme-main); color:white; border-radius:8px; cursor:pointer; font-weight:bold; margin-top:10px;">Pay ₹${pendingAmt.toLocaleString()}</button>`;
@@ -1809,11 +1830,10 @@ async function renderFeeDashboard() {
 window.FEES_PayNow = async (sem, amount) => {
     if (!confirm(`Confirm payment of ₹${amount.toLocaleString()} for Semester ${sem}?`)) return;
     
-    // 🚨 1. LOCK THE SCREEN: Show Initializer Loader
     showPaymentLoader("Initializing Secure Gateway...");
 
     try {
-        const response = await fetch('https://us-central1-adhyora-5d4c1.cloudfunctions.net/createRazorpayOrder', {
+        const response = await fetch('https://asia-south1-adhyora-5d4c1.cloudfunctions.net/createRazorpayOrder', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ collegeId: collegeID, amountInRupees: amount })
@@ -1822,7 +1842,7 @@ window.FEES_PayNow = async (sem, amount) => {
         const orderData = await response.json();
         
         if (!orderData.success) {
-            hidePaymentLoader(); // Unlock screen on fail
+            hidePaymentLoader(); 
             showToast("❌ Could not initialize gateway. Please try again later.");
             return;
         }
@@ -1841,16 +1861,17 @@ window.FEES_PayNow = async (sem, amount) => {
             },
             "theme": { "color": "#3b82f6" },
             "handler": async function (response) {
-                // 🚨 3. LOCK THE SCREEN AGAIN: Show Verification Loader the exact second they enter their UPI PIN
                 showPaymentLoader("Securing Digital Receipt...");
                 
                 try {
-                    const verifyResponse = await fetch('https://us-central1-adhyora-5d4c1.cloudfunctions.net/verifyAndSavePayment', {
+                    const verifyResponse = await fetch('https://asia-south1-adhyora-5d4c1.cloudfunctions.net/verifyAndSavePayment', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             collegeId: collegeID,
                             studentId: currentRollNo,
+                            studentName: currentStudentProfileData.Name || "Unknown",
+                            department: currentStudentProfileData.Department || "General",
                             semester: sem,
                             amount: amount,
                             paymentId: response.razorpay_payment_id,
@@ -1863,8 +1884,8 @@ window.FEES_PayNow = async (sem, amount) => {
 
                     if (verifyResult.success) {
                         showToast("✅ Payment Verified & Receipt Saved!");
-                        await renderFeeDashboard(); // Wait for the UI to redraw the green "Paid" text
-                        hidePaymentLoader(); // 🚨 UNLOCK THE SCREEN: They can see the updated UI now!
+                        await renderFeeDashboard(); 
+                        hidePaymentLoader(); 
                     } else {
                         hidePaymentLoader();
                         showToast("❌ Payment successful, but verification failed. Contact Admin.");
@@ -1882,7 +1903,6 @@ window.FEES_PayNow = async (sem, amount) => {
             showToast("❌ Payment Failed or Cancelled.");
         });
         
-        // 🚨 2. UNLOCK THE SCREEN: Hide the first loader right before the Razorpay window pops open
         hidePaymentLoader(); 
         rzpCheckout.open();
 
@@ -1920,14 +1940,12 @@ window.shareReceiptImage = async (elementId, txnId) => {
     showToast("Generating secure receipt... Please wait.");
     
     try {
-        // 1. Take a digital screenshot of the specific receipt div
         const canvas = await html2canvas(el, { 
-            scale: 3, // High resolution for mobile sharing
+            scale: 3, 
             backgroundColor: "#ffffff",
             logging: false
         });
         
-        // 2. Convert it to an image file
         canvas.toBlob(async (blob) => {
             if (!blob) {
                 showToast("❌ Failed to generate image.");
@@ -1936,7 +1954,6 @@ window.shareReceiptImage = async (elementId, txnId) => {
             
             const file = new File([blob], `Adhyora_Receipt_${txnId}.png`, { type: 'image/png' });
             
-            // 3. Try to open the native phone Share Sheet (WhatsApp, Email, etc.)
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 try {
                     await navigator.share({
@@ -1948,7 +1965,6 @@ window.shareReceiptImage = async (elementId, txnId) => {
                     console.log("User cancelled share");
                 }
             } else {
-                // 4. FALLBACK: If on a desktop PC, just download the image instead
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
