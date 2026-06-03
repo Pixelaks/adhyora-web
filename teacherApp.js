@@ -2071,9 +2071,10 @@ function executeThemeClassToggle(isDark) {
     }
     
     // Update PWA bar and storage
-    updateSystemThemeBar(); 
-    localStorage.setItem("adhyora_teacher_theme", isDark ? "dark" : "light");
+    localStorage.setItem("adhyora_teacher_theme", isDark ? "dark" : "light"); // <--- SAVE FIRST
+    updateSystemThemeBar(); // <--- THEN UPDATE UI
 }
+
 attachSafeClick("btnThemes", () => { let s = document.getElementById("settingsOverlay"); let t = document.getElementById("themesModal"); if(s) s.classList.remove("active"); if(t) t.classList.add("active"); });
 attachSafeClick("btnDarkMode", () => applyTheme(true));
 attachSafeClick("btnLightMode", () => applyTheme(false));
