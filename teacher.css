@@ -6,6 +6,36 @@
    ========================================= */
 /* BEFORE: .data-card, .sub-card, .ss-stu-card, .evt-card, .asn-card, .attd-row { */
 
+/* =======================================================
+   💧 LIQUID SLIDING WAVE EFFECT (VIEW TRANSITIONS)
+   ======================================================= */
+::view-transition-old(root) {
+    animation: none;
+    z-index: 1;
+}
+
+::view-transition-new(root) {
+    animation: liquidWaveSwipe 0.65s cubic-bezier(0.25, 1, 0.5, 1) both;
+    z-index: 9999;
+    clip-path: polygon(0 0, 0 0, 0 100%, 0% 100%);
+}
+
+@keyframes liquidWaveSwipe {
+    0% {
+        clip-path: polygon(0 0, 0 0, 0 100%, 0% 100%);
+    }
+    50% {
+        clip-path: polygon(0 0, 65% 0, 45% 100%, 0 100%);
+    }
+    100% {
+        clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+    }
+}
+
+::view-transition-group(root) {
+    animation-duration: 0.65s;
+}
+
 /* AFTER: Removed .asn-card so the badge can overflow the top freely! */
 .data-card, .sub-card, .ss-stu-card, .evt-card, .attd-row {
     content-visibility: auto;
@@ -538,11 +568,17 @@ body {
     }
 
     #calViewCard {
-        height: auto !important; /* 🚨 Stop the card from stretching full-screen vertically */
-        max-height: 90vh !important;
-        padding: 16px !important;
-        border-radius: 20px !important;
-    }
+       height: auto !important; 
+       max-height: 90vh !important;
+       padding: 16px !important;
+       border-radius: 20px !important;
+       
+       /* 🚨 THE FIX: Centers the card and kills the stretch WITHOUT breaking tabs */
+       margin: auto !important;       
+       flex: 0 0 auto !important;     
+       width: 100% !important;
+       max-width: 400px !important; 
+   }
 
     #calGridContainer {
         flex: none !important; /* Disables infinite flex stretching */
