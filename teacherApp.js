@@ -2014,19 +2014,22 @@ attachSafeClick("btnTerms", () => window.open("https://pixelaks.in/terms", "_bla
 // ==========================================
 async function handleSignOut() {
     try {
-        // If we have a token in RAM, delete it from the database!
         if (myCurrentPushToken && currentUserID && currentCollegeID) {
+            // 1. Remove from database
             const teacherRef = doc(db, "colleges", currentCollegeID, "teachers", currentUserID);
             await setDoc(teacherRef, {
                 webFcmTokens: arrayRemove(myCurrentPushToken)
             }, { merge: true });
-            console.log("Push Token cleanly removed from database!");
+            
+            // 2. DESTROY THE TOKEN ON THE DEVICE
+            await deleteToken(messaging);
+            console.log("Token completely destroyed from device and FCM servers.");
         }
     } catch(e) { 
         console.error("Error removing token", e); 
     }
     
-    // Now log them out!
+    // 3. Log out
     signOut(auth).then(() => window.location.href = "index.html");
 }
 
@@ -7235,6 +7238,9 @@ async function registerTeacherWebSession() {
         localStorage.setItem("myWebDeviceID", myWebDeviceID);
     }
     
+    // 🚨 FIX: Check if this is the very first time this browser is logging in
+    let isFirstLoginOnThisDevice = !localStorage.getItem("myWebDeviceID_Registered");
+    
     let osName = "Web Browser";
     if (navigator.userAgent.indexOf("Win") !== -1) osName = "Windows PC";
     if (navigator.userAgent.indexOf("Mac") !== -1) osName = "Mac OS";
@@ -7246,6 +7252,41 @@ async function registerTeacherWebSession() {
         const sessionRef = doc(db, "colleges", currentCollegeID, "teachers", currentUserID, "sessions", myWebDeviceID);
         await setDoc(sessionRef, { deviceName: osName, loginTime: serverTimestamp() }, { merge: true });
         
+        // ========================================================
+        // 🚨 THE FIX: FIRE THE "NEW LOGIN" PUSH NOTIFICATION
+        // ========================================================
+        if (isFirstLoginOnThisDevice) {
+            localStorage.setItem("myWebDeviceID_Registered", "true"); // Lock it so it doesn't spam on refresh
+            
+            const teacherRef = doc(db, "colleges", currentCollegeID, "teachers", currentUserID);
+            const tSnap = await getDoc(teacherRef);
+            
+            if (tSnap.exists()) {
+                let tokens = [];
+                // Grab all known tokens for this user
+                if (tSnap.data().fcmTokens) tokens.push(...tSnap.data().fcmTokens);
+                else if (tSnap.data().fcmToken) tokens.push(tSnap.data().fcmToken);
+                
+                if (tSnap.data().webFcmTokens) tokens.push(...tSnap.data().webFcmTokens);
+                else if (tSnap.data().webFcmToken) tokens.push(tSnap.data().webFcmToken);
+
+                if (tokens.length > 0) {
+                    fetch("https://script.google.com/macros/s/AKfycbxVL1MGATuPxN4cmAkWbd8GsY5YaoWBkyVTkjfDV-f4jJrWBnMvZ-gXdMZU5pnhHmlPHw/exec", {
+                        method: "POST", mode: "no-cors",
+                        body: JSON.stringify({
+                            title: "Security Alert 🔒",
+                            body: `A new login was detected on ${osName}.`,
+                            image: "https://raw.githubusercontent.com/Pixelaks/pixelaks.in/4c9dc43b4b3fd2c66679498581de26d690053f61/AdhyoraSplashLogo5.png",
+                            type: "login", // 🚨 Triggers your Service Worker & Unity Router!
+                            priority: "high",
+                            tokens: tokens
+                        })
+                    }).catch(e => console.warn("Failed to send login alert", e));
+                }
+            }
+        }
+        // ========================================================
+
         // Listen to our own subcollection document. If deleted, instantly force-kick the browser session!
         onSnapshot(sessionRef, (docSnap) => {
             if (!docSnap.exists()) {
@@ -7584,13 +7625,8 @@ document.getElementById("btnOpenCompose")?.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     
-    // 1. Force the dashboard navigation layer to slide view focus onto assignments
-    let assignmentsTabBtn = document.getElementById("btnNavAssignments");
-    if (assignmentsTabBtn && typeof switchView === "function") {
-        switchView(views.assignments, assignmentsTabBtn);
-    }
-    
-    // 2. Open up the newly designed modular creation template form sheet overlay
+    // Open up the newly designed modular creation template form sheet overlay directly!
+    // (Removed the switchView logic so the user stays on their current screen)
     if (typeof window.OpenAssignmentPanel === "function") {
         window.OpenAssignmentPanel();
     }
@@ -8278,6 +8314,43 @@ window.medOnConfirmDelete = async () => {
         showRcToast("❌ Error deleting record.");
     }
 };
+
+// ==========================================
+// 🚀 ENTER KEY BINDINGS (KEYBOARD & MOBILE)
+// ==========================================
+
+// 1. Lock Screen PIN (App Boot & Auto-Lock)
+const mainPinInput = document.getElementById("lockPinInput");
+if (mainPinInput) {
+    mainPinInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault(); // Stops the keyboard from jumping/refreshing
+            document.getElementById("btnLockSubmit").click();
+        }
+    });
+}
+
+// 2. Action Verification PIN (Deleting, Moving, Exporting, etc.)
+const actionPinInput = document.getElementById("pinInput");
+if (actionPinInput) {
+    actionPinInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            document.getElementById("btnVerifyPin").click();
+        }
+    });
+}
+
+// 3. Re-Auth Password Input (Forgot PIN)
+const reAuthInput = document.getElementById("reAuthPasswordInput");
+if (reAuthInput) {
+    reAuthInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            document.getElementById("btnReAuthSubmit").click();
+        }
+    });
+}
 
 // ==========================================
 // 🚨 BANK-GRADE ANTI-SNOOPING SHIELD 
