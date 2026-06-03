@@ -560,7 +560,11 @@ body {
     }
 
    /* 🚨 Recover screen padding on Student Dashboard for narrow phones */
-    #studentDashboardView { padding: 15px 10px !important; }
+    #studentDashboardView { 
+        padding: 15px 10px !important; 
+        overflow-y: auto !important; /* 🚨 FIX: Unlocks the view so the whole page can scroll! */
+        -webkit-overflow-scrolling: touch !important; /* Ensures smooth momentum scrolling on iOS */
+    }
 
    /* =========================================
        🚨 SUBJECT ASSIGN DROPDOWNS PHONE FIX
@@ -830,6 +834,76 @@ body.dark-mode .menu-btn:hover { background-color: rgba(220, 38, 38, 0.1); borde
 body.dark-mode .btn-text, body.dark-mode .btn-icon { color: var(--text-dark); }
 body.dark-mode .settings-btn { background: var(--bg-base); color: var(--text-dark); border-color: var(--border-color); }
 body.dark-mode .settings-btn:hover { background: var(--bg-surface); border-color: var(--brand-red); color: var(--brand-red); }
+
+
+/* =========================================
+   🎨 TEACHER NAV ART & DARK MODE GLOW
+   ========================================= */
+.icon-nav {
+    position: relative;
+    overflow: hidden; /* Keeps the art perfectly inside the rounded pill */
+    z-index: 10;
+    background-image: none !important; /* 🚨 Removes the old grid pattern */
+}
+
+/* Light Mode Topographic Art (Red Theme) */
+.icon-nav::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 0;
+    background-color: var(--brand-red);
+    opacity: 0.15; /* Subtle red tint */
+    
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='56'%3E%3Cpath d='M0 28 Q50 8 100 28 T200 28' stroke='black' stroke-width='1.2' fill='none'/%3E%3Cpath d='M0 38 Q50 18 100 38 T200 38' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 18 Q50 3 100 18 T200 18' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 48 Q50 32 100 48 T200 48' stroke='black' stroke-width='0.6' fill='none'/%3E%3Cpath d='M0 8 Q50 -3 100 8 T200 8' stroke='black' stroke-width='0.6' fill='none'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='56'%3E%3Cpath d='M0 28 Q50 8 100 28 T200 28' stroke='black' stroke-width='1.2' fill='none'/%3E%3Cpath d='M0 38 Q50 18 100 38 T200 38' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 18 Q50 3 100 18 T200 18' stroke='black' stroke-width='0.9' fill='none'/%3E%3Cpath d='M0 48 Q50 32 100 48 T200 48' stroke='black' stroke-width='0.6' fill='none'/%3E%3Cpath d='M0 8 Q50 -3 100 8 T200 8' stroke='black' stroke-width='0.6' fill='none'/%3E%3C/svg%3E");
+    -webkit-mask-size: 200px 56px;
+    mask-size: 200px 56px;
+    -webkit-mask-repeat: repeat-x;
+    mask-repeat: repeat-x;
+}
+
+/* Elevate the icons above the background art */
+.nav-icon-btn {
+    position: relative;
+    z-index: 2;
+}
+
+/* --- Dark Mode Frosted Glass & Hide Art --- */
+body.dark-mode .icon-nav::before {
+    display: none;
+}
+
+body.dark-mode .icon-nav {
+    background: rgba(30, 41, 59, 0.4) !important; 
+    backdrop-filter: blur(24px) saturate(180%) brightness(1.1) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(180%) brightness(1.1) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 -1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+/* --- Red Glow Behind the Nav in Dark Mode --- */
+.icon-nav-container::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    height: 100%;
+    background: var(--brand-red);
+    filter: blur(35px);
+    opacity: 0; 
+    border-radius: 50%;
+    z-index: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+body.dark-mode .icon-nav-container::before {
+    opacity: 0.35; /* Glows red in dark mode */
+}
 
 /* =========================================
    📱 MOBILE POLISH & 2-COLUMN GRID FIX
