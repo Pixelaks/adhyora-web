@@ -4,6 +4,7 @@ import { getAuth, onAuthStateChanged, signOut, EmailAuthProvider, reauthenticate
 // 🚨 ADDED: deleteDoc is now imported!
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, getDocs, getDocsFromCache, onSnapshot, collection, query, where, orderBy, limit, startAfter, writeBatch, increment, serverTimestamp, deleteField, updateDoc, addDoc, setDoc, arrayRemove, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getMessaging, getToken, onMessage, deleteToken } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-functions.js";
 
 // 🚀 OPTIMIZATION: Debounce Function to stop UI lag when searching
 function debounce(func, wait = 300) {
@@ -2767,13 +2768,17 @@ async function subjExecuteDelete() {
 
     let stateOrDocID = subjActiveLinks.get(subjPendingDeleteCode);
 
-    // 1. If it's real, delete from Firebase
+    // 1. If it's real, delete from Firebase via Cloud Function
     if (stateOrDocID !== "PENDING") {
         showRcToast("Removing subject...");
         try {
-            // 🚨 THE FIX: Use the modular updateDoc function!
-            let docRef = doc(db, "colleges", currentCollegeID, "faculty_subjects", stateOrDocID);
-            await updateDoc(docRef, { isActive: false });
+            const functions = getFunctions(app, "asia-south1");
+            const teacherAPI = httpsCallable(functions, 'teacherAPI');
+            await teacherAPI({
+                routeAction: "DELETE_SUBJECT_DECLARATION",
+                collegeId: currentCollegeID,
+                docId: stateOrDocID
+            });
             
             showRcToast("Subject Removed!");
         } catch(e) {
@@ -2829,28 +2834,14 @@ async function subjSaveNewSelections() {
     let semDrop = document.getElementById("subjSemDropdown");
     let sem = semDrop.options[semDrop.selectedIndex].text.replace("Semester ", "").trim();
     
-    let batch = writeBatch(db);
-    let changes = 0;
-
+    let pendingSubjects = [];
     subjActiveLinks.forEach((status, code) => {
         if (status === "PENDING") {
-            let docID = `Link_${currentUserID}_${code}_S${sem}`;
-            let docRef = doc(db, "colleges", currentCollegeID, "faculty_subjects", docID);
-            
-            batch.set(docRef, {
-                teacherID: currentUserID,
-                teacherName: currentTeacherName,
-                subjectCode: code,
-                subjectName: subjMasterList.get(code),
-                semester: sem,
-                isActive: true,
-                timestamp: serverTimestamp()
-            });
-            changes++;
+            pendingSubjects.push({ code: code, name: subjMasterList.get(code) });
         }
     });
 
-    if (changes === 0) {
+    if (pendingSubjects.length === 0) {
         showRcToast("No new subjects to save.");
         return;
     }
@@ -2860,7 +2851,15 @@ async function subjSaveNewSelections() {
     saveBtn.style.pointerEvents = "none";
 
     try {
-        await batch.commit();
+        const functions = getFunctions(app, "asia-south1");
+        const teacherAPI = httpsCallable(functions, 'teacherAPI');
+        await teacherAPI({
+            routeAction: "SAVE_SUBJECT_DECLARATION",
+            collegeId: currentCollegeID,
+            sem: sem,
+            pendingSubjects: pendingSubjects
+        });
+
         subjIsFirstTimeSetupStatic = false; // Turn off forced-open flag
         showRcToast("Subjects saved successfully!");
 
@@ -3255,8 +3254,15 @@ function asnRenderList(dataList) {
 
         let dateColor = "var(--text-dark)";
         let dateSuffix = "";
+        let cardOpacity = "1"; // 🚨 ADDED: Default full opacity
 
-        // 🚨 Exact C# Logic translation for Expiry & Urgency
+        let postedDateStr = "Unknown Date";
+        if (d.createdAt && typeof d.createdAt.toDate === 'function') {
+            let cDate = d.createdAt.toDate();
+            postedDateStr = cDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+        }
+
+        // Exact C# Logic translation for Expiry & Urgency
         if (d.dueDateISO) {
             let parsedDate = new Date(d.dueDateISO);
             if (!isNaN(parsedDate.getTime())) {
@@ -3270,6 +3276,7 @@ function asnRenderList(dataList) {
                     // 🔴 EXPIRED
                     dateColor = "#ef4444"; // Red
                     dateSuffix = " (Closed)";
+                    cardOpacity = "0.5"; // 🚨 ADDED: Fade out the card if expired
                 } else if (daysDiff <= 2) {
                     // 🟡 URGENT
                     dateColor = "#d97706"; // Amber
@@ -3277,12 +3284,16 @@ function asnRenderList(dataList) {
             }
         }
 
+        // 🚨 MODIFIED HTML: Injected opacity: ${cardOpacity}; into the main wrapper style
         html += `
-            <div style="background: var(--bg-base); border: 1px solid var(--border-color); border-left: 5px solid var(--brand-red); border-radius: 12px; padding: 15px 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); transition: 0.2s;">
+            <div style="background: var(--bg-base); border: 1px solid var(--border-color); border-left: 5px solid var(--brand-red); border-radius: 12px; padding: 15px 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); transition: 0.2s; opacity: ${cardOpacity};">
                 <div style="font-size: 16px; font-weight: 800; color: var(--text-dark); margin-bottom: 2px;">${topic}</div>
                 <div style="font-size: 11px; color: var(--text-muted); font-weight: 600; margin-bottom: 10px; letter-spacing: 0.3px;">${subject} | ${semester}</div>
                 <div style="font-size: 13px; color: var(--text-dark); line-height: 1.5; margin-bottom: 15px; white-space: pre-wrap;">${desc}</div>
-                <div style="text-align: right; font-size: 12px; font-weight: bold; color: ${dateColor};">Due: ${dateStr}${dateSuffix}</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed var(--border-color); padding-top: 10px; margin-top: 5px;">
+                    <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;"><i class="fas fa-calendar-plus" style="margin-right: 5px;"></i>Posted: ${postedDateStr}</div>
+                    <div style="text-align: right; font-size: 12px; font-weight: bold; color: ${dateColor};">Due: ${dateStr}${dateSuffix}</div>
+                </div>
             </div>
         `;
     });
@@ -3998,6 +4009,22 @@ async function saLoadStudents() {
     }
 }
 
+// 🚨 NEW HELPER: Bulletproof Semester Data Merger
+function getMergedSemesterData(dataObj, semNum) {
+    let merged = {};
+    if (!dataObj) return merged;
+    let cleanSem = String(semNum).replace(/[^0-9]/g, '');
+    let targetLow = `semester${cleanSem}`;
+    
+    Object.keys(dataObj).forEach(k => {
+        let kLow = k.toLowerCase().replace(/\s+/g, "").replace("_", "");
+        if (kLow === targetLow || kLow === `sem${cleanSem}` || kLow === cleanSem) {
+            Object.assign(merged, dataObj[k]);
+        }
+    });
+    return merged;
+}
+
 function saRenderLayout(cat) {
     document.getElementById("saEmptyMsg").style.display = "none";
     saSelectedUnassigned.clear();
@@ -4005,8 +4032,6 @@ function saRenderLayout(cat) {
     
     let groupedData = {}; // Tracks Assigned Groups
     let unassignedHTML = "";
-    let semKey = `Semester_${saCurrentSem}`;
-    let semSpace = `Semester ${saCurrentSem}`;
 
     // 1. Sort students alphabetically by name
     saCachedStudents.sort((a,b) => (a.Name || "").localeCompare(b.Name || ""));
@@ -4014,28 +4039,29 @@ function saRenderLayout(cat) {
     saCachedStudents.forEach(s => {
         let isEnrolledInCat = false;
         let enrolledSubject = "";
-        let enrolledMap = s.enrolledSubjects ? (s.enrolledSubjects[semKey] || s.enrolledSubjects[semSpace] || s.enrolledSubjects[saCurrentSem]) : null;
+        
+        // 🚨 USE THE NEW MERGER HELPER to combine fragmented database keys!
+        let enrolledMap = getMergedSemesterData(s.enrolledSubjects, saCurrentSem);
+        let assignedByMap = getMergedSemesterData(s.assigned_by, saCurrentSem);
+        let timeMap = getMergedSemesterData(s.assignment_timestamps, saCurrentSem);
 
-        if (enrolledMap && enrolledMap[cat]) {
+        if (enrolledMap[cat]) {
             isEnrolledInCat = true;
             enrolledSubject = enrolledMap[cat];
         }
 
         let isEditable = false;
         if (isEnrolledInCat) {
-            let assignedByMap = s.assigned_by ? (s.assigned_by[semKey] || s.assigned_by[semSpace] || s.assigned_by[saCurrentSem]) : null;
-            let timeMap = s.assignment_timestamps ? (s.assignment_timestamps[semKey] || s.assignment_timestamps[semSpace] || s.assignment_timestamps[saCurrentSem]) : null;
-            
             // 🚨 1. PRINCIPAL OVERRIDE LOCK
-            if (assignedByMap && assignedByMap[cat] === "Principal") {
+            if (assignedByMap[cat] === "Principal") {
                 isEditable = false;
             } 
             else {
                 // 🚨 2. STRICT 24-HOUR RULE
-                if (!timeMap || !timeMap[cat]) {
+                if (!timeMap[cat]) {
                     isEditable = true; // Legacy pass
                 } else {
-                    let assignedTime = timeMap[cat].toDate();
+                    let assignedTime = timeMap[cat].toDate ? timeMap[cat].toDate() : new Date(timeMap[cat]);
                     let hoursPassed = (new Date() - assignedTime) / (1000 * 60 * 60);
                     if (hoursPassed < 24) isEditable = true;
                 }
@@ -4201,50 +4227,55 @@ async function saExecuteAction() {
 
     let cat = document.getElementById("saCatDrop").value;
     let sub = document.getElementById("saSubDrop").value;
-    
-    // 🚨 THE FIX: Replaced the underscore with a space to perfectly match C# and prevent database fragmentation!
-    let semKey = `Semester ${saCurrentSem}`; 
-
     let studentsToProcess = saIsRemoveMode ? Array.from(saSelectedAssigned) : Array.from(saSelectedUnassigned);
-    let wb = writeBatch(db);
-    let ops = 0;
 
-    for (let i = 0; i < studentsToProcess.length; i++) {
-        let sid = studentsToProcess[i];
-        let stuRef = doc(db, "colleges", currentCollegeID, "students", sid);
-        let updates = {};
+    try {
+        const functions = getFunctions(app, "asia-south1");
+        const teacherAPI = httpsCallable(functions, 'teacherAPI');
+        await teacherAPI({
+            routeAction: "MANAGE_SUBJECT_ASSIGNMENT",
+            collegeId: currentCollegeID,
+            isRemoveMode: saIsRemoveMode,
+            currentSem: saCurrentSem,
+            category: cat,
+            subject: sub,
+            studentsToProcess: studentsToProcess
+        });
 
-        if (saIsRemoveMode) {
-            updates[`enrolledSubjects.${semKey}.${cat}`] = deleteField();
-            updates[`assignment_timestamps.${semKey}.${cat}`] = deleteField();
-            updates[`assigned_by.${semKey}.${cat}`] = deleteField();
-        } else {
-            updates[`enrolledSubjects.${semKey}.${cat}`] = sub;
-            updates[`assignment_timestamps.${semKey}.${cat}`] = serverTimestamp();
-            updates[`assigned_by.${semKey}.${cat}`] = "HOD";
-        }
+        // 🚨 CACHE FIX: Instantly update the local RAM using standard space formatting
+        let semKey = `Semester ${saCurrentSem}`; 
+        studentsToProcess.forEach(sid => {
+            if (AdhyoraStudentCache.ramStore.has(sid)) {
+                let student = AdhyoraStudentCache.ramStore.get(sid);
+                
+                if (!student.enrolledSubjects) student.enrolledSubjects = {};
+                if (!student.enrolledSubjects[semKey]) student.enrolledSubjects[semKey] = {};
+                
+                if (!student.assigned_by) student.assigned_by = {};
+                if (!student.assigned_by[semKey]) student.assigned_by[semKey] = {};
 
-        // 🟢 ADD THIS LINE:
-        updates["updatedAt"] = serverTimestamp();
+                if (saIsRemoveMode) {
+                    delete student.enrolledSubjects[semKey][cat];
+                    delete student.assigned_by[semKey][cat];
+                } else {
+                    student.enrolledSubjects[semKey][cat] = sub;
+                    student.assigned_by[semKey][cat] = currentUserID;
+                }
+                
+                AdhyoraStudentCache.ramStore.set(sid, student);
+            }
+        });
 
-        wb.update(stuRef, updates);
-        ops++;
-
-        if (ops >= 450) {
-            await wb.commit();
-            wb = writeBatch(db); ops = 0;
-        }
+        if (typeof notifyTeachersOfStudentUpdate === "function") notifyTeachersOfStudentUpdate();
+        showRcToast(saIsRemoveMode ? `Removed ${studentsToProcess.length} students!` : `Assigned ${studentsToProcess.length} students!`);
+        saLoadStudents();
+    } catch(e) {
+        console.error("Subject Assignment Error", e);
+        showRcToast("Failed to update assignments.");
+    } finally {
+        btn.innerText = saIsRemoveMode ? "Remove" : "Assign"; 
+        btn.disabled = false;
     }
-
-    if (ops > 0) await wb.commit();
-
-    // 🚨 ADD THIS LINE: Tell teachers students got assigned/removed from a subject!
-    notifyTeachersOfStudentUpdate();
-
-    showRcToast(saIsRemoveMode ? `Removed ${studentsToProcess.length} students!` : `Assigned ${studentsToProcess.length} students!`);
-    
-    // Refresh the UI!
-    saLoadStudents();
 }
 
 // ==========================================
@@ -4890,46 +4921,40 @@ async function evtSaveEventAttendance() {
         involvedSemesters.add(semNum.toString());
     });
 
-    let payload = {
-        teacherID: currentUserID,
-        teacherName: currentTeacherName,
-        eventName: eventName,
-        date: dateStr,
-        period: pStr,
-        semester: Array.from(involvedSemesters).join(", "),
-        studentIDs: sids,
-        status: "Pending"
-    };
-
     try {
-        let docRef;
-        if (evtCurrentRequestID) {
-            docRef = doc(db, "colleges", currentCollegeID, "event_requests", evtCurrentRequestID);
-            await setDoc(docRef, payload, { merge: true });
-        } else {
-            payload.submittedAt = serverTimestamp();
-            docRef = await addDoc(collection(db, "colleges", currentCollegeID, "event_requests"), payload);
-            evtCurrentRequestID = docRef.id;
-        }
-
-        showRcToast("Event sent to Principal!");
-        
-        // 🚨 WEBOOK: Blast notification to Principal safely via Google Script
-        const safeCol = currentCollegeID.replace(/[^a-zA-Z0-9]/g, '');
-        fetch("https://script.google.com/macros/s/AKfycbxVL1MGATuPxN4cmAkWbd8GsY5YaoWBkyVTkjfDV-f4jJrWBnMvZ-gXdMZU5pnhHmlPHw/exec", {
-            method: "POST", mode: "no-cors",
-            body: JSON.stringify({
-                title: "New Event Request 📅",
-                body: `${currentTeacherName} has requested attendance approval for '${eventName}'.`,
-                image: "https://raw.githubusercontent.com/Pixelaks/pixelaks.in/4c9dc43b4b3fd2c66679498581de26d690053f61/AdhyoraSplashLogo5.png",
-                type: "event_request",
-                priority: "high",
-                topics: [`${safeCol}_PRINCIPAL`]
-            })
+        const functions = getFunctions(app, "asia-south1");
+        const teacherAPI = httpsCallable(functions, 'teacherAPI');
+        const res = await teacherAPI({
+            routeAction: "SAVE_EVENT_REQUEST",
+            collegeId: currentCollegeID,
+            eventName: eventName,
+            dateStr: dateStr,
+            pStr: pStr,
+            involvedSemestersArray: Array.from(involvedSemesters),
+            sids: sids,
+            currentRequestID: evtCurrentRequestID
         });
 
+        if (res.data.success) {
+            evtCurrentRequestID = res.data.docId;
+            showRcToast("Event sent to Principal!");
+            
+            // 🚨 WEBOOK: Blast notification to Principal safely via Google Script
+            const safeCol = currentCollegeID.replace(/[^a-zA-Z0-9]/g, '');
+            fetch("https://script.google.com/macros/s/AKfycbxVL1MGATuPxN4cmAkWbd8GsY5YaoWBkyVTkjfDV-f4jJrWBnMvZ-gXdMZU5pnhHmlPHw/exec", {
+                method: "POST", mode: "no-cors",
+                body: JSON.stringify({
+                    title: "New Event Request 📅",
+                    body: `${currentTeacherName} has requested attendance approval for '${eventName}'.`,
+                    image: "https://raw.githubusercontent.com/Pixelaks/pixelaks.in/4c9dc43b4b3fd2c66679498581de26d690053f61/AdhyoraSplashLogo5.png",
+                    type: "event_request",
+                    priority: "high",
+                    topics: [`${safeCol}_PRINCIPAL`]
+                })
+            });
+        }
     } catch (e) {
-        console.error(e);
+        console.error("Event Save Error:", e);
         showRcToast("Failed to Send!");
     } finally {
         saveBtn.innerText = "Send to Principal"; saveBtn.disabled = false;
@@ -5286,14 +5311,25 @@ window.imOpenMarksPanel = (stuPayloadEnc, autoAttEnc, batchEnc) => {
     document.getElementById("imMarksModal").classList.add("active");
 };
 
-function imOnAddExamClicked() {
+async function imOnAddExamClicked() {
     let count = imExamTypesList.length + 1;
     let newName = `${count}th Internal`;
     
     if (!imExamTypesList.includes(newName)) {
         imExamTypesList.push(newName);
-        setDoc(doc(db, "colleges", currentCollegeID, "settings", "exam_config"), { exams: imExamTypesList }, { merge: true });
-        imRenderAccordions();
+        imRenderAccordions(); // Update UI instantly
+
+        try {
+            const functions = getFunctions(app, "asia-south1");
+            const teacherAPI = httpsCallable(functions, 'teacherAPI');
+            await teacherAPI({
+                routeAction: "ADD_EXAM_CONFIG",
+                collegeId: currentCollegeID,
+                newName: newName
+            });
+        } catch (e) {
+            console.error("Failed to append exam globally", e);
+        }
     }
 }
 
@@ -5432,35 +5468,34 @@ window.imSaveMarks = async (examName, idx) => {
 
     if (mVal) imSessionMaxMarks[cacheKey] = mVal;
 
-    let payload = {
-        test: test, att: att, assign: assign, max: maxMark, total: total, timestamp: serverTimestamp()
-    };
-
-    let docRef = doc(db, "colleges", currentCollegeID, "students", imCurrentStudent.id, "nep_marks", semester);
-    let updateData = {};
-    updateData[`${subject}.${examName}`] = payload;
+    let payload = { test: test, att: att, assign: assign, max: maxMark, total: total };
 
     try {
-        await updateDoc(docRef, updateData);
+        const functions = getFunctions(app, "asia-south1");
+        const teacherAPI = httpsCallable(functions, 'teacherAPI');
+        await teacherAPI({
+            routeAction: "SAVE_MARKS",
+            collegeId: currentCollegeID,
+            studentId: imCurrentStudent.id,
+            semester: semester,
+            subject: subject,
+            examName: examName,
+            payload: payload
+        });
+
+        showRcToast("Marks Saved Successfully!");
+        btn.innerText = "Save Marks"; btn.disabled = false;
+
+        let head = document.getElementById(`im_acc_head_${idx}`);
+        if (head) {
+            head.innerHTML = `${examName} <span style="color:var(--brand-red); font-weight:800;">(${total}${maxMark > 0 ? ` / ${maxMark}` : ''})</span>`;
+        }
+        imPopulateMarksPreview(imCurrentStudent.id, semester, subject);
     } catch(e) {
-        // Document doesn't exist yet, Set it!
-        let initialData = {};
-        initialData[subject] = {};
-        initialData[subject][examName] = payload;
-        await setDoc(docRef, initialData, { merge: true });
+        console.error("Save Marks Error", e);
+        showRcToast("Failed to save marks.");
+        btn.innerText = "Save Marks"; btn.disabled = false;
     }
-
-    showRcToast("Marks Saved Successfully!");
-    btn.innerText = "Save Marks"; btn.disabled = false;
-
-    // Instantly update header visually
-    let head = document.getElementById(`im_acc_head_${idx}`);
-    if (head) {
-        head.innerHTML = `${examName} <span style="color:var(--brand-red); font-weight:800;">(${total}${maxMark > 0 ? ` / ${maxMark}` : ''})</span>`;
-    }
-    
-    // 🚨 THE FIX: Instantly refresh the badge on the background card!
-    imPopulateMarksPreview(imCurrentStudent.id, semester, subject);
 };
 
 // ==========================================
@@ -5975,68 +6010,84 @@ window.asnOnCatChange = (rowId, val) => {
     asnActiveRows = asnActiveRows.filter(r => !(r.period === row.period && r.isSplit)); // Wipe old splits
     asnRenderLayout();
 };
-window.asnOnSubChange = (rowId, val) => {
+window.asnOnSubChange = async (rowId, val) => {
     let row = asnActiveRows.find(r => r.id === rowId); if(!row) return;
-    row.subject = val; row.teacher = ""; row.teacherID = ""; row.room = "";
+    
+    // Wipe old state
+    row.subject = val; 
+    row.teacher = ""; 
+    row.teacherID = ""; 
+    row.room = "";
+    
+    // Remove any existing split rows for this period
     asnActiveRows = asnActiveRows.filter(r => !(r.period === row.period && r.isSplit)); 
     
     if (val) {
-        // Query ALL allocations for this period/subject to capture splits
-        getDocs(query(
-            collection(db, "colleges", currentCollegeID, "timetable_allocations"),
-            where("semester", "==", asnCurrentSem),
-            where("day", "==", asnSelectedDay),
-            where("period", "==", row.period.toString()),
-            where("subjectName", "==", val)
-        )).then(snap => {
-            if (!snap.empty) {
-                let allocs = [];
-                snap.forEach(d => allocs.push(d.data()));
-                
-                // Sort by split index securely
-                allocs.sort((a,b) => (parseInt(a.splitIndex)||0) - (parseInt(b.splitIndex)||0));
-                
-                // Restore the main row (Batch 1 / Common)
+        try {
+            // 1. Fetch any existing allocations for this period/subject to auto-fill Teacher/Room
+            const allocSnap = await getDocs(query(
+                collection(db, "colleges", currentCollegeID, "timetable_allocations"),
+                where("semester", "==", asnCurrentSem),
+                where("day", "==", asnSelectedDay),
+                where("period", "==", row.period.toString()),
+                where("subjectName", "==", val)
+            ));
+
+            let allocs = [];
+            allocSnap.forEach(d => allocs.push(d.data()));
+            allocs.sort((a,b) => (parseInt(a.splitIndex)||0) - (parseInt(b.splitIndex)||0));
+
+            // Apply the main row (Batch 1 / Common) allocation if it exists
+            if (allocs.length > 0) {
                 let mainAlloc = allocs[0];
                 row.teacher = mainAlloc.teacherName || "";
                 row.teacherID = mainAlloc.teacherID || "";
                 row.room = mainAlloc.room || "";
-
-                // Check if batched
-                getDocs(query(collection(db, "colleges", currentCollegeID, "subject_batches"), where("semester", "==", asnCurrentSem), where("subjectName", "==", val))).then(bSnap => {
-                    if (bSnap.size > 1) {
-                        let bDocs = []; bSnap.forEach(d => bDocs.push(d.data())); bDocs.sort((a,b) => a.batchName.localeCompare(b.batchName));
-                        for(let i=1; i<bDocs.length; i++) {
-                            
-                            // 🚨 Safely pull the corresponding teacher for this specific batch
-                            let matchAlloc = allocs.find(a => parseInt(a.splitIndex) === i);
-                            let tName = matchAlloc ? matchAlloc.teacherName : "";
-                            let tID = matchAlloc ? matchAlloc.teacherID : "";
-                            let tRoom = matchAlloc ? matchAlloc.room : "";
-
-                            asnActiveRows.push({ 
-                                id: `r_${row.period}_${i}_${Date.now()}`, 
-                                period: row.period, 
-                                splitIndex: i, 
-                                isSplit: true, 
-                                category: row.category, 
-                                subject: val, 
-                                teacher: tName, 
-                                teacherID: tID, 
-                                room: tRoom 
-                            });
-                        }
-                    }
-                    asnRenderLayout();
-                });
-            } else {
-                asnRenderLayout();
             }
-        });
+
+            // 2. 🚨 THE FIX: Fetch batches independently! (Matches C# RestoreSplitsForMainRow)
+            const bSnap = await getDocs(query(
+                collection(db, "colleges", currentCollegeID, "subject_batches"), 
+                where("semester", "==", asnCurrentSem), 
+                where("subjectName", "==", val)
+            ));
+
+            if (bSnap.size > 1) {
+                let bDocs = []; 
+                bSnap.forEach(d => bDocs.push(d.data())); 
+                bDocs.sort((a,b) => a.batchName.localeCompare(b.batchName));
+                
+                // Spawn the additional split rows
+                for(let i = 1; i < bDocs.length; i++) {
+                    let matchAlloc = allocs.find(a => parseInt(a.splitIndex) === i);
+                    let tName = matchAlloc ? matchAlloc.teacherName : "";
+                    let tID = matchAlloc ? matchAlloc.teacherID : "";
+                    let tRoom = matchAlloc ? matchAlloc.room : "";
+
+                    asnActiveRows.push({ 
+                        id: `r_${row.period}_${i}_${Date.now()}`, 
+                        period: row.period, 
+                        splitIndex: i, 
+                        isSplit: true, 
+                        category: row.category, 
+                        subject: val, 
+                        teacher: tName, 
+                        teacherID: tID, 
+                        room: tRoom 
+                    });
+                }
+            }
+            asnRenderLayout();
+        } catch (e) {
+            console.error("Error fetching subject splits: ", e);
+            asnRenderLayout();
+        }
     } else {
         asnRenderLayout();
     }
 };
+
+
 window.asnOnTeacherChange = (rowId, val) => { let row = asnActiveRows.find(r => r.id === rowId); if(!row) return; if(val){ let parts = val.split('|'); row.teacherID = parts[0]; row.teacher = parts[1]; } else { row.teacherID = ""; row.teacher = ""; } };
 window.asnOnRoomChange = (rowId, val) => { let row = asnActiveRows.find(r => r.id === rowId); if(!row) return; row.room = val; };
 
@@ -6139,22 +6190,16 @@ function asnExecuteSplitAction() {
         if (row.subject) {
             let newBatches = remRows.length;
             if (newBatches === 1) {
-                showRcToast("Reverted to a single class.");
-                getDocs(query(collection(db, "colleges", currentCollegeID, "subject_batches"), where("semester", "==", asnCurrentSem), where("subjectName", "==", row.subject))).then(snap => {
-                    let wb = writeBatch(db); // Safer fallback for DB deletion
-                    snap.forEach(d => wb.delete(d.ref));
-                    wb.commit();
-                });
+                showRcToast("Reverting to a single class...");
+                const functions = getFunctions(app, "asia-south1");
+                const teacherAPI = httpsCallable(functions, 'teacherAPI');
+                teacherAPI({ routeAction: "MANAGE_BATCHES", collegeId: currentCollegeID, action: "DELETE_ALL", semester: asnCurrentSem, subject: row.subject })
+                    .then(() => showRcToast("Reverted successfully."));
             } else {
                 if (isDeptSplit) asnOpenDeptSplit(remRows[0], true);
                 else {
                     showRcToast(`Re-balancing into ${newBatches} batches...`);
-                    getDocs(query(collection(db, "colleges", currentCollegeID, "subject_batches"), where("semester", "==", asnCurrentSem), where("subjectName", "==", row.subject))).then(snap => {
-                        const wb = writeBatch(db); 
-                        snap.forEach(d => wb.delete(d.ref)); 
-                        // 🚨 FIX: Added row.category here
-                        wb.commit().then(() => asnExecuteDivideEvenly(row.subject, newBatches, row.category));
-                    });
+                    asnExecuteDivideEvenly(row.subject, newBatches, row.category);
                 }
             }
         }
@@ -6165,7 +6210,6 @@ function asnExecuteSplitAction() {
             let newIdx = asnActiveRows.filter(r => r.period === row.period && r.isSplit).length + 1; 
             asnActiveRows.push({ id: `r_${row.period}_${newIdx}_${Date.now()}`, period: row.period, splitIndex: newIdx, isSplit: true, category: row.category, subject: row.subject, teacher: "", teacherID: "", room: "" }); 
             asnRenderLayout(); 
-            // 🚨 FIX: Added row.category here
             asnExecuteDivideEvenly(row.subject, newIdx + 1, row.category);
         }
     }
@@ -6174,32 +6218,24 @@ function asnExecuteSplitAction() {
 async function asnExecuteDivideEvenly(subject, totalBatches, rowCategory) {
     let validStudentIDs = [];
     let cleanCat = (rowCategory || "").toUpperCase().replace(/\s+/g,"");
-    let semKey = `Semester_${asnCurrentSem}`;
-    let semSpace = `Semester ${asnCurrentSem}`;
 
-    // 🚨 FIX: Filter the cached students exactly like the C# version does!
     asnCachedYearStudents.forEach(s => {
         let isEnrolled = false;
 
         if (cleanCat.includes("MJD") || cleanCat.includes("CORE") || cleanCat.includes("TUTORIAL")) {
-            // Strict Department Check for MJD
             let sDept = "DEPT_" + String(s.Department || s.department || "").replace(/ /g, "");
             if (sDept === teacherDeptRaw || (s.Department || s.department) === teacherDeptRaw) {
                 isEnrolled = true;
             }
         } else {
-            // Normal Check for Electives/Open subjects
-            let enrolledMap = s.enrolledSubjects ? (s.enrolledSubjects[semKey] || s.enrolledSubjects[semSpace] || s.enrolledSubjects[asnCurrentSem]) : null;
-            if (enrolledMap) {
-                Object.values(enrolledMap).forEach(v => {
-                    if (v.toString().trim() === subject.trim()) isEnrolled = true;
-                });
-            }
+            // 🚨 USE MERGER HELPER
+            let enrolledMap = getMergedSemesterData(s.enrolledSubjects, asnCurrentSem);
+            Object.values(enrolledMap).forEach(v => {
+                if (v.toString().trim() === subject.trim()) isEnrolled = true;
+            });
         }
 
-        if (isEnrolled) {
-            validStudentIDs.push(s.id);
-        }
+        if (isEnrolled) validStudentIDs.push(s.id);
     });
 
     if (validStudentIDs.length === 0) {
@@ -6207,29 +6243,23 @@ async function asnExecuteDivideEvenly(subject, totalBatches, rowCategory) {
         return;
     }
 
-    let baseSize = Math.floor(validStudentIDs.length / totalBatches); 
-    let remainder = validStudentIDs.length % totalBatches;
-    const wb = writeBatch(db); 
-    let cleanSub = subject.replace(/\s+/g, '').replace(/\//g, ''); 
-    let offset = 0;
-
-    for(let i = 0; i < totalBatches; i++) {
-        let size = baseSize + (i < remainder ? 1 : 0); 
-        let bStudents = validStudentIDs.slice(offset, offset + size); 
-        offset += size; 
-        
-        let bName = `Batch ${i+1}`; 
-        let docID = `BATCH_Sem${asnCurrentSem}_${cleanSub}_${bName.replace(/\s+/g,'')}`;
-        
-        wb.set(doc(db, "colleges", currentCollegeID, "subject_batches", docID), { 
-            batchName: bName, 
-            subjectName: subject, 
-            semester: asnCurrentSem, 
-            studentIDs: bStudents 
-        }, {merge: true});
+    try {
+        const functions = getFunctions(app, "asia-south1");
+        const teacherAPI = httpsCallable(functions, 'teacherAPI');
+        await teacherAPI({
+            routeAction: "MANAGE_BATCHES",
+            collegeId: currentCollegeID,
+            action: "DIVIDE_EVENLY",
+            semester: asnCurrentSem,
+            subject: subject,
+            totalBatches: totalBatches,
+            studentIds: validStudentIDs
+        });
+        showRcToast(`Split Class evenly!`);
+    } catch (e) {
+        console.error(e);
+        showRcToast("Database Error. Check permissions.");
     }
-    await wb.commit();
-    showRcToast(`Split Class evenly!`);
 }
 
 function asnOpenDeptSplit(row, isDeleting) {
@@ -6238,7 +6268,13 @@ function asnOpenDeptSplit(row, isDeleting) {
     
     students.forEach(s => {
         let isEnrolled = false;
-        if(s.enrolledSubjects) { let semKey = "Semester_" + asnCurrentSem; let semSpace = "Semester " + asnCurrentSem; let map = s.enrolledSubjects[semKey] || s.enrolledSubjects[semSpace] || s.enrolledSubjects[asnCurrentSem]; if(map) { Object.values(map).forEach(v => { if(v.toString().trim() === sub.trim()) isEnrolled = true; }); } }
+        if(s.enrolledSubjects) { 
+            // 🚨 USE MERGER HELPER
+            let map = getMergedSemesterData(s.enrolledSubjects, asnCurrentSem);
+            Object.values(map).forEach(v => { 
+                if(v.toString().trim() === sub.trim()) isEnrolled = true; 
+            }); 
+        }
         if (isEnrolled) { let d = (s.Department || s.department || "Unknown").trim(); uniqueDepts.add(d); studentToDept[s.id] = d; }
     });
     
@@ -6285,25 +6321,62 @@ async function asnConfirmDeptSplit(subject, uniqueDepts, studentToDept) {
     document.getElementById("deptSplitOverlay").classList.remove("active"); 
     showRcToast("Saving configurations...");
     
-    if (totalBatches === 1) {
-        const snap = await getDocs(query(collection(db, "colleges", currentCollegeID, "subject_batches"), where("semester", "==", asnCurrentSem), where("subjectName", "==", subject)));
-        const wb = writeBatch(db); snap.forEach(d => wb.delete(d.ref)); await wb.commit();
-        asnActiveRows = asnActiveRows.filter(r => !(r.period === asnPendSplitRow.period && r.isSplit)); let mRow = asnActiveRows.find(r => r.period === asnPendSplitRow.period); if(mRow) { mRow.isSplit = false; mRow.splitIndex = 0; }
-        asnRenderLayout(); return;
+    try {
+        const functions = getFunctions(app, "asia-south1");
+        const teacherAPI = httpsCallable(functions, 'teacherAPI');
+
+        if (totalBatches === 1) {
+            await teacherAPI({
+                routeAction: "MANAGE_BATCHES",
+                collegeId: currentCollegeID,
+                action: "DELETE_ALL",
+                semester: asnCurrentSem,
+                subject: subject
+            });
+            
+            asnActiveRows = asnActiveRows.filter(r => !(r.period === asnPendSplitRow.period && r.isSplit)); 
+            let mRow = asnActiveRows.find(r => r.period === asnPendSplitRow.period); 
+            if(mRow) { mRow.isSplit = false; mRow.splitIndex = 0; }
+            asnRenderLayout(); 
+            return;
+        }
+
+        let batchMap = {}; 
+        for(let i=1; i<=totalBatches; i++) batchMap[`Batch ${i}`] = [];
+        
+        document.querySelectorAll(".ds-dept-select").forEach(s => { 
+            let val = s.value; 
+            if(val !== "Exclude") { 
+                Object.keys(studentToDept).forEach(sid => { 
+                    if(studentToDept[sid] === s.dataset.dept) batchMap[val].push(sid); 
+                }); 
+            } 
+        });
+
+        await teacherAPI({
+            routeAction: "MANAGE_BATCHES",
+            collegeId: currentCollegeID,
+            action: "DIVIDE_BY_DEPT",
+            semester: asnCurrentSem,
+            subject: subject,
+            totalBatches: totalBatches,
+            batchMap: batchMap
+        });
+
+        let existingCount = asnActiveRows.filter(r => r.period === asnPendSplitRow.period).length;
+        if (totalBatches > existingCount) { 
+            for(let i=existingCount; i<totalBatches; i++) asnActiveRows.push({ id: `r_${asnPendSplitRow.period}_${i}_${Date.now()}`, period: asnPendSplitRow.period, splitIndex: i, isSplit: true, category: asnPendSplitRow.category, subject: subject, teacher: "", teacherID: "", room: "" }); 
+        } else if (totalBatches < existingCount) { 
+            asnActiveRows = asnActiveRows.filter(r => r.period !== asnPendSplitRow.period || r.splitIndex < totalBatches); 
+        }
+        
+        asnRenderLayout(); 
+        showRcToast(`Saved as ${totalBatches} batches!`);
+
+    } catch (e) {
+        console.error(e);
+        showRcToast("Database Error. Check permissions.");
     }
-
-    let batchMap = {}; for(let i=1; i<=totalBatches; i++) batchMap[`Batch ${i}`] = [];
-    document.querySelectorAll(".ds-dept-select").forEach(s => { let val = s.value; if(val !== "Exclude") { Object.keys(studentToDept).forEach(sid => { if(studentToDept[sid] === s.dataset.dept) batchMap[val].push(sid); }); } });
-
-    const snap = await getDocs(query(collection(db, "colleges", currentCollegeID, "subject_batches"), where("semester", "==", asnCurrentSem), where("subjectName", "==", subject)));
-    const wb = writeBatch(db); snap.forEach(d => wb.delete(d.ref));
-    for(let i=1; i<=totalBatches; i++) { wb.set(doc(db, "colleges", currentCollegeID, "subject_batches", `BATCH_Sem${asnCurrentSem}_${cleanSub}_Batch${i}`), { batchName: `Batch ${i}`, subjectName: subject, semester: asnCurrentSem, studentIDs: batchMap[`Batch ${i}`] }, {merge:true}); }
-    await wb.commit();
-
-    let existingCount = asnActiveRows.filter(r => r.period === asnPendSplitRow.period).length;
-    if (totalBatches > existingCount) { for(let i=existingCount; i<totalBatches; i++) asnActiveRows.push({ id: `r_${asnPendSplitRow.period}_${i}_${Date.now()}`, period: asnPendSplitRow.period, splitIndex: i, isSplit: true, category: asnPendSplitRow.category, subject: subject, teacher: "", teacherID: "", room: "" }); }
-    else if (totalBatches < existingCount) { asnActiveRows = asnActiveRows.filter(r => r.period !== asnPendSplitRow.period || r.splitIndex < totalBatches); }
-    asnRenderLayout(); showRcToast(`Saved as ${totalBatches} batches!`);
 }
 
 async function asnSaveTimetable() {
@@ -6313,18 +6386,24 @@ async function asnSaveTimetable() {
     
     let tMap = {}; 
     let conflict = false;
+    let cleanRows = [];
     
     asnActiveRows.forEach(r => {
         let elTea = document.getElementById(`tea_${r.id}`);
         let elSub = document.getElementById(`sub_${r.id}`);
         let elCat = document.getElementById(`cat_${r.id}`);
+        let elRoom = document.getElementById(`rm_${r.id}`);
         
         let currentTeachVal = elTea ? elTea.value : "";
         let currentSubject = elSub ? elSub.value : r.subject;
         let currentCategory = elCat ? elCat.value : r.category;
+        let room = elRoom ? elRoom.value.trim() : r.room;
         
         if(currentSubject && currentTeachVal && currentTeachVal !== "Unassigned") {
-            let tName = currentTeachVal.split('|')[1];
+            let parts = currentTeachVal.split('|');
+            let tName = parts[1];
+            let tID = parts[0];
+
             if(!tMap[r.period]) tMap[r.period] = {};
             
             if(tMap[r.period][tName]) { 
@@ -6337,6 +6416,20 @@ async function asnSaveTimetable() {
             } else {
                 tMap[r.period][tName] = currentSubject;
             }
+
+            let isCom = !asnActiveRows.some(x => x.period === r.period && x.isSplit);
+            let sIdxStr = !isCom ? r.splitIndex.toString() : "0";
+
+            cleanRows.push({
+                period: r.period,
+                category: currentCategory,
+                subjectName: currentSubject,
+                teacherID: tID,
+                teacherName: tName,
+                room: room,
+                isCommon: isCom,
+                splitIndex: sIdxStr
+            });
         }
     });
     
@@ -6346,96 +6439,22 @@ async function asnSaveTimetable() {
         btn.disabled = false; 
         return; 
     }
-
-    let safeHodDept = teacherDeptRaw.startsWith("DEPT_") ? teacherDeptRaw : `DEPT_${teacherDeptRaw.replace(/\s+/g,"")}`;
     
-    showRcToast("Cleaning old timetable data...");
+    showRcToast("Cleaning old timetable data & saving...");
     
     try {
-        const snap = await getDocs(query(
-            collection(db, "colleges", currentCollegeID, "timetable_allocations"), 
-            where("semester", "==", asnCurrentSem), 
-            where("day", "==", asnSelectedDay), 
-            where("departmentID", "==", safeHodDept)
-        ));
-        
-        let wipeBatch = writeBatch(db); 
-        snap.forEach(d => wipeBatch.delete(d.ref));
-        await wipeBatch.commit();
+        const functions = getFunctions(app, "asia-south1");
+        const teacherAPI = httpsCallable(functions, 'teacherAPI');
+        await teacherAPI({
+            routeAction: "SAVE_TIMETABLE",
+            collegeId: currentCollegeID,
+            teacherDeptRaw: teacherDeptRaw,
+            asnCurrentSem: asnCurrentSem,
+            asnSelectedDay: asnSelectedDay,
+            activeRows: cleanRows
+        });
 
-        let saveBatch = writeBatch(db);
-        let entriesSaved = 0;
-
-        for (let r of asnActiveRows) {
-            let elCat = document.getElementById(`cat_${r.id}`);
-            let elSub = document.getElementById(`sub_${r.id}`);
-            let elTea = document.getElementById(`tea_${r.id}`);
-            let elRoom = document.getElementById(`rm_${r.id}`);
-
-            let category = elCat ? elCat.value : r.category;
-            let subjectName = elSub ? elSub.value : r.subject;
-            let teacherVal = elTea ? elTea.value : "";
-            let room = elRoom ? elRoom.value.trim() : r.room;
-
-            if (subjectName && teacherVal && teacherVal !== "Unassigned") {
-                let parts = teacherVal.split('|');
-                let teacherID = parts[0];
-                let teacherName = parts[1];
-
-                let safeSubj = subjectName.replace(/\s+/g, '').replace(/\//g, ''); 
-                
-                let isCom = !asnActiveRows.some(x => x.period === r.period && x.isSplit);
-                let sIdxStr = !isCom ? r.splitIndex.toString() : "0";
-
-                let docID = `Sem${asnCurrentSem}_${asnSelectedDay}_P${r.period}_${sIdxStr}_${safeSubj}`;
-                let docRef = doc(db, "colleges", currentCollegeID, "timetable_allocations", docID);
-
-                let saveData = {
-                    semester: asnCurrentSem, 
-                    day: asnSelectedDay, 
-                    period: r.period.toString(), 
-                    category: category, 
-                    subjectName: subjectName, 
-                    teacherName: teacherName, 
-                    teacherID: teacherID, 
-                    departmentID: safeHodDept, 
-                    room: room
-                };
-
-                if (isCom) {
-                    saveData.isCommon = true;
-                } else {
-                    saveData.isCommon = false;
-                    saveData.splitIndex = sIdxStr; 
-                }
-
-                saveBatch.set(docRef, saveData, { merge: true });
-                entriesSaved++;
-
-                if (!isCom) {
-                    let batchNumber = parseInt(sIdxStr) + 1;
-                    let bDoc = `BATCH_Sem${asnCurrentSem}_${safeSubj}_Batch${batchNumber}`;
-                    let batchRef = doc(db, "colleges", currentCollegeID, "subject_batches", bDoc);
-                    
-                    saveBatch.set(batchRef, {
-                        teacherName: teacherName,
-                        teacherID: teacherID,
-                        room: room
-                    }, { merge: true });
-                    entriesSaved++;
-                }
-            }
-        }
-
-        if (entriesSaved > 0) {
-            await saveBatch.commit();
-            showRcToast("Successfully Saved Timetable!");
-        } else {
-            showRcToast("No active schedules found to register.");
-        }
-        
-        // Removed the line that kicked the user back to the main view here
-        
+        showRcToast("Successfully Saved Timetable!");
     } catch(e) {
         console.error("Timetable Batch Commit Failed:", e);
         showRcToast("Database write rejection. Verify permissions.");
@@ -6925,14 +6944,23 @@ document.getElementById("btnSendMessage")?.addEventListener("click", async () =>
     btn.disabled = true;
     btn.style.opacity = "0.7";
 
-    let safeSenderRole = "Teacher"; 
-    let displaySenderName = isHOD ? `${currentTeacherName} (HOD)` : currentTeacherName;
-
     try {
+        const functions = getFunctions(app, "asia-south1");
+        const teacherAPI = httpsCallable(functions, 'teacherAPI');
+
         if (composeIsPrivate && composeRecipientID) {
-            // Private message implementation
             let targetName = document.getElementById("composePrivateTarget").value;
-            await sendPrivateMessageToDatabase(title, body, composeRecipientID, targetName, safeSenderRole, displaySenderName);
+            
+            await teacherAPI({
+                routeAction: "SEND_MESSAGE",
+                collegeId: currentCollegeID,
+                isPrivate: true,
+                targetID: composeRecipientID,
+                targetName: targetName,
+                title: title,
+                body: body
+            });
+
             if (composeFCMTokens && composeFCMTokens.length > 0) {
                 sendPushNotification(title, body, composeFCMTokens, null);
             }
@@ -6954,9 +6982,20 @@ document.getElementById("btnSendMessage")?.addEventListener("click", async () =>
                     btn.innerText = "Send Message"; btn.disabled = false; btn.style.opacity = "1";
                     return;
                 }
+                
                 let prinID = prinSnap.docs[0].id;
                 let prinName = prinSnap.docs[0].data().name || "Principal";
-                await sendPrivateMessageToDatabase(title, body, prinID, prinName, safeSenderRole, displaySenderName);
+                
+                await teacherAPI({
+                    routeAction: "SEND_MESSAGE",
+                    collegeId: currentCollegeID,
+                    isPrivate: true,
+                    targetID: prinID,
+                    targetName: prinName,
+                    title: title,
+                    body: body
+                });
+                
                 let safeColID = getSafeTopic(currentCollegeID);
                 sendPushNotification(title, body, null, [`${safeColID}_PRINCIPAL`]);
             } else {
@@ -6985,12 +7024,15 @@ document.getElementById("btnSendMessage")?.addEventListener("click", async () =>
                     else targetDescription += `Students (${actualDeptName} - ${actualYear})`;
                 }
 
-                let payload = {
-                    title: title, body: body, targetSummary: targetDescription,
-                    timestamp: serverTimestamp(), type: "broadcast", status: "sent",
-                    senderRole: safeSenderRole, senderID: currentUserID, senderName: displaySenderName
-                };
-                await addDoc(collection(db, "colleges", currentCollegeID, "sent_messages"), payload);
+                await teacherAPI({
+                    routeAction: "SEND_MESSAGE",
+                    collegeId: currentCollegeID,
+                    isPrivate: false,
+                    title: title,
+                    body: body,
+                    targetSummary: targetDescription
+                });
+
                 if (topicsToPing.length > 0) sendPushNotification(title, body, null, topicsToPing);
             }
         }
@@ -6999,23 +7041,10 @@ document.getElementById("btnSendMessage")?.addEventListener("click", async () =>
     } catch (e) {
         console.error("Error sending message: ", e);
         showRcToast("Failed to send message.");
-    } finally {   // <--- Change this line
+    } finally {
         btn.innerText = "Send Message"; btn.disabled = false; btn.style.opacity = "1";
     }
 });
-
-// 🚨 NEW HELPER: Reusable Private Message Writer
-async function sendPrivateMessageToDatabase(title, body, targetID, targetName, safeSenderRole, displaySenderName) {
-    let chatRoomID = [currentUserID, targetID].sort().join("_");
-    let chatRef = doc(db, "colleges", currentCollegeID, "chats", chatRoomID);
-    let batch = writeBatch(db);
-    batch.set(chatRef, { participants: [currentUserID, targetID], lastMessage: body, lastUpdated: serverTimestamp(), receiverName: targetName }, { merge: true });
-    let msgRef = doc(collection(chatRef, "messages"));
-    batch.set(msgRef, { title: title, body: body, senderID: currentUserID, senderName: displaySenderName, senderRole: safeSenderRole, timestamp: serverTimestamp(), type: "incoming", status: "sent" });
-    let historyRef = doc(collection(db, "colleges", currentCollegeID, "sent_messages"));
-    batch.set(historyRef, { title: title, body: body, targetSummary: `Personal: ${targetName}`, timestamp: serverTimestamp(), type: "personal", status: "sent", linkedChatID: chatRoomID, linkedMessageID: msgRef.id, senderRole: safeSenderRole, senderID: currentUserID, senderName: displaySenderName });
-    await batch.commit();
-}
 
 // 4. WEBHOOK EXECUTOR
 // 🚨 FIX 1: Added 'customType' parameter (defaults to "chat")
@@ -7528,30 +7557,14 @@ async function executeCreateAssignment() {
             }
         }
 
-        showRcToast("Posting Assignment Document...");
-        let assignmentPayload = {
-            teacherID: currentUserID,
-            teacherName: currentTeacherName,
-            teacherDeptID: teacherDeptRaw,
-            subject: selectedSubject,
-            semester: `Semester ${semNum}`,
-            topic: topic,
-            description: desc,
-            dueDate: dueDateDisplay,
-            dueDateISO: standardizedDateISO,
-            createdAt: serverTimestamp()
-        };
-
-        await addDoc(collection(db, "colleges", currentCollegeID, "assignments"), assignmentPayload);
-
         let pushTopic = "";
         let targetTokens = [];
         let pushTitle = `New Assignment • ${currentTeacherName}`;
         let pushBody = `A new assignment has been posted for ${selectedSubject}.`;
 
+        // 🚨 GATHER TOKENS BEFORE CALLING CLOUD FUNCTION
         if (isMjdOrCore) {
             pushTopic = `${getSafeTopic(currentCollegeID)}_STUDENTS_${getSafeTopic(targetDeptName)}_${getSafeTopic("Year" + Math.ceil(parseInt(semNum) / 2))}`;
-            sendPushNotification(pushTitle, pushBody, null, [pushTopic], "assignment");
         } else {
             let targetYearStr = Math.ceil(parseInt(semNum) / 2).toString();
             const stuSnap = await getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("Year", "==", targetYearStr)));
@@ -7577,25 +7590,33 @@ async function executeCreateAssignment() {
                     else if (sData.webFcmToken && !targetTokens.includes(sData.webFcmToken)) targetTokens.push(sData.webFcmToken);
                 }
             });
-
-            if (targetTokens.length > 0) {
-                sendPushNotification(pushTitle, pushBody, targetTokens, null, "assignment");
-            }
         }
 
-        let reminderPayload = {
-            topic: pushTopic || "",
-            tokens: targetTokens,
-            subject: selectedSubject,
-            dueDateISO: standardizedDateISO,
-            teacherName: currentTeacherName,
-            teacherID: currentUserID,      
-            collegeID: currentCollegeID,   
-            createdAt: serverTimestamp()   
-        };
-        
-        // 🚨 FIX 2: Swapped setDoc(doc(...)) for addDoc(...) for standard permission compliance
-        await addDoc(collection(db, "adhyora_reminders"), reminderPayload);
+        showRcToast("Posting Assignment Document...");
+
+        // 🚨 DISPATCH TO CLOUD FUNCTION
+        const functions = getFunctions(app, "asia-south1");
+        const teacherAPI = httpsCallable(functions, 'teacherAPI');
+        await teacherAPI({
+            routeAction: "CREATE_ASSIGNMENT",
+            collegeId: currentCollegeID,
+            teacherDeptRaw: teacherDeptRaw,
+            selectedSubject: selectedSubject,
+            semNum: semNum,
+            topic: topic,
+            desc: desc,
+            dueDateDisplay: dueDateDisplay,
+            standardizedDateISO: standardizedDateISO,
+            targetTokens: targetTokens,
+            pushTopic: pushTopic
+        });
+
+        // 🚨 TRIGGER FRONTEND WEBHOOK (Unchanged)
+        if (isMjdOrCore) {
+            sendPushNotification(pushTitle, pushBody, null, [pushTopic], "assignment");
+        } else if (targetTokens.length > 0) {
+            sendPushNotification(pushTitle, pushBody, targetTokens, null, "assignment");
+        }
 
         showRcToast("Assignment Posted Successfully!");
         setTimeout(() => {
@@ -8179,65 +8200,26 @@ async function medCheckAndSave(startStr, endStr) {
     btn.innerText = "Checking..."; btn.disabled = true;
 
     try {
-        const medSnap = await getDocs(query(collection(db, "colleges", currentCollegeID, "medical_leaves"), where("studentID", "==", medTargetStudentID)));
-        let hasOverlap = false;
-        medSnap.forEach(d => {
-            let data = d.data();
-            if (data.startDate && data.endDate) {
-                if (startStr <= data.endDate && endStr >= data.startDate) {
-                    hasOverlap = true;
-                }
-            }
+        const functions = getFunctions(app, "asia-south1");
+        const teacherAPI = httpsCallable(functions, 'teacherAPI');
+        const res = await teacherAPI({
+            routeAction: "SAVE_MEDICAL_LEAVE",
+            collegeId: currentCollegeID,
+            medTargetStudentID: medTargetStudentID,
+            medTargetRollNo: medTargetRollNo,
+            medTargetDeptID: medTargetDeptID,
+            medTargetYear: medTargetYear,
+            startStr: startStr,
+            endStr: endStr
         });
 
-        if (hasOverlap) {
-            showRcToast("❌ Student is already on Medical Leave during this time!");
+        if (!res.data.success) {
+            showRcToast(res.data.message);
             window.medRestartSelection();
             btn.disabled = false;
             return;
         }
 
-        const attSnap = await getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("date", ">=", startStr), where("date", "<=", endStr)));
-        let attendanceBlocked = false;
-        let blockReason = "";
-
-        attSnap.forEach(docSnap => {
-            if (attendanceBlocked) return;
-            let d = docSnap.data();
-            for (let i = 1; i <= 6; i++) {
-                let pData = d[`period_${i}`];
-                if (pData && pData.attendance) {
-                    if (pData.attendance[medTargetRollNo] === true || pData.attendance[medTargetStudentID] === true) {
-                        attendanceBlocked = true;
-                        blockReason = `Marked Present on ${docSnap.data().date}`;
-                        break;
-                    }
-                }
-            }
-        });
-
-        if (attendanceBlocked) {
-            showRcToast(`❌ Conflict: ${blockReason}`);
-            window.medRestartSelection();
-            btn.disabled = false;
-            return;
-        }
-
-        btn.innerText = "Saving...";
-        let docID = `${medTargetStudentID}_${Date.now()}`;
-        let payload = {
-            studentID: medTargetStudentID,
-            departmentID: medTargetDeptID,
-            year: medTargetYear,
-            startDate: startStr,
-            endDate: endStr,
-            approvedBy: currentUserID,
-            approvedByName: currentTeacherName,
-            timestamp: serverTimestamp(),
-            reason: "Medical"
-        };
-
-        await setDoc(doc(db, "colleges", currentCollegeID, "medical_leaves", docID), payload);
         showRcToast("✅ Medical Leave Saved!");
         document.getElementById("medLeaveModal").classList.remove("active");
 
@@ -8302,11 +8284,15 @@ window.medOnConfirmDelete = async () => {
     document.getElementById("medDeleteConfirmModal").classList.remove("active");
 
     try {
-        // 2. Delete from Firebase (Mirrors C# DeleteAsync)
-        await deleteDoc(doc(db, "colleges", currentCollegeID, "medical_leaves", docId));
+        const functions = getFunctions(app, "asia-south1");
+        const teacherAPI = httpsCallable(functions, 'teacherAPI');
+        await teacherAPI({
+            routeAction: "DELETE_MEDICAL_LEAVE",
+            collegeId: currentCollegeID,
+            docId: docId
+        });
+
         showRcToast("✅ Record Deleted!");
-        
-        // 3. Refresh the UI (Mirrors C# LoadMedicalHistory)
         window.medOpenHistory(); 
 
     } catch (e) {
