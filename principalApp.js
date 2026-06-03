@@ -667,9 +667,17 @@ function switchView(targetView, clickedBtn) {
 }
 
 document.getElementById("btnHome").addEventListener("click", (e) => switchView("HOME", e.currentTarget));
-document.getElementById("btnNotifications").addEventListener("click", (e) => { switchView(views.notifications, e.currentTarget); document.querySelector("#btnNotifications .notification-dot").style.display = "none"; });
+document.getElementById("btnNotifications").addEventListener("click", (e) => { 
+    switchView(views.notifications, e.currentTarget); 
+    localStorage.setItem(`lastViewedNotifs_${currentUserID}`, Date.now()); // 🚨 Save timestamp
+    document.querySelector("#btnNotifications .notification-dot").style.display = "none"; 
+});
 document.getElementById("btnCalendar").addEventListener("click", (e) => { switchView(views.calendar, e.currentTarget); if (!calendarLoaded) loadCalendarData(); });
-document.getElementById("btnMessages").addEventListener("click", (e) => { switchView(views.messages, e.currentTarget); document.querySelector("#btnMessages .notification-dot").style.display = "none"; });
+document.getElementById("btnMessages").addEventListener("click", (e) => { 
+    switchView(views.messages, e.currentTarget); 
+    localStorage.setItem(`lastViewedMessages_${currentUserID}`, Date.now()); // 🚨 Save timestamp
+    document.querySelector("#btnMessages .notification-dot").style.display = "none"; 
+});
 document.getElementById("btnNavRoomcode").addEventListener("click", () => { switchView(views.roomcode); if (!rcLoaded) startRoomcodeListener(); });
 document.getElementById("btnNavTeacherList").addEventListener("click", () => { switchView(views.teacherList); if (!tlLoaded) startTeacherListListener(); });
 document.getElementById("btnBackToTeachers").addEventListener("click", () => switchView(views.teacherList));
@@ -693,16 +701,35 @@ let cachedNotifs = [];
 function startInboxListener() {
     const myTopics = [`${currentCollegeID.replace(/[^a-zA-Z0-9]/g, '')}_ALL`, `${currentCollegeID.replace(/[^a-zA-Z0-9]/g, '')}_PRINCIPAL`];
     let inboxCache = []; let globalCache = [];
-    const updateNotifUI = () => { cachedNotifs = [...inboxCache, ...globalCache].sort((a,b) => b.time - a.time); renderNotifications(); };
+    
+    const updateNotifUI = () => { 
+        cachedNotifs = [...inboxCache, ...globalCache].sort((a,b) => b.time - a.time); 
+        
+        // 🚨 THE RED DOT FIX: Compare timestamps to see if it's actually new!
+        let lastViewed = parseInt(localStorage.getItem(`lastViewedNotifs_${currentUserID}`) || "0");
+        let hasNew = cachedNotifs.some(n => n.time.getTime() > lastViewed);
+        
+        // Check if the user is already staring at the panel
+        let isViewing = document.getElementById("notificationsView") && !document.getElementById("notificationsView").classList.contains("hidden-view");
+        
+        if (isViewing) {
+            localStorage.setItem(`lastViewedNotifs_${currentUserID}`, Date.now());
+            document.querySelector("#btnNotifications .notification-dot").style.display = "none";
+        } else {
+            document.querySelector("#btnNotifications .notification-dot").style.display = hasNew ? "block" : "none";
+        }
+        
+        renderNotifications(); 
+    };
 
     onSnapshot(query(collection(db, "colleges", currentCollegeID, "inbox_messages"), where("targetTopic", "in", myTopics), orderBy("timestamp", "desc"), limit(30)), (snap) => {
         inboxCache = []; snap.forEach(doc => { let d = doc.data(); inboxCache.push({ title: d.title || "Notice", body: d.body || "", time: d.timestamp ? d.timestamp.toDate() : new Date() }); });
-        document.querySelector("#btnNotifications .notification-dot").style.display = "block"; updateNotifUI();
+        updateNotifUI();
     });
 
     onSnapshot(query(collection(db, "adhyora_global_updates"), orderBy("timestamp", "desc"), limit(10)), (snap) => {
         globalCache = []; snap.forEach(doc => { let d = doc.data(); globalCache.push({ title: d.title || "System Update", body: d.body || "", time: d.timestamp ? d.timestamp.toDate() : new Date() }); });
-        document.querySelector("#btnNotifications .notification-dot").style.display = "block"; updateNotifUI();
+        updateNotifUI();
     });
 }
 function renderNotifications() {
@@ -804,7 +831,20 @@ function startMessagesListener() {
             let d = doc.data(); let roleClass = (d.senderRole || "").toLowerCase().includes("teacher") ? "msg-teacher" : "msg-principal";
             cachedMessages.push({ title: d.title || "Notice", body: d.body || "", sender: d.senderName || "System", target: d.targetSummary || "", roleClass: roleClass, time: d.timestamp ? d.timestamp.toDate() : new Date() });
         });
-        document.querySelector("#btnMessages .notification-dot").style.display = "block"; 
+        
+        // 🚨 THE RED DOT FIX: Compare timestamps for the Messages Inbox
+        let lastViewed = parseInt(localStorage.getItem(`lastViewedMessages_${currentUserID}`) || "0");
+        let hasNew = cachedMessages.some(m => m.time.getTime() > lastViewed);
+        
+        let isViewing = document.getElementById("messagesView") && !document.getElementById("messagesView").classList.contains("hidden-view");
+        
+        if (isViewing) {
+            localStorage.setItem(`lastViewedMessages_${currentUserID}`, Date.now());
+            document.querySelector("#btnMessages .notification-dot").style.display = "none";
+        } else {
+            document.querySelector("#btnMessages .notification-dot").style.display = hasNew ? "block" : "none";
+        }
+
         renderMessages();
     });
 }
