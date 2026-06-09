@@ -1315,26 +1315,162 @@ function TD_GenerateTimetableGrid(ttSnap) {
     gridEl.innerHTML = html;
 }
 async function TD_FetchHours(targetDate) {
-    document.getElementById("tdSubjectsList").innerHTML = ""; document.getElementById("tdTotalHoursText").innerText = "Calc...";
+    document.getElementById("tdSubjectsList").innerHTML = ""; 
+    document.getElementById("tdTotalHoursText").innerText = "Calc...";
+    
+    const timelineListEl = document.getElementById("tdTimelineList");
+    timelineListEl.innerHTML = `<div style="text-align:center; padding:30px 20px; color:#64748b; font-size:13px; font-weight:bold;"><i class="fas fa-circle-notch fa-spin" style="margin-right:8px; color:var(--brand-green);"></i> Digging through records...</div>`;
+    
+    let timelineData = [];
+
     if (targetDate === "All Time") {
+        document.getElementById("tdTimelineStatus").innerText = "Showing recent history (Last 100 Days)";
         try {
+            // 1. Fetch Profile Stats for the Subjects Box
             const docSnap = await getDoc(doc(db, "colleges", currentCollegeID, "teachers", tdCurrentTeacherID));
             let totalHrs = 0; let subjectHours = {};
             if (docSnap.exists()) {
                 let d = docSnap.data(); if (d.total_hours_taught) totalHrs = d.total_hours_taught;
                 if (d.semester_hours) { Object.values(d.semester_hours).forEach(semData => { if (semData.subjects) { Object.entries(semData.subjects).forEach(([subName, hrs]) => { if (!subjectHours[subName]) subjectHours[subName] = 0; subjectHours[subName] += parseInt(hrs); }); } }); }
             }
-            document.getElementById("tdTotalHoursText").innerText = `${totalHrs} hrs`; TD_DrawSubjectRows(subjectHours);
-        } catch(e) {}
+            document.getElementById("tdTotalHoursText").innerText = `${totalHrs} hrs`; 
+            TD_DrawSubjectRows(subjectHours);
+
+            // 2. Fetch Recent Timeline for the new Box (Limit 100 to save reads)
+            const recentSnap = await getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), orderBy("date", "desc"), limit(100)));
+            timelineData = ExtractTeacherTimeline(recentSnap, tdCurrentTeacherID);
+            
+        } catch(e) { console.error(e); }
     } else {
+        document.getElementById("tdTimelineStatus").innerText = `Showing records for ${targetDate}`;
         try {
+            // Fetch Specific Date
             const snap = await getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("date", "==", targetDate)));
             let totalHrs = 0; let subjectHours = {};
-            snap.forEach(doc => { let d = doc.data(); Object.keys(d).forEach(k => { if (k.startsWith("period_") && d[k].markedByTeacherID === tdCurrentTeacherID) { let subName = d[k].subject || "Unknown Subject"; if (!subjectHours[subName]) subjectHours[subName] = 0; subjectHours[subName]++; totalHrs++; } }); });
-            document.getElementById("tdTotalHoursText").innerText = `${totalHrs} hrs`; TD_DrawSubjectRows(subjectHours);
-        } catch(e) {}
+            
+            snap.forEach(doc => { 
+                let d = doc.data(); 
+                Object.keys(d).forEach(k => { 
+                    if (k.startsWith("period_") && d[k].markedByTeacherID === tdCurrentTeacherID) { 
+                        let subName = d[k].subject || "Unknown Subject"; 
+                        if (!subjectHours[subName]) subjectHours[subName] = 0; 
+                        subjectHours[subName]++; 
+                        totalHrs++; 
+                    } 
+                }); 
+            });
+            
+            document.getElementById("tdTotalHoursText").innerText = `${totalHrs} hrs`; 
+            TD_DrawSubjectRows(subjectHours);
+
+            // 3. Extract Timeline from the EXACT SAME SNAPSHOT (0 extra reads!)
+            timelineData = ExtractTeacherTimeline(snap, tdCurrentTeacherID);
+
+        } catch(e) { console.error(e); }
     }
+
+    // Render the Timeline Cards
+    RenderTeacherTimeline(timelineData);
 }
+
+// Helper 1: Data Extractor
+function ExtractTeacherTimeline(snapshot, teacherID) {
+    let records = [];
+    snapshot.forEach(doc => {
+        let d = doc.data();
+        let rawDateStr = d.date || "Unknown Date";
+        let dateObj = new Date(rawDateStr);
+        let dateFormatted = isNaN(dateObj.getTime()) ? rawDateStr : dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+        for(let i=1; i<=6; i++) {
+            let pKey = `period_${i}`;
+            let pData = d[pKey];
+            
+            // Check if this teacher marked this period
+            if (pData && pData.markedByTeacherID === teacherID) {
+                let timeString = "--:--";
+                let rawTime = 0;
+                
+                // Extract Time
+                if (pData.timestamp) {
+                    let jsDate = pData.timestamp.toDate ? pData.timestamp.toDate() : new Date(pData.timestamp.seconds * 1000);
+                    timeString = jsDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                    rawTime = jsDate.getTime();
+                }
+
+                // Safely grab stats from backend summary to prevent extra reads
+                let totalStudents = 0, presentCount = 0;
+                if (pData.stats) {
+                    totalStudents = pData.stats.totalStudents || 0;
+                    presentCount = pData.stats.presentCount || 0;
+                }
+
+                records.push({
+                    subject: pData.subject || "Unknown Subject",
+                    dateFormatted: dateFormatted,
+                    timeString: timeString,
+                    rawTime: rawTime,
+                    rawDate: dateObj, 
+                    period: i,
+                    totalStudents: totalStudents,
+                    presentCount: presentCount
+                });
+            }
+        }
+    });
+
+    // Sort: Newest Date first, then Newest Time first
+    records.sort((a, b) => {
+        if (b.rawDate.getTime() !== a.rawDate.getTime()) {
+            return b.rawDate - a.rawDate;
+        }
+        return b.rawTime - a.rawTime;
+    });
+
+    return records;
+}
+
+// Helper 2: UI Renderer (Bulletproof Mobile Layout)
+function RenderTeacherTimeline(records) {
+    const listContainer = document.getElementById("tdTimelineList");
+    if (records.length === 0) {
+        listContainer.innerHTML = `<div class="no-data-text" style="padding: 20px 0;">No attendance logs found for this filter.</div>`;
+        return;
+    }
+
+    let html = records.map(record => {
+        let percentage = record.totalStudents > 0 ? Math.round((record.presentCount / record.totalStudents) * 100) : 0;
+        
+        return `
+        <div style="background:var(--bg-base); border:1px solid var(--border-color); border-radius:12px; padding:15px; margin-bottom:12px; display:flex; flex-direction:column; gap:12px; box-shadow:0 2px 5px rgba(0,0,0,0.02); transition:0.2s;">
+            
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+                
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                    <span style="font-size:14px; font-weight:800; color:var(--text-dark); line-height:1.3;">${record.subject}</span>
+                    <div style="display:inline-flex;">
+                        <span style="font-size:10px; font-weight:700; color:#94a3b8; background:var(--bg-grid-color); padding:3px 8px; border-radius:6px;"><i class="far fa-clock" style="margin-right:4px;"></i>${record.timeString}</span>
+                    </div>
+                </div>
+                
+                <div style="text-align:right; flex-shrink:0;">
+                    <div style="font-size:16px; font-weight:800; color:var(--text-green); line-height:1.1;">${record.presentCount} <span style="font-size:12px; color:#94a3b8;">/ ${record.totalStudents}</span></div>
+                    <div style="font-size:9px; font-weight:800; color:var(--brand-green); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px;">Present (${percentage}%)</div>
+                </div>
+                
+            </div>
+            
+            <div style="padding-top:12px; border-top:1px dashed var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;"><i class="far fa-calendar-alt" style="margin-right:4px;"></i> ${record.dateFormatted}</span>
+                <span style="font-size:10px; font-weight:800; color:#3b82f6; background:#eff6ff; border:1px solid #bfdbfe; padding:3px 8px; border-radius:6px; letter-spacing:0.5px;">PERIOD ${record.period}</span>
+            </div>
+            
+        </div>`;
+    }).join('');
+
+    listContainer.innerHTML = html;
+}
+
 function TD_DrawSubjectRows(hoursMap) {
     const listEl = document.getElementById("tdSubjectsList"); const noData = document.getElementById("tdNoSubjectsText");
     let html = ""; let drawn = 0;
@@ -1693,11 +1829,34 @@ async function SD_BuildUI(specificDate = "All Time") {
         });
     }
 
+    // 🚨 1. Calculate Remaining Calendar Days from RAM
+    let remainingDays = 0;
+    if (sdWorkingDays.size > 0) {
+        let iterator = new Date(); iterator.setDate(iterator.getDate() + 1);
+        sdWorkingDays.forEach(dateKey => {
+            let dateObj = new Date(dateKey);
+            if (dateObj >= iterator) remainingDays++;
+        });
+    }
+
+    let projectedAtt = 0;
+    let projectedTot = 0;
+
     // 🚨 THE FIX: Force it to respect the Principal's global setting!
     let isStrict = (attendanceCalculationMode === "STRICT_SESSION");
-    
-    let projectedAtt = (isStrict && strictTotal > 0) ? strictPresent : simpleAtt;
-    let projectedTot = (isStrict && strictTotal > 0) ? strictTotal : simpleTotal;
+
+    // 🚨 2. Apply projection logic based on calculation mode
+    if (strictTotal > 0) {
+        // STRICT MODE (Calculate by day)
+        projectedAtt = strictPresent + remainingDays;
+        projectedTot = strictTotal + remainingDays;
+    } else {
+        // SIMPLE MODE (Calculate by 6 periods per day)
+        let remainingPeriods = remainingDays * 6;
+        projectedAtt = simpleAtt + remainingPeriods;
+        projectedTot = simpleTotal + remainingPeriods;
+    }
+
     let percent = projectedTot > 0 ? (projectedAtt / projectedTot) * 100 : 0;
     
     SD_UpdateWaveUI(percent);
@@ -1708,10 +1867,17 @@ async function SD_BuildUI(specificDate = "All Time") {
         document.getElementById("sdNoDataText").style.display = Object.keys(subjectAtt).length === 0 ? "block" : "none";
         document.getElementById("sdNoDataText").innerText = "No attendance data for this semester.";
         
+        // Inside SD_BuildUI(specificDate = "All Time")
         document.getElementById("sdSubjectList").innerHTML = Object.entries(subjectAtt).map(([name, data]) => {
-            let p = data.p, t = data.t, per = t>0 ? (p/t)*100 : 0; let col = per >= 75 ? "#4CAF50" : (per >= 60 ? "#FF9800" : "#F44336");
-            return `<div style="background:white; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:8px;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="font-weight:bold; font-size:13px; color:#334155;">${name}</span> <span style="font-size:12px; font-weight:bold; color:${col};">${per.toFixed(0)}% (${p}/${t})</span></div>
+            let p = data.p, t = data.t, per = t>0 ? (p/t)*100 : 0; 
+            let col = per >= 75 ? "#4CAF50" : (per >= 60 ? "#FF9800" : "#F44336");
+            
+            // 🚨 Added cursor:pointer and onclick hook
+            return `<div onclick="OpenAttendanceLedger('${name}', ${p}, ${t})" style="background:white; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:8px; cursor: pointer; transition: 0.2s;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <span style="font-weight:bold; font-size:13px; color:#334155;">${name} <i class="fas fa-external-link-alt" style="font-size: 10px; color: #cbd5e1; margin-left: 5px;"></i></span> 
+                    <span style="font-size:12px; font-weight:bold; color:${col};">${per.toFixed(0)}% (${p}/${t})</span>
+                </div>
                 <div style="background:#f1f5f9; height:6px; border-radius:3px; overflow:hidden;"><div style="height:100%; background:${col}; width:${per}%;"></div></div>
             </div>`;
         }).join('');
@@ -1741,30 +1907,111 @@ document.getElementById("sdBtnAllTime").addEventListener("click", () => { docume
 document.getElementById("sdDateFilter").addEventListener("change", (e) => { if(e.target.value) SD_BuildUI(e.target.value); });
 
 async function SD_FetchDailyAttendance(targetDate, dbSemesterFormat) {
-    const listEl = document.getElementById("sdSubjectList"); listEl.innerHTML = "";
+    const listEl = document.getElementById("sdSubjectList"); 
+    listEl.innerHTML = `<div style="text-align:center; padding:30px 20px; color:#64748b; font-size:13px; font-weight:bold;"><i class="fas fa-circle-notch fa-spin" style="margin-right:8px; color:var(--brand-green);"></i> Loading daily records...</div>`;
+    
     try {
-        const snap = await getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("date", "==", targetDate), where("semester", "==", dbSemesterFormat)));
-        if (snap.empty) {
-            document.getElementById("sdNoDataText").style.display = "block"; document.getElementById("sdNoDataText").innerText = "No data available on this date.";
-            document.getElementById("sdStatPAtt").innerText = "0"; document.getElementById("sdStatPAbs").innerText = "0"; document.getElementById("sdStatPTot").innerText = "0"; return;
+        // 🚀 ROBUST QUERY: Fetch all possible semester string formats simultaneously
+        let format1 = dbSemesterFormat; 
+        let format2 = dbSemesterFormat.replace(/\s+/g, "_"); 
+        let format3 = dbSemesterFormat.replace(/\s+/g, ""); 
+
+        const [snap1, snap2, snap3] = await Promise.all([
+            getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("date", "==", targetDate), where("semester", "==", format1))),
+            getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("date", "==", targetDate), where("semester", "==", format2))),
+            getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("date", "==", targetDate), where("semester", "==", format3)))
+        ]);
+
+        let allDocsMap = new Map();
+        snap1.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+        snap2.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+        snap3.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+
+        if (allDocsMap.size === 0) {
+            document.getElementById("sdNoDataText").style.display = "block"; 
+            document.getElementById("sdNoDataText").innerText = "No records found for this date.";
+            document.getElementById("sdStatPAtt").innerText = "0"; 
+            document.getElementById("sdStatPAbs").innerText = "0"; 
+            document.getElementById("sdStatPTot").innerText = "0"; 
+            listEl.innerHTML = "";
+            return;
         }
+
         document.getElementById("sdNoDataText").style.display = "none";
-        let dayPres = 0, dayAbs = 0; let html = "";
-        snap.forEach(doc => {
-            let d = doc.data();
-            Object.keys(d).forEach(k => {
-                if (k.startsWith("period_")) {
-                    let pData = d[k];
-                    if (pData.attendance && pData.attendance[sdCurrentStudentID] !== undefined) {
-                        let isPres = pData.attendance[sdCurrentStudentID]; if(isPres) dayPres++; else dayAbs++;
-                        let subName = pData.subject || "Unknown Subject"; let col = isPres ? "#4CAF50" : "#F44336";
-                        html += `<div style="background:white; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;"><span style="font-weight:bold; font-size:13px; color:#334155;">${subName}</span> <span style="font-size:12px; font-weight:bold; color:white; background:${col}; padding:3px 8px; border-radius:6px;">${isPres ? 'Present' : 'Absent'}</span></div>`;
+        let dayPres = 0, dayAbs = 0; 
+        let dailyRecords = [];
+
+        // Extract period data
+        allDocsMap.forEach((d) => {
+            for (let i = 1; i <= 6; i++) {
+                let pKey = `period_${i}`;
+                let pData = d[pKey];
+                
+                // If the period exists and this specific student was marked in it
+                if (pData && pData.attendance && pData.attendance[sdCurrentStudentID] !== undefined) {
+                    let isPres = pData.attendance[sdCurrentStudentID]; 
+                    if(isPres) dayPres++; else dayAbs++;
+                    
+                    let subName = pData.subject || "Unknown Subject"; 
+                    let teacherName = pData.markedByTeacherName || "Unknown Teacher";
+                    
+                    // 🚨 NEW: Extract and format the time
+                    let timeString = "--:--";
+                    if (pData.timestamp) {
+                        let jsDate = pData.timestamp.toDate ? pData.timestamp.toDate() : new Date(pData.timestamp.seconds * 1000);
+                        timeString = jsDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
                     }
+
+                    dailyRecords.push({
+                        period: i,
+                        subName: subName,
+                        teacherName: teacherName,
+                        timeString: timeString,
+                        isPres: isPres
+                    });
                 }
-            });
+            }
         });
-        document.getElementById("sdStatPAtt").innerText = dayPres; document.getElementById("sdStatPAbs").innerText = dayAbs; document.getElementById("sdStatPTot").innerText = dayPres + dayAbs; listEl.innerHTML = html;
-    } catch(e) { }
+
+        // Sort records logically (Period 1 to 6)
+        dailyRecords.sort((a, b) => a.period - b.period);
+
+        // Generate the new UI cards
+        let html = dailyRecords.map(record => {
+            let badgeClass = record.isPres ? "present" : "absent";
+            let badgeText = record.isPres ? "Present" : "Absent";
+            let icon = record.isPres ? '<i class="fas fa-check-circle"></i>' : '<i class="fas fa-times-circle"></i>';
+            
+            return `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; background:var(--bg-base); border:1px solid var(--border-color); border-radius:12px; box-shadow:0 2px 5px rgba(0,0,0,0.02); transition:0.2s; margin-bottom:10px;">
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                    
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:14px; font-weight:800; color:var(--text-dark);">${record.subName}</span>
+                        <span style="font-size:10px; font-weight:700; color:#94a3b8; background:var(--bg-grid-color); padding:2px 6px; border-radius:6px;"><i class="far fa-clock" style="margin-right:3px;"></i> ${record.timeString}</span>
+                    </div>
+                    
+                    <span style="font-size:11px; font-weight:600; color:#64748b; text-transform:uppercase;">
+                        Period ${record.period} 
+                        <span style="margin: 0 4px; opacity:0.3;">|</span> 
+                        <i class="fas fa-user-edit" style="margin-right:3px;"></i> ${record.teacherName}
+                    </span>
+                    
+                </div>
+                <div class="ledger-badge ${badgeClass}" style="display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:800; text-transform:uppercase;">${icon} ${badgeText}</div>
+            </div>`;
+        }).join('');
+
+        // Update UI
+        document.getElementById("sdStatPAtt").innerText = dayPres; 
+        document.getElementById("sdStatPAbs").innerText = dayAbs; 
+        document.getElementById("sdStatPTot").innerText = dayPres + dayAbs; 
+        listEl.innerHTML = html;
+
+    } catch(e) { 
+        console.error(e);
+        listEl.innerHTML = `<div class="no-data-text" style="color:red; margin-top:20px;">Error loading daily records.</div>`;
+    }
 }
 
 let sdCachedMarks = {};
@@ -5846,6 +6093,172 @@ window.PrintThermalReceipt = function(sem, txnId) {
         showRcToast("⚠️ Please allow pop-ups to print receipts.");
     }
 };
+
+// ==========================================
+// 📅 OPTIMIZED ATTENDANCE LEDGER ENGINE
+// ==========================================
+const ledgerOverlay = document.getElementById("attendanceLedgerOverlay");
+const closeLedgerBtn = document.getElementById("closeLedgerBtn");
+
+// Pagination & Cache Variables
+let ledgerTimelineCache = {}; 
+let ledgerCurrentData = [];
+let ledgerRenderLimit = 15;
+
+closeLedgerBtn.addEventListener("click", () => {
+    ledgerOverlay.classList.remove("active");
+});
+
+window.OpenAttendanceLedger = async (subjectNameFromUI, presentCount, totalCount) => {
+    ledgerOverlay.classList.add("active");
+    
+    document.getElementById("ledgerSubjectName").innerText = subjectNameFromUI.split('<')[0].trim();
+    document.getElementById("ledgerStudentStats").innerText = `Attended: ${presentCount} / ${totalCount} Classes`;
+    
+    const listContainer = document.getElementById("ledgerDatesList");
+    listContainer.innerHTML = `<div style="text-align:center; padding:30px 20px; color:#64748b; font-size:13px; font-weight:bold;"><i class="fas fa-circle-notch fa-spin" style="margin-right:8px; color:var(--brand-green);"></i> Digging through records...</div>`;
+
+    let semDisplay = document.getElementById("sdSemesterTitle").innerText.trim();
+    
+    // 🚀 CACHE CHECK: Zero Read Cost on Re-opens
+    let cacheKey = `${sdCurrentStudentID}_${semDisplay}_${subjectNameFromUI}`;
+
+    if (!ledgerTimelineCache[cacheKey]) {
+        // Only trigger Firebase reads if we haven't fetched this subject yet
+        ledgerTimelineCache[cacheKey] = await FetchDatesForSubject(subjectNameFromUI);
+    }
+
+    ledgerCurrentData = ledgerTimelineCache[cacheKey];
+    ledgerRenderLimit = 15; // Reset pagination limit on fresh open
+    
+    RenderLedgerList();
+};
+
+function RenderLedgerList() {
+    const listContainer = document.getElementById("ledgerDatesList");
+    
+    if (ledgerCurrentData.length === 0) {
+        listContainer.innerHTML = `<div class="no-data-text" style="padding: 20px 0;">No timeline records found.</div>`;
+        return;
+    }
+
+    let renderBatch = ledgerCurrentData.slice(0, ledgerRenderLimit);
+    let oldScroll = listContainer.scrollTop;
+
+    let html = renderBatch.map(record => {
+        let badgeClass = record.isPresent ? "present" : "absent";
+        let badgeText = record.isPresent ? "Present" : "Absent";
+        let icon = record.isPresent ? '<i class="fas fa-check-circle"></i>' : '<i class="fas fa-times-circle"></i>';
+        
+        return `
+        <div class="ledger-row" style="display:flex; justify-content:space-between; align-items:center; padding:15px; background:var(--bg-base); border:1px solid var(--border-color); border-radius:12px; box-shadow:0 2px 5px rgba(0,0,0,0.02); transition:0.2s; margin-bottom:10px;">
+            <div class="ledger-date-col" style="display:flex; flex-direction:column; gap:6px;">
+                
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="ledger-date-text" style="font-size:14px; font-weight:800; color:var(--text-dark);">${record.dateFormatted}</span>
+                    <span style="font-size:10px; font-weight:700; color:#94a3b8; background:var(--bg-grid-color); padding:2px 6px; border-radius:6px;"><i class="far fa-clock" style="margin-right:3px;"></i> ${record.timeFormatted}</span>
+                </div>
+                
+                <span class="ledger-period-text" style="font-size:11px; font-weight:600; color:#64748b; text-transform:uppercase;">
+                    Period ${record.period} 
+                    <span style="margin: 0 4px; opacity:0.3;">|</span> 
+                    <i class="fas fa-user-edit" style="margin-right:3px;"></i> ${record.teacherName}
+                </span>
+                
+            </div>
+            <div class="ledger-badge ${badgeClass}" style="display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:800; text-transform:uppercase;">${icon} ${badgeText}</div>
+        </div>`;
+    }).join('');
+
+    if (ledgerRenderLimit < ledgerCurrentData.length) {
+        html += `<div style="text-align:center; padding:15px; font-size:11px; color:#94a3b8; font-weight:bold; letter-spacing:1px; text-transform:uppercase;">Scroll for more records</div>`;
+    } else {
+        html += `<div style="text-align:center; padding:15px; font-size:11px; color:#cbd5e1; font-weight:bold; letter-spacing:1px; text-transform:uppercase;">End of Timeline</div>`;
+    }
+
+    listContainer.innerHTML = html;
+    listContainer.scrollTop = oldScroll;
+}
+
+// 🚀 SCROLL LISTENER: Triggers when user hits the bottom
+document.getElementById("ledgerDatesList").addEventListener("scroll", (e) => {
+    let el = e.target;
+    // If scrolled within 50px of the bottom
+    if (el.scrollHeight - el.scrollTop <= el.clientHeight + 50) {
+        if (ledgerRenderLimit < ledgerCurrentData.length) {
+            ledgerRenderLimit += 15; // Load 15 more
+            RenderLedgerList();
+        }
+    }
+});
+
+// Mock function - you'll need to adapt this to your actual Firestore structure
+async function FetchDatesForSubject(subjectNameFromUI) {
+    let timeline = [];
+    let semDisplay = document.getElementById("sdSemesterTitle").innerText.trim(); 
+    let dbSubjectName = subjectNameFromUI.split('<')[0].trim().replace("/", "-");
+
+    try {
+        let format1 = semDisplay; 
+        let format2 = semDisplay.replace(/\s+/g, "_"); 
+        let format3 = semDisplay.replace(/\s+/g, ""); 
+
+        const [snap1, snap2, snap3] = await Promise.all([
+            getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("semester", "==", format1))),
+            getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("semester", "==", format2))),
+            getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("semester", "==", format3)))
+        ]);
+
+        let allDocsMap = new Map();
+        snap1.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+        snap2.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+        snap3.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+
+        allDocsMap.forEach((d, docId) => {
+            let rawDateStr = d.date || "Unknown Date";
+            let dateObj = new Date(rawDateStr);
+            let dateFormatted = isNaN(dateObj.getTime()) ? rawDateStr : dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+            for (let i = 1; i <= 6; i++) {
+                let pKey = `period_${i}`;
+
+                if (d[pKey] && d[pKey].subject) {
+                    let logSubjectClean = d[pKey].subject.trim();
+                    
+                    if (logSubjectClean === subjectNameFromUI || logSubjectClean === dbSubjectName) {
+                        if (d[pKey].attendance && d[pKey].attendance[sdCurrentStudentID] !== undefined) {
+                            
+                            // 🚨 NEW: Extract Time and Teacher Name
+                            let timeString = "--:--";
+                            if (d[pKey].timestamp) {
+                                let jsDate = d[pKey].timestamp.toDate ? d[pKey].timestamp.toDate() : new Date(d[pKey].timestamp.seconds * 1000);
+                                timeString = jsDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                            }
+                            
+                            let teacherName = d[pKey].markedByTeacherName || "Unknown Teacher";
+
+                            timeline.push({
+                                dateFormatted: dateFormatted,
+                                timeFormatted: timeString,       // Passed to UI
+                                teacherName: teacherName,        // Passed to UI
+                                rawDate: dateObj,
+                                period: i,
+                                isPresent: d[pKey].attendance[sdCurrentStudentID]
+                            });
+                        }
+                    }
+                }
+            }
+        });
+
+        timeline.sort((a, b) => b.rawDate - a.rawDate);
+
+    } catch (error) {
+        console.error("Firestore Error Fetching Timeline:", error);
+    }
+
+    return timeline;
+}
 
 // ==========================================
 // 🚀 SMART BACK BUTTON NAVIGATION ENGINE v3 (Double-Tap Exit)
