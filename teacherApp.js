@@ -1692,8 +1692,8 @@ async function saveAttendance() {
     const targetTeacherName = attIsSubstitutePanelOpen ? attPendingSubTeacherName : currentTeacherName;
     const myKey = attCurrentSessionBatchIndex === -1 ? "common" : String(attCurrentSessionBatchIndex);
 
-    // Create a unique submission ID to prevent accidental double-clicks
-    let submissionId = `${dateStr}_P${pIndex}_${myKey}_${currentUserID}`;
+    // 🚨 THE FIX: Append a timestamp so every edit creates a brand new Queue Ticket!
+    let submissionId = `${dateStr}_P${pIndex}_${myKey}_${currentUserID}_${Date.now()}`;
 
     // Build the Queue Ticket
     let payload = {
@@ -1755,6 +1755,7 @@ async function saveAttendance() {
 // ==========================================
 const views = {
     welcome: document.getElementById("welcomeView"), 
+    myDashboard: document.getElementById("myDashboardView"),
     attendance: document.getElementById("attendanceView"), 
     timetable: document.getElementById("timetableView"),
     assign: document.getElementById("assignView"), 
@@ -1870,6 +1871,7 @@ function switchView(targetView, clickedBtn) {
 function attachSafeClick(elementId, action) { let el = document.getElementById(elementId); if (el) el.addEventListener("click", action); }
 
 attachSafeClick("btnHome", (e) => switchView("HOME", e.currentTarget));
+attachSafeClick("btnMyDashboard", (e) => { switchView(views.myDashboard, e.currentTarget); MD_InitDashboard(); });
 attachSafeClick("btnMessages", (e) => { 
     switchView(views.messages, e.currentTarget); 
     localStorage.setItem(`lastViewedInbox_${currentUserID}`, Date.now());
@@ -3689,8 +3691,31 @@ async function SD_BuildUI(specificDate = "All Time") {
         });
     }
 
-    let projectedAtt = strictTotal > 0 ? strictPresent : simpleAtt;
-    let projectedTot = strictTotal > 0 ? strictTotal : simpleTotal;
+    // 🚨 1. Calculate Remaining Calendar Days from RAM
+    let remainingDays = 0;
+    if (sdWorkingDays.size > 0) {
+        let iterator = new Date(); iterator.setDate(iterator.getDate() + 1);
+        sdWorkingDays.forEach(dateKey => {
+            let dateObj = new Date(dateKey);
+            if (dateObj >= iterator) remainingDays++;
+        });
+    }
+
+    let projectedAtt = 0;
+    let projectedTot = 0;
+
+    // 🚨 2. Apply projection logic based on calculation mode
+    if (strictTotal > 0) {
+        // STRICT MODE (Calculate by day)
+        projectedAtt = strictPresent + remainingDays;
+        projectedTot = strictTotal + remainingDays;
+    } else {
+        // SIMPLE MODE (Calculate by 6 periods per day)
+        let remainingPeriods = remainingDays * 6;
+        projectedAtt = simpleAtt + remainingPeriods;
+        projectedTot = simpleTotal + remainingPeriods;
+    }
+
     let percent = projectedTot > 0 ? (projectedAtt / projectedTot) * 100 : 0;
     
     SD_UpdateWaveUI(percent);
@@ -3704,15 +3729,183 @@ async function SD_BuildUI(specificDate = "All Time") {
         document.getElementById("sdSubjectList").innerHTML = Object.entries(subjectAtt).map(([name, data]) => {
             let p = data.p, t = data.t, per = t>0 ? (p/t)*100 : 0; let col = per >= 75 ? "#10b981" : (per >= 60 ? "#f59e0b" : "var(--brand-red)");
             
-            // 🚨 PERFORMANCE FIX: Forced GPU rendering on the rounded progress bars
-            return `<div style="background:var(--bg-base); border:1px solid var(--border-color); border-radius:10px; padding:12px; margin-bottom:8px; transform: translateZ(0);">
-                <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="font-weight:bold; font-size:13px; color:var(--text-dark);">${name}</span> <span style="font-size:12px; font-weight:bold; color:${col};">${per.toFixed(0)}% (${p}/${t})</span></div>
+            // 🚨 NEW: Added onclick and hover states to make the card clickable!
+            return `<div onclick="window.OpenAttendanceLedger('${name.replace(/'/g, "\\'")}', ${p}, ${t})" style="background:var(--bg-base); border:1px solid var(--border-color); border-radius:10px; padding:12px; margin-bottom:8px; transform: translateZ(0); cursor:pointer; transition:0.2s;" onmouseover="this.style.borderColor='var(--brand-red)';" onmouseout="this.style.borderColor='var(--border-color)';">
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <span style="font-weight:bold; font-size:13px; color:var(--text-dark);">${name} <i class="fas fa-external-link-alt" style="font-size: 10px; color: var(--text-muted); margin-left: 5px;"></i></span> 
+                    <span style="font-size:12px; font-weight:bold; color:${col};">${per.toFixed(0)}% (${p}/${t})</span>
+                </div>
                 <div style="background:var(--bg-surface); height:6px; border-radius:3px; overflow:hidden; transform: translateZ(0);"><div style="height:100%; background:${col}; width:${per}%;"></div></div>
             </div>`;
         }).join('');
     } else {
         SD_FetchDailyAttendance(specificDate, semDisplay);
     }
+}
+
+// ==========================================
+// 📅 OPTIMIZED ATTENDANCE LEDGER ENGINE 
+// ==========================================
+let ledgerTimelineCache = {}; 
+let ledgerCurrentData = [];
+let ledgerRenderLimit = 15;
+
+// Scroll Listener for Infinite Pagination
+document.addEventListener("DOMContentLoaded", () => {
+    let listContainer = document.getElementById("ledgerDatesList");
+    if(listContainer) {
+        listContainer.addEventListener("scroll", (e) => {
+            let el = e.target;
+            if (el.scrollHeight - el.scrollTop <= el.clientHeight + 50) {
+                if (ledgerRenderLimit < ledgerCurrentData.length) {
+                    ledgerRenderLimit += 15; 
+                    RenderLedgerList();
+                }
+            }
+        });
+    }
+});
+
+window.OpenAttendanceLedger = async (subjectNameFromUI, presentCount, totalCount) => {
+    let overlay = document.getElementById("attendanceLedgerOverlay");
+    if (!overlay) return;
+    overlay.classList.add("active");
+    
+    document.getElementById("ledgerSubjectName").innerText = subjectNameFromUI.split('<')[0].trim();
+    document.getElementById("ledgerStudentStats").innerText = `Attended: ${presentCount} / ${totalCount} Classes`;
+    
+    const listContainer = document.getElementById("ledgerDatesList");
+    listContainer.innerHTML = `<div style="text-align:center; padding:30px 20px; color:var(--text-muted); font-size:13px; font-weight:bold;"><i class="fas fa-circle-notch fa-spin" style="margin-right:8px; color:var(--brand-red);"></i> Digging through records...</div>`;
+
+    let semDisplay = document.getElementById("sdSemesterTitle").innerText.trim();
+    
+    // RAM CACHE: Zero Cost on Re-opens
+    let cacheKey = `${sdCurrentStudentID}_${semDisplay}_${subjectNameFromUI}`;
+
+    if (!ledgerTimelineCache[cacheKey]) {
+        ledgerTimelineCache[cacheKey] = await FetchDatesForSubject(subjectNameFromUI);
+    }
+
+    ledgerCurrentData = ledgerTimelineCache[cacheKey];
+    ledgerRenderLimit = 15; 
+    
+    RenderLedgerList();
+};
+
+function RenderLedgerList() {
+    const listContainer = document.getElementById("ledgerDatesList");
+    if (!listContainer) return;
+    
+    if (ledgerCurrentData.length === 0) {
+        listContainer.innerHTML = `<div class="no-data-text" style="padding: 20px 0;">No timeline records found.</div>`;
+        return;
+    }
+
+    let renderBatch = ledgerCurrentData.slice(0, ledgerRenderLimit);
+    let oldScroll = listContainer.scrollTop;
+
+    let html = renderBatch.map(record => {
+        let badgeClass = record.isPresent ? "present" : "absent";
+        let badgeText = record.isPresent ? "Present" : "Absent";
+        let icon = record.isPresent ? '<i class="fas fa-check-circle"></i>' : '<i class="fas fa-times-circle"></i>';
+        
+        let badgeBg = record.isPresent ? "#dcfce7" : "#fef2f2";
+        let badgeCol = record.isPresent ? "#16a34a" : "#dc2626";
+        let badgeBorder = record.isPresent ? "#bbf7d0" : "#fecaca";
+
+        return `
+        <div class="ledger-row" style="display:flex; justify-content:space-between; align-items:center; padding:15px; background:var(--bg-base); border:1px solid var(--border-color); border-radius:12px; box-shadow:0 2px 5px rgba(0,0,0,0.02); transition:0.2s; margin-bottom:10px;">
+            <div class="ledger-date-col" style="display:flex; flex-direction:column; gap:6px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="ledger-date-text" style="font-size:14px; font-weight:800; color:var(--text-dark);">${record.dateFormatted}</span>
+                    <span style="font-size:10px; font-weight:700; color:var(--text-muted); background:var(--bg-grid-color); padding:2px 6px; border-radius:6px;"><i class="far fa-clock" style="margin-right:3px;"></i> ${record.timeFormatted}</span>
+                </div>
+                <span class="ledger-period-text" style="font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase;">
+                    Period ${record.period} 
+                    <span style="margin: 0 4px; opacity:0.3;">|</span> 
+                    <i class="fas fa-user-edit" style="margin-right:3px;"></i> ${record.teacherName}
+                </span>
+            </div>
+            <div class="ledger-badge ${badgeClass}" style="display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:800; text-transform:uppercase; background:${badgeBg}; color:${badgeCol}; border:1px solid ${badgeBorder};">${icon} ${badgeText}</div>
+        </div>`;
+    }).join('');
+
+    if (ledgerRenderLimit < ledgerCurrentData.length) {
+        html += `<div style="text-align:center; padding:15px; font-size:11px; color:var(--text-muted); font-weight:bold; letter-spacing:1px; text-transform:uppercase;">Scroll for more records</div>`;
+    } else {
+        html += `<div style="text-align:center; padding:15px; font-size:11px; color:var(--border-color); font-weight:bold; letter-spacing:1px; text-transform:uppercase;">End of Timeline</div>`;
+    }
+
+    listContainer.innerHTML = html;
+    listContainer.scrollTop = oldScroll;
+}
+
+async function FetchDatesForSubject(subjectNameFromUI) {
+    let timeline = [];
+    let semDisplay = document.getElementById("sdSemesterTitle").innerText.trim(); 
+    let dbSubjectName = subjectNameFromUI.split('<')[0].trim().replace("/", "-");
+
+    try {
+        // Handle all 3 format styles to prevent read misses
+        let format1 = semDisplay; 
+        let format2 = semDisplay.replace(/\s+/g, "_"); 
+        let format3 = semDisplay.replace(/\s+/g, ""); 
+
+        const [snap1, snap2, snap3] = await Promise.all([
+            getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("semester", "==", format1))),
+            getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("semester", "==", format2))),
+            getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("semester", "==", format3)))
+        ]);
+
+        let allDocsMap = new Map();
+        snap1.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+        snap2.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+        snap3.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+
+        allDocsMap.forEach((d, docId) => {
+            let rawDateStr = d.date || "Unknown Date";
+            let dateObj = new Date(rawDateStr);
+            let dateFormatted = isNaN(dateObj.getTime()) ? rawDateStr : dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+            for (let i = 1; i <= 6; i++) {
+                let pKey = `period_${i}`;
+
+                if (d[pKey] && d[pKey].subject) {
+                    let logSubjectClean = d[pKey].subject.trim();
+                    
+                    if (logSubjectClean === subjectNameFromUI || logSubjectClean === dbSubjectName) {
+                        if (d[pKey].attendance && d[pKey].attendance[sdCurrentStudentID] !== undefined) {
+                            
+                            let timeString = "--:--";
+                            if (d[pKey].timestamp) {
+                                let jsDate = d[pKey].timestamp.toDate ? d[pKey].timestamp.toDate() : new Date(d[pKey].timestamp.seconds * 1000);
+                                timeString = jsDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                            }
+                            
+                            let teacherName = d[pKey].markedByTeacherName || "Unknown Teacher";
+
+                            timeline.push({
+                                dateFormatted: dateFormatted,
+                                timeFormatted: timeString,
+                                teacherName: teacherName,
+                                rawDate: dateObj,
+                                period: i,
+                                isPresent: d[pKey].attendance[sdCurrentStudentID]
+                            });
+                        }
+                    }
+                }
+            }
+        });
+
+        // Sort latest dates to the top
+        timeline.sort((a, b) => b.rawDate - a.rawDate);
+
+    } catch (error) {
+        console.error("Firestore Error Fetching Timeline:", error);
+    }
+
+    return timeline;
 }
 
 function SD_UpdateWaveUI(percentage) {
@@ -8301,6 +8494,230 @@ window.medOnConfirmDelete = async () => {
         showRcToast("❌ Error deleting record.");
     }
 };
+
+
+// ==========================================
+// 🚨 MY DASHBOARD ENGINE (TEACHER)
+// ==========================================
+let mdAssignedSubjectsCache = [];
+
+async function MD_InitDashboard() {
+    document.getElementById("mdNameText").innerText = currentTeacherName;
+    document.getElementById("mdEmailText").innerText = auth.currentUser ? auth.currentUser.email : "Unknown";
+    document.getElementById("mdDeptText").innerText = currentDeptName;
+
+    let today = new Date().toISOString().split('T')[0]; 
+    document.getElementById("mdDateFilter").value = today;
+    
+    mdAssignedSubjectsCache = []; 
+    document.getElementById("mdSubjectsList").innerHTML = ""; 
+    document.getElementById("mdTimetableGrid").innerHTML = `<div class="no-data-text">Loading...</div>`; 
+    document.getElementById("mdTotalHoursText").innerText = "0 hrs";
+
+    document.getElementById("mdDateFilter").onchange = (e) => MD_FetchHours(e.target.value);
+    document.getElementById("mdBtnAllTime").onclick = () => { document.getElementById("mdDateFilter").value = ""; MD_FetchHours("All Time"); };
+
+    await MD_FetchTimetableAndSubjects(today);
+}
+
+async function MD_FetchTimetableAndSubjects(filterDate) {
+    try {
+        const [subSnap, ttSnap] = await Promise.all([ 
+            getDocs(query(collection(db, "colleges", currentCollegeID, "faculty_subjects"), where("teacherID", "==", currentUserID))), 
+            getDocs(query(collection(db, "colleges", currentCollegeID, "timetable_allocations"), where("teacherID", "==", currentUserID))) 
+        ]);
+        mdAssignedSubjectsCache = []; 
+        subSnap.forEach(doc => { if (doc.data().subjectName) mdAssignedSubjectsCache.push(doc.data().subjectName); });
+        
+        MD_GenerateTimetableGrid(ttSnap); 
+        MD_FetchHours(filterDate);
+    } catch(e) {}
+}
+
+function MD_GenerateTimetableGrid(ttSnap) {
+    const gridEl = document.getElementById("mdTimetableGrid"); 
+    let grid = Array.from({ length: 6 }, () => Array(6).fill('<span class="tt-empty" style="color:var(--text-muted); padding-top:8px; display:block;">--</span>'));
+    const dayMap = { "monday":0, "tuesday":1, "wednesday":2, "thursday":3, "friday":4, "saturday":5 };
+    
+    ttSnap.forEach(doc => {
+        let d = doc.data(); 
+        let dIdx = dayMap[(d.day || "").toLowerCase()]; 
+        let pIdx = parseInt(d.period) - 1;
+        if (dIdx !== undefined && pIdx >= 0 && pIdx < 6) { 
+            let sem = (d.semester || "?").replace("Semester ", "S").replace("Semester_", "S"); 
+            grid[dIdx][pIdx] = `<span class="tt-slot" style="color:var(--brand-red); font-weight:bold; padding-top:8px; display:block;">${sem}</span>`; 
+        }
+    });
+
+    const dayLabels = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
+    let html = `<div class="tt-header" style="font-weight:bold; color:var(--text-muted); padding-bottom:8px; border-bottom:1px solid var(--border-color);">DAY</div>`; 
+    for(let i=1; i<=6; i++) html += `<div class="tt-header" style="font-weight:bold; color:var(--text-muted); padding-bottom:8px; border-bottom:1px solid var(--border-color);">P${i}</div>`;
+    
+    for(let i=0; i<6; i++) { 
+        html += `<div class="tt-day" style="font-weight:bold; color:var(--text-dark); padding-top:8px;">${dayLabels[i]}</div>`; 
+        grid[i].forEach(cell => html += cell); 
+    }
+    gridEl.innerHTML = html;
+}
+
+async function MD_FetchHours(targetDate) {
+    document.getElementById("mdSubjectsList").innerHTML = ""; 
+    document.getElementById("mdTotalHoursText").innerText = "Calc...";
+    
+    const timelineListEl = document.getElementById("mdTimelineList");
+    timelineListEl.innerHTML = `<div style="text-align:center; padding:30px 20px; color:var(--text-muted); font-size:13px; font-weight:bold;"><i class="fas fa-circle-notch fa-spin" style="margin-right:8px; color:var(--brand-red);"></i> Digging through records...</div>`;
+    
+    let timelineData = [];
+
+    if (targetDate === "All Time") {
+        document.getElementById("mdTimelineStatus").innerText = "Showing recent history (Last 100 Days)";
+        try {
+            const docSnap = await getDoc(doc(db, "colleges", currentCollegeID, "teachers", currentUserID));
+            let totalHrs = 0; let subjectHours = {};
+            if (docSnap.exists()) {
+                let d = docSnap.data(); if (d.total_hours_taught) totalHrs = d.total_hours_taught;
+                if (d.semester_hours) { Object.values(d.semester_hours).forEach(semData => { if (semData.subjects) { Object.entries(semData.subjects).forEach(([subName, hrs]) => { if (!subjectHours[subName]) subjectHours[subName] = 0; subjectHours[subName] += parseInt(hrs); }); } }); }
+            }
+            document.getElementById("mdTotalHoursText").innerText = `${totalHrs} hrs`; 
+            MD_DrawSubjectRows(subjectHours);
+
+            const recentSnap = await getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), orderBy("date", "desc"), limit(100)));
+            timelineData = ExtractMyTimeline(recentSnap);
+        } catch(e) { console.error(e); }
+    } else {
+        document.getElementById("mdTimelineStatus").innerText = `Showing records for ${targetDate}`;
+        try {
+            const snap = await getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("date", "==", targetDate)));
+            let totalHrs = 0; let subjectHours = {};
+            
+            snap.forEach(doc => { 
+                let d = doc.data(); 
+                Object.keys(d).forEach(k => { 
+                    if (k.startsWith("period_") && d[k].markedByTeacherID === currentUserID) { 
+                        let subName = d[k].subject || "Unknown Subject"; 
+                        if (!subjectHours[subName]) subjectHours[subName] = 0; 
+                        subjectHours[subName]++; 
+                        totalHrs++; 
+                    } 
+                }); 
+            });
+            
+            document.getElementById("mdTotalHoursText").innerText = `${totalHrs} hrs`; 
+            MD_DrawSubjectRows(subjectHours);
+
+            timelineData = ExtractMyTimeline(snap);
+        } catch(e) { console.error(e); }
+    }
+
+    RenderMyTimeline(timelineData);
+}
+
+function MD_DrawSubjectRows(hoursMap) {
+    const listEl = document.getElementById("mdSubjectsList"); 
+    const noData = document.getElementById("mdNoSubjectsText");
+    let html = ""; let drawn = 0;
+    
+    Object.entries(hoursMap).forEach(([name, hrs]) => { 
+        html += `<div style="background: var(--bg-base); border: 1px solid var(--border-color); padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.02);"><span style="font-weight: bold; color: var(--text-dark); font-size: 13px;">${name}</span> <span style="color: var(--text-muted); font-size: 13px;">Hours: <b style="color: var(--brand-red); font-size: 15px;">${hrs}</b></span></div>`; 
+        drawn++; 
+    });
+    
+    mdAssignedSubjectsCache.forEach(sub => {
+        if (!hoursMap[sub]) { 
+            html += `<div style="background: var(--bg-base); border: 1px dashed var(--border-color); padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; opacity:0.7;"><span style="font-weight: bold; color: var(--text-muted); font-size: 13px;">${sub}</span> <span style="color: var(--text-muted); font-size: 13px;">Hours: <b style="font-size: 15px;">0</b></span></div>`; 
+            drawn++; 
+        }
+    });
+    
+    listEl.innerHTML = html; 
+    noData.style.display = drawn === 0 ? "block" : "none";
+}
+
+function ExtractMyTimeline(snapshot) {
+    let records = [];
+    snapshot.forEach(doc => {
+        let d = doc.data();
+        let rawDateStr = d.date || "Unknown Date";
+        let dateObj = new Date(rawDateStr);
+        let dateFormatted = isNaN(dateObj.getTime()) ? rawDateStr : dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+        for(let i=1; i<=6; i++) {
+            let pKey = `period_${i}`;
+            let pData = d[pKey];
+            
+            if (pData && pData.markedByTeacherID === currentUserID) {
+                let timeString = "--:--";
+                let rawTime = 0;
+                
+                if (pData.timestamp) {
+                    let jsDate = pData.timestamp.toDate ? pData.timestamp.toDate() : new Date(pData.timestamp.seconds * 1000);
+                    timeString = jsDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                    rawTime = jsDate.getTime();
+                }
+
+                let totalStudents = 0, presentCount = 0;
+                if (pData.stats) {
+                    totalStudents = pData.stats.totalStudents || 0;
+                    presentCount = pData.stats.presentCount || 0;
+                }
+
+                records.push({
+                    subject: pData.subject || "Unknown Subject",
+                    dateFormatted: dateFormatted,
+                    timeString: timeString,
+                    rawTime: rawTime,
+                    rawDate: dateObj, 
+                    period: i,
+                    totalStudents: totalStudents,
+                    presentCount: presentCount
+                });
+            }
+        }
+    });
+
+    records.sort((a, b) => {
+        if (b.rawDate.getTime() !== a.rawDate.getTime()) {
+            return b.rawDate - a.rawDate;
+        }
+        return b.rawTime - a.rawTime;
+    });
+
+    return records;
+}
+
+function RenderMyTimeline(records) {
+    const listContainer = document.getElementById("mdTimelineList");
+    if (records.length === 0) {
+        listContainer.innerHTML = `<div class="no-data-text" style="padding: 20px 0;">No attendance logs found for this filter.</div>`;
+        return;
+    }
+
+    let html = records.map(record => {
+        let percentage = record.totalStudents > 0 ? Math.round((record.presentCount / record.totalStudents) * 100) : 0;
+        
+        return `
+        <div style="background:var(--bg-base); border:1px solid var(--border-color); border-radius:12px; padding:15px; margin-bottom:12px; display:flex; flex-direction:column; gap:12px; box-shadow:0 2px 5px rgba(0,0,0,0.02); transition:0.2s;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                    <span style="font-size:14px; font-weight:800; color:var(--text-dark); line-height:1.3;">${record.subject}</span>
+                    <div style="display:inline-flex;">
+                        <span style="font-size:10px; font-weight:700; color:var(--text-muted); background:var(--bg-grid-color); padding:3px 8px; border-radius:6px;"><i class="far fa-clock" style="margin-right:4px;"></i>${record.timeString}</span>
+                    </div>
+                </div>
+                <div style="text-align:right; flex-shrink:0;">
+                    <div style="font-size:16px; font-weight:800; color:var(--brand-red); line-height:1.1;">${record.presentCount} <span style="font-size:12px; color:var(--text-muted);">/ ${record.totalStudents}</span></div>
+                    <div style="font-size:9px; font-weight:800; color:var(--brand-red); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px;">Present (${percentage}%)</div>
+                </div>
+            </div>
+            <div style="padding-top:12px; border-top:1px dashed var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;"><i class="far fa-calendar-alt" style="margin-right:4px;"></i> ${record.dateFormatted}</span>
+                <span style="font-size:10px; font-weight:800; color:var(--brand-red); background:var(--bg-grid-color); border:1px solid var(--border-color); padding:3px 8px; border-radius:6px; letter-spacing:0.5px;">PERIOD ${record.period}</span>
+            </div>
+        </div>`;
+    }).join('');
+
+    listContainer.innerHTML = html;
+}
 
 // ==========================================
 // 🚀 ENTER KEY BINDINGS (KEYBOARD & MOBILE)
