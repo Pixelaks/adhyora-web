@@ -1562,3 +1562,65 @@ body.dark-mode .icon-nav-container::before {
         font-size: 28px !important; /* Shrink logo slightly to make room */
     }
 }
+
+/* =========================================
+   📅 ATTENDANCE LEDGER ROWS
+   ========================================= */
+.ledger-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    background: var(--bg-base);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    transition: 0.2s ease-in-out;
+}
+
+.ledger-row:hover {
+    border-color: var(--brand-green);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.ledger-date-col {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ledger-date-text {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-dark);
+}
+
+.ledger-period-text {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.ledger-badge {
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.ledger-badge.present {
+    background: #dcfce7;
+    color: #16a34a;
+    border: 1px solid #bbf7d0;
+}
+
+.ledger-badge.absent {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+}
