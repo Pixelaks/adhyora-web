@@ -18,6 +18,7 @@ function debounce(func, wait = 300) {
 // ==========================================
 // 🚨 GLOBAL VARIABLES
 // ==========================================
+window.collegeTimeConfig = null; // 🚨 V2 TIMETABLE CONFIG
 let currentCollegeID = "";
 let currentUserID = "";
 let currentTeacherName = "Unknown";
@@ -404,6 +405,7 @@ async function finalizeProfileUI(rawName, email, deptName) {
         
         startInboxListener();
         await syncSemesterWithDatabase();
+        startCollegeConfigListener(); // 🚨 LIVE CONFIG SYNC
 
         initAttendanceEngine(); 
         initSubjectDeclarationEngine(); 
@@ -704,6 +706,7 @@ function renderNotifications() {
 // ==========================================
 let currentSemesterType = "Odd";
 let isSemesterInitialized = false;
+let collegeConfigListenerUnsub = null; // 🚨 LIVE CONFIG LISTENER
 
 async function syncSemesterWithDatabase() {
     if (isSemesterInitialized) return;
@@ -714,6 +717,14 @@ async function syncSemesterWithDatabase() {
             
             if (data.currentSemesterType) {
                 currentSemesterType = data.currentSemesterType;
+            }
+
+            // 🚨 FETCH TIMETABLE CONFIG AND POPULATE DROPDOWNS
+            if (data.timetable_config) {
+                window.collegeTimeConfig = data.timetable_config;
+            }
+            if (typeof populateDynamicPeriodDropdowns === "function") {
+                populateDynamicPeriodDropdowns();
             }
 
             // 🚨 SAVE PLAN TIER GLOBALLY AND SHOW THE ULTIMATE BADGE
@@ -727,6 +738,26 @@ async function syncSemesterWithDatabase() {
     } catch (e) {
         console.error("Semester Sync Error:", e);
     }
+}
+
+// ==========================================
+// 🚨 LIVE COLLEGE CONFIG LISTENER (V2 Dynamic Timetable)
+// ==========================================
+function startCollegeConfigListener() {
+    if (collegeConfigListenerUnsub) return; // Already running
+    collegeConfigListenerUnsub = onSnapshot(doc(db, "colleges", currentCollegeID), (snap) => {
+        if (!snap.exists()) return;
+        let data = snap.data();
+        if (data.timetable_config) {
+            window.collegeTimeConfig = data.timetable_config;
+            if (typeof populateDynamicPeriodDropdowns === "function") {
+                populateDynamicPeriodDropdowns();
+            }
+        }
+        if (data.currentSemesterType) {
+            currentSemesterType = data.currentSemesterType;
+        }
+    });
 }
 
 // ==========================================
@@ -1621,7 +1652,7 @@ function renderStudentRows(students, existingData, batchTeachersMap, ticket) {
         let opacityStyle = rowLocked ? "0.6" : "1.0"; // 🚨 VISUAL LOCK (Gray out row)
         
         fullHTML += `
-        <div id="row_${prefix}${id}" style="background:${bgCol}; opacity:${opacityStyle}; border:1px solid var(--border-color); border-radius:12px; margin-bottom:10px; padding:${padding}; display:flex; justify-content:space-between; align-items:center; cursor:${cursorStyle}; transition: background 0.2s;">
+        <div id="row_${prefix}${id}" class="attd-mark-row" style="background:${bgCol}; opacity:${opacityStyle}; border:1px solid var(--border-color); border-radius:12px; margin-bottom:10px; padding:${padding}; display:flex; justify-content:space-between; align-items:center; cursor:${cursorStyle}; transition: 0.2s;">
             <div style="font-size:14px; font-weight:600; color:var(--text-dark); pointer-events:none; line-height:1.4;">${uiText}</div>
             <div id="tog_${prefix}${id}" class="${toggleClass}" data-id="${id}" data-state="${isPresent}" data-locked="${rowLocked}" data-new="${isNewEntry}" data-init="${isPresent}" style="pointer-events:none;"></div>
         </div>`;
@@ -2078,8 +2109,9 @@ function executeThemeClassToggle(isDark) {
 }
 
 attachSafeClick("btnThemes", () => { let s = document.getElementById("settingsOverlay"); let t = document.getElementById("themesModal"); if(s) s.classList.remove("active"); if(t) t.classList.add("active"); });
-attachSafeClick("btnDarkMode", () => applyTheme(true));
-attachSafeClick("btnLightMode", () => applyTheme(false));
+// 🚨 Added UI_Audio.playWhoosh() to sync with the liquid wave swipe!
+attachSafeClick("btnDarkMode", () => { applyTheme(true); UI_Audio.playWhoosh(); });
+attachSafeClick("btnLightMode", () => { applyTheme(false); UI_Audio.playWhoosh(); });
 applyTheme(localStorage.getItem("adhyora_teacher_theme") === "dark");
 
 // ==========================================
@@ -2265,7 +2297,8 @@ function histProcessDailyData(snapshot, targetSemester) {
         if (docSnap.id.endsWith("_GLOBAL") || docSnap.id.endsWith("_EVENTS")) return;
 
         let dayData = docSnap.data();
-        for (let i = 1; i <= 6; i++) {
+        let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+        for (let i = 1; i <= pCount; i++) {
             let pKey = `period_${i}`;
             if (dayData[pKey]) {
                 let periodData = dayData[pKey];
@@ -3867,7 +3900,8 @@ async function FetchDatesForSubject(subjectNameFromUI) {
             let dateObj = new Date(rawDateStr);
             let dateFormatted = isNaN(dateObj.getTime()) ? rawDateStr : dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-            for (let i = 1; i <= 6; i++) {
+            let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+            for (let i = 1; i <= pCount; i++) {
                 let pKey = `period_${i}`;
 
                 if (d[pKey] && d[pKey].subject) {
@@ -5699,7 +5733,6 @@ let ttLoaded = false;
 let ttSelectedDay = "Monday";
 let ttListenerUnsub = null;
 let ttTimelineInterval = null;
-const ttPeriodEndTimes = [10.5, 11.5, 12.5, 14.5, 15.5, 16.5];
 
 function initTimetableEngine() {
     if (ttLoaded) return;
@@ -5781,8 +5814,9 @@ function ttLoadTimetable() {
 function ttRenderDay(periodData) {
     let wrapper = document.getElementById("ttMyWrapper");
     let html = "";
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
 
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < pCount; i++) {
         let hasClass = periodData[i] !== undefined;
         let pNum = i + 1;
         let idBase = `my_tt_${i}`;
@@ -5800,7 +5834,7 @@ function ttRenderDay(periodData) {
         <div class="tt-row" id="row_${idBase}">
             <div class="tt-timeline-col">
                 <div class="tt-node" id="node_${idBase}" data-has-class="${hasClass}" style="border-color:${hasClass ? 'var(--brand-red)' : '#cbd5e1'}; color:${hasClass ? 'white' : '#94a3b8'}; background:${hasClass ? 'var(--brand-red)' : 'var(--bg-base)'};">${pNum}</div>
-                ${i < 5 ? `<div class="tt-line-bg" style="background:var(--border-color);"><div class="tt-line-fill" id="fill_${idBase}" style="background:var(--brand-red);"></div></div>` : ''}
+                ${i < pCount - 1 ? `<div class="tt-line-bg" style="background:var(--border-color);"><div class="tt-line-fill" id="fill_${idBase}" style="background:var(--brand-red);"></div></div>` : ''}
             </div>
             
             <div class="tt-card" style="background:${bgStyle}; border:${borderStyle};">
@@ -5823,14 +5857,19 @@ function ttRenderDay(periodData) {
 function ttUpdateVisuals() {
     let now = new Date();
     let currentHour = now.getHours() + (now.getMinutes() / 60.0);
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
     
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < pCount; i++) {
         let idBase = `my_tt_${i}`;
         let nodeEl = document.getElementById(`node_${idBase}`);
         let fillEl = document.getElementById(`fill_${idBase}`);
         
-        let endTime = ttPeriodEndTimes[i];
-        let startTime = endTime - 1.0;
+        // 🚨 V2 DYNAMIC CLOCK SYNC
+        let timing = window.getPeriodTiming(window.collegeTimeConfig, i + 1);
+        const toDec = (t) => { let [hm, m] = t.split(' '); let [h, min] = hm.split(':').map(Number); if(m==='PM'&&h!==12)h+=12; if(m==='AM'&&h===12)h=0; return h+(min/60); };
+        
+        let startTime = toDec(timing.start);
+        let endTime = toDec(timing.end);
         
         if (nodeEl) {
             let hasClass = nodeEl.getAttribute("data-has-class") === "true";
@@ -5865,7 +5904,7 @@ function ttUpdateVisuals() {
             }
         }
         
-        if (fillEl && i < 5) {
+        if (fillEl && i < pCount - 1) {
             let fillAmount = (currentHour >= endTime) ? 100 : (currentHour <= startTime) ? 0 : ((currentHour - startTime) / (endTime - startTime)) * 100;
             fillEl.style.height = `${fillAmount}%`;
         }
@@ -5942,7 +5981,8 @@ async function asnLoadData() {
     let slots = structSnap.data().slots;
     let validPeriods = [];
     let pCats = {};
-    for (let i = 1; i <= 6; i++) {
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    for (let i = 1; i <= pCount; i++) {
         if (slots[`P${i}`]) {
             let cat = slots[`P${i}`].trim();
             if (cat !== "Break" && cat !== "Lunch" && cat !== "Select Category") {
@@ -6926,9 +6966,15 @@ async function generateNepAttendanceStatsCSV(students, sem) {
     return sb.join("\n");
 }
 
-// 6. CSV GENERATOR: DAILY LOGS (Optimized)
+// 6. CSV GENERATOR: DAILY LOGS (Optimized & Dynamic)
 async function generateDailyLogsCSV(students, sem) {
-    let sb = ["Date,Semester,Roll No,Name,P1,P2,P3,P4,P5,P6,Daily Status"];
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    
+    // Dynamically build the header (P1, P2, P3... up to pCount)
+    let periodHeaders = [];
+    for(let i=1; i<=pCount; i++) periodHeaders.push(`P${i}`);
+    
+    let sb = [`Date,Semester,Roll No,Name,${periodHeaders.join(",")},Daily Status`];
     let validLogs = [];
 
     // Optimized Fetch matching C#
@@ -6959,10 +7005,12 @@ async function generateDailyLogsCSV(students, sem) {
         students.sort((a,b) => a.id.localeCompare(b.id)).forEach(student => {
             let r = student.id;
             let name = `"${(student.Name || student.studentName || "").replace(/"/g, '""')}"`;
-            let p = ["-", "-", "-", "-", "-", "-"];
+            
+            // Dynamically create the array of dashes based on pCount
+            let p = Array(pCount).fill("-");
 
             dailyData.forEach(data => {
-                for (let i = 1; i <= 6; i++) {
+                for (let i = 1; i <= pCount; i++) {
                     if (p[i-1] === "-") p[i-1] = checkNepPeriod(data, `period_${i}`, r);
                 }
             });
@@ -6970,11 +7018,16 @@ async function generateDailyLogsCSV(students, sem) {
             let present = p.includes("P");
             let status = present ? "Present" : "Absent";
 
-            sb.push(`${dateStr},${semStr},${r},${name},${p[0]},${p[1]},${p[2]},${p[3]},${p[4]},${p[5]},${status}`);
+            // Dynamically join the marks using commas
+            sb.push(`${dateStr},${semStr},${r},${name},${p.join(",")},${status}`);
         });
         
-        sb.push(",,,,,,,,,,"); // Spacer
-        sb.push("----------,----------,----------,----------,----------,----------,----------,----------,----------,----------,----------");
+        // Dynamically build the spacers
+        let spacerRow = Array(4 + pCount + 1).fill("").join(",");
+        let dashRow = Array(4 + pCount + 1).fill("----------").join(",");
+        
+        sb.push(spacerRow);
+        sb.push(dashRow);
     });
 
     return sb.join("\n");
@@ -7869,9 +7922,9 @@ let isFirstSecurityLoad = true;
 function CheckSecurityPin() {
     // 🚨 FIX: Force the phone status bar and bottom nav to match the dark lockscreen
     const metaThemeColor = document.getElementById("pwaThemeColorMeta");
-    if(metaThemeColor) metaThemeColor.setAttribute("content", "#0f172a");
-    document.documentElement.style.backgroundColor = "#0f172a";
-    document.body.style.backgroundColor = "#0f172a";
+    if(metaThemeColor) metaThemeColor.setAttribute("content", "#0e1522");
+    document.documentElement.style.backgroundColor = "#0e1522";
+    document.body.style.backgroundColor = "#0e1522";
 
     document.querySelector(".main-content").style.display = "none";
     document.getElementById("mainSidebar").style.display = "none";
@@ -8045,6 +8098,11 @@ if(elLock.btnBio) {
 function SetLockMode(mode) {
     lockMode = mode;
     elLock.input.value = "";
+    
+    // 🚨 NEW: Clear the ghost dots!
+    const dots = document.querySelectorAll("#pinDisplayWrapper .pin-dot");
+    if (dots.length > 0) dots.forEach(d => d.classList.remove("filled"));
+    
     elLock.btnForgot.style.display = "none";
     elLock.btnForgot.innerText = "Forgot PIN?"; 
     elLock.input.style.display = "inline-block"; 
@@ -8111,6 +8169,17 @@ elLock.btnSubmit.addEventListener("click", async () => {
             elLock.status.innerText = "Incorrect PIN.";
             elLock.status.style.color = "var(--brand-red)";
             elLock.input.value = "";
+            
+            // 🚨 NEW: Clear input, empty the dots, and trigger the CSS shake
+            const dots = document.querySelectorAll("#pinDisplayWrapper .pin-dot");
+            if (dots.length > 0) {
+                dots.forEach(d => d.classList.remove("filled"));
+                const wrapper = document.getElementById("pinDisplayWrapper");
+                wrapper.classList.remove("shake-error");
+                void wrapper.offsetWidth; // Force CSS reflow to restart animation
+                wrapper.classList.add("shake-error");
+            }
+            
             if (failedPinAttempts >= 2) elLock.btnForgot.style.display = "block";
         }
     } 
@@ -8277,7 +8346,7 @@ document.addEventListener("visibilitychange", () => {
             // 🚨 FIX: Force the phone's status bar to match the dark lock screen when auto-locking!
             const metaThemeColor = document.getElementById("pwaThemeColorMeta");
             if (metaThemeColor) {
-                metaThemeColor.setAttribute("content", "#0f172a");
+                metaThemeColor.setAttribute("content", "#0e1522");
             }
         }
     }
@@ -8536,14 +8605,15 @@ async function MD_FetchTimetableAndSubjects(filterDate) {
 
 function MD_GenerateTimetableGrid(ttSnap) {
     const gridEl = document.getElementById("mdTimetableGrid"); 
-    let grid = Array.from({ length: 6 }, () => Array(6).fill('<span class="tt-empty" style="color:var(--text-muted); padding-top:8px; display:block;">--</span>'));
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    let grid = Array.from({ length: 6 }, () => Array(pCount).fill('<span class="tt-empty" style="color:var(--text-muted); padding-top:8px; display:block;">--</span>'));
     const dayMap = { "monday":0, "tuesday":1, "wednesday":2, "thursday":3, "friday":4, "saturday":5 };
     
     ttSnap.forEach(doc => {
         let d = doc.data(); 
         let dIdx = dayMap[(d.day || "").toLowerCase()]; 
         let pIdx = parseInt(d.period) - 1;
-        if (dIdx !== undefined && pIdx >= 0 && pIdx < 6) { 
+        if (dIdx !== undefined && pIdx >= 0 && pIdx < pCount) { 
             let sem = (d.semester || "?").replace("Semester ", "S").replace("Semester_", "S"); 
             grid[dIdx][pIdx] = `<span class="tt-slot" style="color:var(--brand-red); font-weight:bold; padding-top:8px; display:block;">${sem}</span>`; 
         }
@@ -8551,12 +8621,15 @@ function MD_GenerateTimetableGrid(ttSnap) {
 
     const dayLabels = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
     let html = `<div class="tt-header" style="font-weight:bold; color:var(--text-muted); padding-bottom:8px; border-bottom:1px solid var(--border-color);">DAY</div>`; 
-    for(let i=1; i<=6; i++) html += `<div class="tt-header" style="font-weight:bold; color:var(--text-muted); padding-bottom:8px; border-bottom:1px solid var(--border-color);">P${i}</div>`;
+    for(let i=1; i<=pCount; i++) html += `<div class="tt-header" style="font-weight:bold; color:var(--text-muted); padding-bottom:8px; border-bottom:1px solid var(--border-color);">P${i}</div>`;
     
     for(let i=0; i<6; i++) { 
         html += `<div class="tt-day" style="font-weight:bold; color:var(--text-dark); padding-top:8px;">${dayLabels[i]}</div>`; 
         grid[i].forEach(cell => html += cell); 
     }
+
+    gridEl.style.gridTemplateColumns = `50px repeat(${pCount}, 1fr)`;
+
     gridEl.innerHTML = html;
 }
 
@@ -8635,13 +8708,15 @@ function MD_DrawSubjectRows(hoursMap) {
 
 function ExtractMyTimeline(snapshot) {
     let records = [];
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6; // 🚨 ADDED
+    
     snapshot.forEach(doc => {
         let d = doc.data();
         let rawDateStr = d.date || "Unknown Date";
         let dateObj = new Date(rawDateStr);
         let dateFormatted = isNaN(dateObj.getTime()) ? rawDateStr : dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-        for(let i=1; i<=6; i++) {
+        for(let i=1; i<=pCount; i++) { // 🚨 CHANGED TO pCount
             let pKey = `period_${i}`;
             let pData = d[pKey];
             
@@ -8723,15 +8798,45 @@ function RenderMyTimeline(records) {
 // 🚀 ENTER KEY BINDINGS (KEYBOARD & MOBILE)
 // ==========================================
 
-// 1. Lock Screen PIN (App Boot & Auto-Lock)
+// 1. Lock Screen PIN (Ghost Pad, Auto-Submit & Keystroke Tracking)
 const mainPinInput = document.getElementById("lockPinInput");
-if (mainPinInput) {
-    mainPinInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-            e.preventDefault(); // Stops the keyboard from jumping/refreshing
-            document.getElementById("btnLockSubmit").click();
+const pinDisplayWrapper = document.getElementById("pinDisplayWrapper");
+
+if (mainPinInput && pinDisplayWrapper) {
+    const pinDots = pinDisplayWrapper.querySelectorAll(".pin-dot");
+
+    mainPinInput.addEventListener("input", (e) => {
+        let val = e.target.value.replace(/[^0-9]/g, ''); // Force numbers only
+        if (val.length > 4) val = val.slice(0, 4); // Cap at 4 digits
+        e.target.value = val;
+
+        // Animate the dots based on input length
+        pinDots.forEach((dot, index) => {
+            if (index < val.length) {
+                if (!dot.classList.contains("filled")) {
+                    dot.classList.add("filled");
+                    if (navigator.vibrate) navigator.vibrate(10); // Tiny haptic on every digit typed!
+                    if (typeof UI_Audio !== 'undefined') UI_Audio.playClick();
+                }
+            } else {
+                dot.classList.remove("filled");
+            }
+        });
+
+        // Remove error shake if they start typing again
+        pinDisplayWrapper.classList.remove("shake-error");
+
+        // 🚨 AUTO-SUBMIT MAGIC
+        if (val.length === 4) {
+            // Slight delay so the user actually sees the 4th dot light up
+            setTimeout(() => {
+                document.getElementById("btnLockSubmit").click();
+            }, 150);
         }
     });
+
+    // Ensure the invisible input stays focused if they click anywhere near the dots
+    pinDisplayWrapper.addEventListener("click", () => mainPinInput.focus());
 }
 
 // 2. Action Verification PIN (Deleting, Moving, Exporting, etc.)
@@ -8814,14 +8919,126 @@ function updateSystemThemeBar() {
     const isLoaderVisible = loader && loader.style.display !== "none";
 
     if (metaThemeColor) {
-        // If it is locked OR loading, strictly enforce the dark navy theme
+        // If it is locked OR loading, strictly enforce the new dark background
         if (isLocked || isLoaderVisible) {
-            metaThemeColor.setAttribute("content", "#0f172a"); 
+            metaThemeColor.setAttribute("content", "#0e1522"); 
         } else {
             metaThemeColor.setAttribute("content", isDark ? "#0f172a" : "#ffffff");
         }
     }
 }
+
+// Auto-populates the HTML dropdowns we just emptied
+function populateDynamicPeriodDropdowns() {
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    let attDrop = document.getElementById("attPeriodDropdown");
+    let evtDrop = document.getElementById("evtPeriodDrop");
+    
+    if (attDrop) {
+        let opts = "";
+        for(let i=0; i<pCount; i++) opts += `<option value="${i}">Period ${i+1}</option>`;
+        attDrop.innerHTML = opts;
+    }
+    if (evtDrop) {
+        let evtOpts = "";
+        for(let i=1; i<=pCount; i++) evtOpts += `<option value="${i}">Period ${i}</option>`;
+        evtDrop.innerHTML = evtOpts;
+    }
+}
+
+// ==========================================
+// 🚨 NATIVE WEB AUDIO ENGINE & HAPTICS
+// ==========================================
+const UI_Audio = {
+    ctx: null,
+    init: function() {
+        if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+    },
+    playClick: function() {
+        if (localStorage.getItem("adhyora_teacher_sound") === "false") return;
+        try {
+            this.init();
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine'; // Premium soft tick
+            osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(200, this.ctx.currentTime + 0.05);
+            gain.gain.setValueAtTime(0.04, this.ctx.currentTime); // Very quiet
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            osc.start(); osc.stop(this.ctx.currentTime + 0.05);
+        } catch(e){}
+    },
+    playWhoosh: function() {
+        if (localStorage.getItem("adhyora_teacher_sound") === "false") return;
+        try {
+            this.init();
+            const duration = 0.65; // Matches the CSS liquidWaveSwipe
+            
+            const bufferSize = this.ctx.sampleRate * duration;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1; 
+            const noiseSource = this.ctx.createBufferSource();
+            noiseSource.buffer = buffer;
+            
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.Q.value = 1.2; 
+            filter.frequency.setValueAtTime(150, this.ctx.currentTime); 
+            filter.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + (duration / 2)); 
+            filter.frequency.exponentialRampToValueAtTime(150, this.ctx.currentTime + duration); 
+            
+            const gainNode = this.ctx.createGain();
+            gainNode.gain.setValueAtTime(0, this.ctx.currentTime); 
+            gainNode.gain.linearRampToValueAtTime(0.12, this.ctx.currentTime + (duration / 2)); 
+            gainNode.gain.linearRampToValueAtTime(0, this.ctx.currentTime + duration); 
+            
+            noiseSource.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(this.ctx.destination);
+            noiseSource.start();
+        } catch(e){}
+    }
+};
+
+// 🚨 SOUND TOGGLE LOGIC
+const btnToggleSounds = document.getElementById("btnToggleSounds");
+const soundToggleSwitch = document.getElementById("soundToggleSwitch");
+
+if (btnToggleSounds && soundToggleSwitch) {
+    if (localStorage.getItem("adhyora_teacher_sound") === "false") {
+        soundToggleSwitch.classList.remove("active");
+    }
+    btnToggleSounds.addEventListener("click", () => {
+        const isActive = soundToggleSwitch.classList.toggle("active");
+        localStorage.setItem("adhyora_teacher_sound", isActive ? "true" : "false");
+        UI_Audio.init();
+        if (isActive) UI_Audio.playClick(); 
+    });
+}
+
+// 🚨 GLOBAL HAPTICS & CLICK SOUND DETECTOR
+document.addEventListener('pointerdown', (e) => {
+    // 🚨 FIX: Added .attd-mark-row to instantly catch attendance taps!
+    const target = e.target.closest('button, select, .toggle-switch, .nav-icon-btn, .menu-btn, .data-card, .sub-card, .ss-stu-card, .evt-card, .asn-card, .attd-row, .settings-btn, .ledger-row, .attd-mark-row, [onclick]');
+    
+    // Prevent double-audio if they click a checkbox that is inside a card
+    if (target && e.target.type !== 'checkbox') {
+        if (navigator.vibrate) navigator.vibrate(15); 
+        UI_Audio.playClick(); 
+    }
+});
+
+// 🚨 DROPDOWN & CHECKBOX SELECTION SOUND & HAPTICS
+document.addEventListener('change', (e) => {
+    // 🚨 FIX: Now listens for checkboxes changing state (captures label clicks perfectly!)
+    if (e.target.tagName.toLowerCase() === 'select' || e.target.type === 'checkbox') {
+        if (navigator.vibrate) navigator.vibrate(15); 
+        UI_Audio.playClick(); 
+    }
+});
 
 function glitchLoop() {
     if (!logoEl) return;
