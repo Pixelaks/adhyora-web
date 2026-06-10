@@ -72,8 +72,10 @@ let actualProjectedPercent = 0;
 let savedStrictPresent = 0;
 let savedStrictTotal = 0;
 let savedRemainingDays = 0;
+let savedIsStrict = false;
 let attendanceCalculationMode = "SIMPLE";
 let isStrictCollege = false;
+window.collegeTimeConfig = null; // 🚨 V2 TIMETABLE CONFIG
 
 // ==========================================
 // 🚨 BANK-GRADE ANTI-SNOOPING SHIELD 
@@ -223,6 +225,11 @@ async function syncCollegeAndListen() {
             
             if (data.currentSemesterType) { 
                 collegeSemesterType = data.currentSemesterType; 
+            }
+
+            // 🚨 FETCH TIMETABLE CONFIG
+            if (data.timetable_config) {
+                window.collegeTimeConfig = data.timetable_config;
             }
 
             if (data.settings && data.settings.attendanceCalculationMode) {
@@ -505,45 +512,58 @@ function updateUIForCurrentSemester(optionalDept) {
     savedStrictPresent = 0;
     savedStrictTotal = 0;
     savedRemainingDays = 0;
+    savedIsStrict = false;
 
-    if (isStrictCollege) {
+    // 🚨 1. Calculate Calendar Days regardless of calculation mode
+    let globalMode = collegeSemesterType || "Odd";
+    let semNum = currentSemesterIndex + 1;
+    let isCurrentlyActiveSem = (globalMode == "Odd" && semNum % 2 != 0) || (globalMode == "Even" && semNum % 2 == 0);
+
+    if (isGlobalDataLoaded && isCurrentlyActiveSem && calWorkingDays.size > 0) {
+        let iterator = new Date(); iterator.setDate(iterator.getDate() + 1);
+        calWorkingDays.forEach(dateKey => {
+            let dateObj = new Date(dateKey);
+            if (dateObj >= iterator) savedRemainingDays++;
+        });
+    }
+
+    // 🚨 2. Apply logic based on Mode
+    // Data-driven: if Strict_Global data exists, use strict mode regardless of flag timing
+    if (isStrictCollege || semData.strictTotal > 0) {
+        savedIsStrict = true;
         currentStrictPercent = (semData.strictTotal > 0) ? (semData.strictPresent / semData.strictTotal) * 100 : 0;
         projectedStrictPercent = currentStrictPercent;
 
-        let globalMode = collegeSemesterType || "Odd";
-        let semNum = currentSemesterIndex + 1;
-        let isCurrentlyActiveSem = (globalMode == "Odd" && semNum % 2 != 0) || (globalMode == "Even" && semNum % 2 == 0);
+        if (savedRemainingDays > 0) {
+            savedStrictPresent = semData.strictPresent;
+            savedStrictTotal = semData.strictTotal;
 
-        if (isGlobalDataLoaded && isCurrentlyActiveSem) {
-            
-            if (calWorkingDays.size > 0) {
-                let remainingDays = 0;
-                let iterator = new Date(); iterator.setDate(iterator.getDate() + 1);
-                
-                calWorkingDays.forEach(dateKey => {
-                    let dateObj = new Date(dateKey);
-                    if (dateObj >= iterator) remainingDays++;
-                });
-
-                if (remainingDays > 0) {
-                    savedStrictPresent = semData.strictPresent;
-                    savedStrictTotal = semData.strictTotal;
-                    savedRemainingDays = remainingDays;
-
-                    let projNum = savedStrictPresent + remainingDays;
-                    let projDenom = savedStrictTotal + remainingDays;
-
-                    if (projDenom > 0) projectedStrictPercent = (projNum / projDenom) * 100.0;
-                }
-            }
+            let projNum = savedStrictPresent + savedRemainingDays;
+            let projDenom = savedStrictTotal + savedRemainingDays;
+            if (projDenom > 0) projectedStrictPercent = (projNum / projDenom) * 100.0;
         }
     } else {
-        projectedStrictPercent = simplePercent;
+        savedIsStrict = false;
+        // SIMPLE MODE (Period-based math)
         currentStrictPercent = simplePercent;
+        projectedStrictPercent = simplePercent;
+
+        if (savedRemainingDays > 0) {
+            savedStrictPresent = semData.simplePresent; 
+            savedStrictTotal = semData.simpleTotal;
+            
+            // 🚨 V2 DYNAMIC PERIOD MATH
+            let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+            let remainingPeriods = savedRemainingDays * pCount;
+            let projNum = savedStrictPresent + remainingPeriods;
+            let projDenom = savedStrictTotal + remainingPeriods;
+            
+            if (projDenom > 0) projectedStrictPercent = (projNum / projDenom) * 100.0;
+        }
     }
 
     actualProjectedPercent = projectedStrictPercent;
-    let currentOverallPercent = isStrictCollege ? currentStrictPercent : simplePercent;
+    let currentOverallPercent = savedIsStrict ? currentStrictPercent : simplePercent;
 
     el.pctText.innerText = `${projectedStrictPercent.toFixed(2)}%`;
     el.curPctText.innerText = `Current: ${currentOverallPercent.toFixed(2)}%`;
@@ -594,10 +614,46 @@ function updateUIForCurrentSemester(optionalDept) {
     }
     el.waterFill.style.backgroundColor = hexColor;
     el.waterFill.style.top = `${100 - Math.min(100, projectedStrictPercent)}%`;
+    // 🚀 ULTRA-MODERN SUBJECT CARDS 🚀
     el.subList.innerHTML = (!semData.hasData || semData.subjects.length === 0) ? `<div class="no-data-text">No Attendance Data</div>` : semData.subjects.map(sub => {
-        const ratio = sub.total > 0 ? (sub.present / sub.total) : 0; const subPct = ratio * 100;
-        let barColor = ratio < 0.6 ? "#f44336" : ratio < 0.75 ? "#ff9800" : "#4caf50";
-        return `<div class="subject-row"><div class="row-header"><span>${sub.name}</span><span style="color:${barColor}">${subPct.toFixed(0)}% <span style="font-size:9px; color:#888;">(${sub.present}/${sub.total})</span></span></div><div class="progress-track"><div class="progress-fill" style="width: ${subPct}%; background-color: ${barColor};"></div></div></div>`;
+        const ratio = sub.total > 0 ? (sub.present / sub.total) : 0; 
+        const subPct = ratio * 100;
+        
+        // Updated to vibrant, modern Tailwind colors
+        let barColor = ratio < 0.6 ? "#ef4444" : ratio < 0.75 ? "#f59e0b" : "#10b981"; 
+        
+        return `
+        <div onclick="window.OpenAttendanceLedger('${sub.name}', ${sub.present}, ${sub.total})" style="cursor: pointer; border: 1px solid var(--border-color, #e2e8f0); border-radius: 12px; padding: 14px 16px; background: var(--bg-card, #ffffff); transition: all 0.2s ease; margin-bottom: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.02);" onmouseover="this.style.borderColor='var(--theme-main)'; this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.05)';" onmouseout="this.style.borderColor='var(--border-color, #e2e8f0)'; this.style.transform='none'; this.style.boxShadow='0 2px 6px rgba(0,0,0,0.02)';">
+            
+            <div style="margin-bottom: 8px;">
+                <h4 style="margin: 0; font-size: 14px; font-weight: 800; color: var(--text-main, #0f172a); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${sub.name}">${sub.name}</h4>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="width: 26px; height: 26px; border-radius: 6px; background: ${barColor}15; display: flex; align-items: center; justify-content: center; color: ${barColor}; border: 1px solid ${barColor}30;">
+                        <i class="fas fa-book" style="font-size: 11px;"></i>
+                    </div>
+                    <span style="font-size: 12px; font-weight: 700; color: #64748b;">
+                        <span style="color: var(--text-main, #334155);">${sub.present}</span> / ${sub.total} 
+                        <span style="font-size: 10px; font-weight: 600; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 2px;">Classes</span>
+                    </span>
+                </div>
+                
+                <div style="text-align: right;">
+                    <span style="font-size: 18px; font-weight: 900; color: ${barColor}; line-height: 1;">${subPct.toFixed(0)}%</span>
+                </div>
+                
+            </div>
+
+            <div style="width: 100%; background: var(--bg-main, #f1f5f9); height: 6px; border-radius: 4px; overflow: hidden; border: 1px solid var(--border-color, #e2e8f0);">
+                <div style="height: 100%; width: ${subPct}%; background: ${barColor}; border-radius: 4px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden;">
+                    <div style="position: absolute; top: 0; left: 0; height: 100%; width: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); animation: barShimmer 2s infinite;"></div>
+                </div>
+            </div>
+            
+        </div>`;
     }).join('');
 
     fetchMarksForSemester(semData.name);
@@ -638,23 +694,52 @@ function fetchMarksForSemester(semName) {
 
 function drawMarksUI(marksArray) {
     el.markList.innerHTML = (!marksArray || marksArray.length === 0) ? "" : marksArray.map(m => {
-        const pct = m.max > 0 ? (m.obtained / m.max) * 100 : 0;
-        return `<div class="subject-row"><div class="row-header"><span>${m.name}</span><span>${m.obtained}/${m.max} <span style="font-size:9px; color:#888;">(${pct.toFixed(0)}%)</span></span></div><div class="progress-track"><div class="progress-fill" style="width: ${pct}%; background-color: #3b82f6;"></div></div></div>`;
+        
+        // 🚨 1. Calculate the Ratio
+        const ratio = m.max > 0 ? (m.obtained / m.max) : 0;
+        const pct = ratio * 100;
+        
+        // 🚨 2. Dynamic Color Logic (Red -> Yellow -> Green)
+        let barColor = ratio < 0.6 ? "#ef4444" : ratio < 0.75 ? "#f59e0b" : "#10b981"; 
+        
+        return `
+        <div class="subject-row" style="margin-bottom: 15px;">
+            
+            <div class="row-header" style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; font-weight: 600;">
+                <span>${m.name}</span>
+                <span>${m.obtained}/${m.max} <span style="font-size:10px; color:${barColor}; font-weight:800; margin-left:3px;">(${pct.toFixed(0)}%)</span></span>
+            </div>
+            
+            <div style="width: 100%; background: var(--bg-main, #f1f5f9); height: 6px; border-radius: 4px; overflow: hidden; border: 1px solid var(--border-color, #e2e8f0);">
+                <div style="height: 100%; width: ${pct}%; background: ${barColor}; border-radius: 4px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden;">
+                    <div style="position: absolute; top: 0; left: 0; height: 100%; width: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); animation: barShimmer 2s infinite;"></div>
+                </div>
+            </div>
+            
+        </div>`;
     }).join('');
+    
     el.noMarks.style.display = (!marksArray || marksArray.length === 0) ? "block" : "none";
 }
 
 async function buildEnrolledSubjectsUI(semesterName) {
     let listEl = document.getElementById("enrolledSubjectsListText");
-    listEl.innerHTML = "<i>Loading subjects...</i>";
+    listEl.innerHTML = `<div style="text-align: center; color: #94a3b8; font-size: 13px; padding: 20px;"><i class="fas fa-spinner fa-spin"></i> Loading subjects...</div>`;
     
     let cleanSemNum = semesterName.replace("Semester", "").replace("_", "").trim();
     let finalSubjects = [];
 
     let semKey = semesterName.replace(" ", "_"); 
     let enrollMap = currentStudentEnrolledMap[semKey] || currentStudentEnrolledMap[semesterName] || {};
+    
+    // 1. Render Secondary/Elective Subjects (Yellow Badges)
     for (let [cat, sub] of Object.entries(enrollMap)) {
-        finalSubjects.push(`<span style="color:#f59e0b; font-weight:bold;">[${cat}]</span> ${sub}`);
+        finalSubjects.push(`
+            <div style="display:flex; align-items:center; gap:12px; padding:12px 15px; background:var(--bg-base, #ffffff); border:1px solid var(--border-color, #e2e8f0); border-radius:10px; box-shadow:0 2px 4px rgba(0,0,0,0.01);">
+                <span style="font-size:10px; font-weight:800; color:#d97706; background:#fef3c7; padding:4px 8px; border-radius:6px; letter-spacing:0.5px; border:1px solid #fde68a; min-width:55px; text-align:center;">${cat}</span>
+                <span style="font-size:13px; font-weight:700; color:var(--text-main, #0f172a);">${sub}</span>
+            </div>
+        `);
     }
 
     if (!optimizedSubjectCache) {
@@ -681,11 +766,21 @@ async function buildEnrolledSubjectsUI(semesterName) {
     }
 
     let cleanStuDept = rawDept.replace(/\s/g, "").toLowerCase().replace("dept_", "");
+    
+    // 2. Render Core/Major Subjects (Green Badges - Pushed to Top)
     optimizedSubjectCache.forEach(sub => {
         if (sub.semesterArray.includes(cleanSemNum)) {
             let isDeptMatch = (sub.cleanSubDept === cleanStuDept) || (cleanStuDept.includes(sub.cleanSubDept) && sub.cleanSubDept.length > 3) || (sub.cleanSubDept.includes(cleanStuDept) && cleanStuDept.length > 3);
+            
             if ((sub.cleanType.includes("MJD") || sub.cleanType.includes("CORE") || sub.cleanType.includes("TUTORIAL")) && isDeptMatch) {
-                let newEntry = `<span style="color:#10b981; font-weight:bold;">[${sub.rawType}]</span> ${sub.displayName}`;
+                
+                let newEntry = `
+                    <div style="display:flex; align-items:center; gap:12px; padding:12px 15px; background:var(--bg-base, #ffffff); border:1px solid var(--border-color, #e2e8f0); border-radius:10px; box-shadow:0 2px 4px rgba(0,0,0,0.01);">
+                        <span style="font-size:10px; font-weight:800; color:#16a34a; background:#dcfce7; padding:4px 8px; border-radius:6px; letter-spacing:0.5px; border:1px solid #bbf7d0; min-width:55px; text-align:center;">${sub.rawType}</span>
+                        <span style="font-size:13px; font-weight:700; color:var(--text-main, #0f172a);">${sub.displayName}</span>
+                    </div>
+                `;
+                
                 if (!finalSubjects.some(existing => existing.includes(sub.displayName))) {
                     finalSubjects.unshift(newEntry);
                 }
@@ -693,8 +788,11 @@ async function buildEnrolledSubjectsUI(semesterName) {
         }
     });
 
-    if (finalSubjects.length === 0) listEl.innerHTML = "<i>No subjects assigned for this semester.</i>";
-    else listEl.innerHTML = finalSubjects.join("<br>");
+    if (finalSubjects.length === 0) {
+        listEl.innerHTML = `<div class="no-data-text" style="padding: 20px;">No subjects assigned for this semester.</div>`;
+    } else {
+        listEl.innerHTML = finalSubjects.join("");
+    }
 }
 
 document.getElementById("btnProfileDetails").addEventListener("click", () => {
@@ -753,9 +851,22 @@ document.getElementById("predictSubmitBtn").addEventListener("click", () => {
 
     el.predictStatusText.innerHTML = `<span style="color:#10b981;">Prediction calculated.</span>`;
 
-    let projNum = savedStrictPresent + (savedRemainingDays - leaveDays);
-    let projDenom = savedStrictTotal + savedRemainingDays;
+    let projNum = 0;
+    let projDenom = 0;
     let predictedPercent = 0;
+
+    if (savedIsStrict) {
+        projNum = savedStrictPresent + (savedRemainingDays - leaveDays);
+        projDenom = savedStrictTotal + savedRemainingDays;
+    } else {
+        // 🚨 V2 DYNAMIC PREDICTOR MATH
+        let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+        let periodsMissed = leaveDays * pCount;
+        let remainingPeriods = savedRemainingDays * pCount;
+        
+        projNum = savedStrictPresent + (remainingPeriods - periodsMissed);
+        projDenom = savedStrictTotal + remainingPeriods;
+    }
     
     if (projDenom > 0) predictedPercent = (projNum / projDenom) * 100.0;
 
@@ -964,8 +1075,11 @@ async function loadDailyAttendance() {
     el.dailyStatus.innerText = "Checking..."; 
     el.periodsGrid.innerHTML = ""; 
     
+    // 🚨 V2 DYNAMIC GRID GENERATOR
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    
     window.dailyData = []; 
-    for(let i=0; i<6; i++) { 
+    for(let i=0; i<pCount; i++) { 
         window.dailyData.push({hasData: false}); 
         el.periodsGrid.innerHTML += `<button class="period-btn btn-nodata">${i+1}</button>`; 
     }
@@ -983,26 +1097,29 @@ async function loadDailyAttendance() {
 }
 
 function renderDailyData(docs) {
+    // 🚨 FIX: Renamed to 'totalPeriods' to avoid crashing with 'pCount' (Present Count)
+    let totalPeriods = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    
     window.dailyData = []; 
-    for(let i=0; i<6; i++) { window.dailyData.push({hasData: false}); }
+    for(let i=0; i<totalPeriods; i++) { window.dailyData.push({hasData: false}); }
 
     if (docs.length === 0) {
         el.dailyStatus.innerText = "No Classes Recorded";
         el.periodsGrid.innerHTML = "";
-        for(let i=0; i<6; i++) { el.periodsGrid.innerHTML += `<button class="period-btn btn-nodata">${i+1}</button>`; }
+        for(let i=0; i<totalPeriods; i++) { el.periodsGrid.innerHTML += `<button class="period-btn btn-nodata">${i+1}</button>`; }
         return;
     }
 
     let isMedToday = false; let cDateObj = new Date(currentDailyDate).setHours(0,0,0,0);
     for(let l of cachedMedicalLeaves) { if(cDateObj >= l.start.setHours(0,0,0,0) && cDateObj <= l.end.setHours(0,0,0,0)) { isMedToday = true; break; } }
 
-    let pCount = 0; let tHeld = 0;
+    let pCount = 0; let tHeld = 0; // <-- This pCount is for "Present Count", do not change!
     docs.forEach(d => {
-        for(let i=1; i<=6; i++) {
+        for(let i=1; i<=totalPeriods; i++) { // 🚨 Uses totalPeriods safely
             let pK = `period_${i}`;
             if(d[pK] && d[pK].attendance && d[pK].attendance[currentRollNo] !== undefined) {
                 let isP = (d[pK].attendance[currentRollNo] == true || d[pK].attendance[currentRollNo] == 1);
-                tHeld++; if(isP) pCount++;
+                tHeld++; if(isP) pCount++; // Adds to the Present Count
                 let sub = d[pK].subject || "Unknown";
                 if(d[pK].event_details && d[pK].event_details[currentRollNo]) sub = d[pK].event_details[currentRollNo];
                 window.dailyData[i-1] = { hasData: true, isPresent: isP, isMedical: isMedToday, subject: sub, teacher: d[pK].markedByTeacherName || "System", time: d[pK].timestamp ? new Date(d[pK].timestamp.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "N/A" };
@@ -1013,7 +1130,7 @@ function renderDailyData(docs) {
     if(tHeld > 0) el.dailyStatus.innerText = `Present: ${pCount} / ${tHeld}`; else el.dailyStatus.innerText = "No Classes Recorded";
     
     el.periodsGrid.innerHTML = "";
-    for(let i=0; i<6; i++) {
+    for(let i=0; i<totalPeriods; i++) { // 🚨 Uses totalPeriods safely
         let d = window.dailyData[i]; 
         if(!d.hasData) { el.periodsGrid.innerHTML += `<button class="period-btn btn-nodata">${i+1}</button>`; continue; }
         let css = d.isMedical ? "btn-medical" : (d.isPresent ? "btn-present" : "btn-absent");
@@ -1076,8 +1193,9 @@ function loadTimetableForDay(selectedDay) {
     let semStr = (currentSemesterIndex + 1).toString();
 
     let docs = timetableCache.filter(d => d.day === selectedDay);
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
 
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < pCount; i++) {
         let pStr = (i + 1).toString(); let periodDocs = docs.filter(d => d.period === pStr); let finalMatch = null;
         finalMatch = periodDocs.find(d => d.category === "Break" || d.category === "Lunch");
 
@@ -1114,15 +1232,32 @@ function loadTimetableForDay(selectedDay) {
 
 function updateTimelineVisuals() {
     if (el.ttView.classList.contains("hidden-view")) return;
-    let now = new Date(); let currentHour = now.getHours() + (now.getMinutes() / 60);
-    let pStart = 9.5; let pEnd = 16.5; let progress = Math.max(0, Math.min(1, (currentHour - pStart) / (pEnd - pStart)));
+    let now = new Date(); let currentHour = now.getHours() + (now.getMinutes() / 60.0);
+    
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    let nodesHTML = "";
+
+    const toDec = (t) => { let [hm, m] = t.split(' '); let [h, min] = hm.split(':').map(Number); if(m==='PM'&&h!==12)h+=12; if(m==='AM'&&h===12)h=0; return h+(min/60); };
+    
+    // Calculate total bar progress dynamically
+    let firstTiming = window.getPeriodTiming(window.collegeTimeConfig, 1);
+    let lastTiming = window.getPeriodTiming(window.collegeTimeConfig, pCount);
+    
+    let pStart = toDec(firstTiming.start);
+    let pEnd = toDec(lastTiming.end);
+    let progress = Math.max(0, Math.min(1, (currentHour - pStart) / (pEnd - pStart)));
+    
     el.ttProgress.style.height = `${progress * 100}%`;
 
-    let endTimes = [10.5, 11.5, 12.5, 14.5, 15.5, 16.5]; let nodesHTML = "";
-    for (let i = 0; i < 6; i++) {
-        let nodeStart = (i === 0) ? 9.5 : endTimes[i - 1]; if (i === 3) nodeStart = 13.5; 
+    for (let i = 0; i < pCount; i++) {
+        let timing = window.getPeriodTiming(window.collegeTimeConfig, i + 1);
+        let startTime = toDec(timing.start);
+        let endTime = toDec(timing.end);
+        
         let nClass = "tt-node";
-        if (currentHour >= nodeStart && currentHour < endTimes[i]) nClass += " active"; else if (currentHour >= endTimes[i]) nClass += " completed";
+        if (currentHour >= startTime && currentHour < endTime) nClass += " active"; 
+        else if (currentHour >= endTime) nClass += " completed";
+        
         nodesHTML += `<div class="${nClass}">${i+1}</div>`;
     }
     el.ttNodes.innerHTML = nodesHTML;
@@ -1980,3 +2115,334 @@ window.shareReceiptImage = async (elementId, txnId) => {
         showToast("❌ Could not generate receipt image.");
     }
 };
+
+// ==========================================
+// 📅 SUBJECT ATTENDANCE FILTER & LEDGER (PORTED FROM PRINCIPAL APP)
+// ==========================================
+
+const studentDateFilter = document.getElementById("studentDateFilter");
+const btnAllTimeFilter = document.getElementById("btnAllTimeFilter");
+
+if (studentDateFilter && btnAllTimeFilter) {
+    studentDateFilter.addEventListener("change", (e) => {
+        if(e.target.value) {
+            // 🚨 REMOVED THE DIMMING LOGIC: Button keeps its theme color!
+            FetchSubjectDailyAttendance(e.target.value);
+        }
+    });
+
+    btnAllTimeFilter.addEventListener("click", () => {
+        studentDateFilter.value = "";
+        // 🚨 Re-run the master UI builder to restore all full-semester stats!
+        updateUIForCurrentSemester(rawDept); 
+    });
+}
+
+async function FetchSubjectDailyAttendance(targetDate) {
+    const listEl = el.subList; 
+    listEl.innerHTML = `<div style="text-align:center; padding:30px 20px; color:#64748b; font-size:13px; font-weight:bold;"><i class="fas fa-circle-notch fa-spin" style="margin-right:8px; color:var(--brand-green);"></i> Loading daily records...</div>`;
+    
+    let semDisplay = sortedSemesterKeys[currentSemesterIndex].replace("_", " ");
+    
+    try {
+        // 🚀 ROBUST QUERY: Fetch all possible semester string formats simultaneously
+        let format1 = semDisplay; 
+        let format2 = semDisplay.replace(/\s+/g, "_"); 
+        let format3 = semDisplay.replace(/\s+/g, ""); 
+
+        const [snap1, snap2, snap3] = await Promise.all([
+            getDocs(query(collection(db, "colleges", collegeID, "attendance"), where("date", "==", targetDate), where("semester", "==", format1))),
+            getDocs(query(collection(db, "colleges", collegeID, "attendance"), where("date", "==", targetDate), where("semester", "==", format2))),
+            getDocs(query(collection(db, "colleges", collegeID, "attendance"), where("date", "==", targetDate), where("semester", "==", format3)))
+        ]);
+
+        let allDocsMap = new Map();
+        snap1.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+        snap2.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+        snap3.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+
+        if (allDocsMap.size === 0) {
+            listEl.innerHTML = `<div class="no-data-text">No records found for this date.</div>`;
+            // Update counts to 0 without touching the wave percentages!
+            el.perPres.innerText = `Periods Present: 0`; 
+            el.perAbs.innerText = `Periods Absent: 0`; 
+            el.perTot.innerText = `Total Periods: 0`;
+            el.attClasses.innerText = `Attended: 0`;
+            el.absClasses.innerText = `Absent: 0`;
+            el.totClasses.innerText = `Total: 0`;
+            return;
+        }
+
+        let dayPres = 0, dayAbs = 0; 
+        let dailyRecords = [];
+
+        // Extract period data
+        allDocsMap.forEach((d) => {
+            let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+            for (let i = 1; i <= pCount; i++) {
+                let pKey = `period_${i}`;
+                let pData = d[pKey];
+                
+                // If the period exists and this specific student was marked in it
+                if (pData && pData.attendance && pData.attendance[currentRollNo] !== undefined) {
+                    let isPres = pData.attendance[currentRollNo]; 
+                    if(isPres) dayPres++; else dayAbs++;
+                    
+                    let subName = pData.subject || "Unknown Subject"; 
+                    if(pData.event_details && pData.event_details[currentRollNo]) subName = pData.event_details[currentRollNo];
+                    let teacherName = pData.markedByTeacherName || "Unknown Teacher";
+                    
+                    let timeString = "--:--";
+                    if (pData.timestamp) {
+                        let jsDate = pData.timestamp.toDate ? pData.timestamp.toDate() : new Date(pData.timestamp.seconds * 1000);
+                        timeString = jsDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                    }
+
+                    dailyRecords.push({
+                        period: i,
+                        subName: subName,
+                        teacherName: teacherName,
+                        timeString: timeString,
+                        isPres: isPres
+                    });
+                }
+            }
+        });
+
+        // Sort records logically (Period 1 to 6)
+        dailyRecords.sort((a, b) => a.period - b.period);
+
+        if (dailyRecords.length === 0) {
+             listEl.innerHTML = `<div class="no-data-text">You were not explicitly marked in any periods on this date.</div>`;
+             return;
+        }
+
+        // Generate the new UI cards
+        let html = dailyRecords.map(record => {
+            let badgeClass = record.isPres ? "present" : "absent";
+            let badgeText = record.isPres ? "Present" : "Absent";
+            let icon = record.isPres ? '<i class="fas fa-check-circle"></i>' : '<i class="fas fa-times-circle"></i>';
+            
+            return `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; background:var(--bg-base); border:1px solid var(--border-color); border-radius:12px; box-shadow:0 2px 5px rgba(0,0,0,0.02); transition:0.2s; margin-bottom:10px;">
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                    
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:14px; font-weight:800; color:var(--text-dark);">${record.subName}</span>
+                        <span style="font-size:10px; font-weight:700; color:#94a3b8; background:var(--theme-light); padding:2px 6px; border-radius:6px;"><i class="far fa-clock" style="margin-right:3px;"></i> ${record.timeString}</span>
+                    </div>
+                    
+                    <span style="font-size:11px; font-weight:600; color:#64748b; text-transform:uppercase;">
+                        Period ${record.period} 
+                        <span style="margin: 0 4px; opacity:0.3;">|</span> 
+                        <i class="fas fa-user-edit" style="margin-right:3px;"></i> ${record.teacherName}
+                    </span>
+                    
+                </div>
+                <div class="ledger-badge ${badgeClass}" style="display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:800; text-transform:uppercase;">${icon} ${badgeText}</div>
+            </div>`;
+        }).join('');
+
+        // 🚨 Update UI Counters exactly like the Principal Script (DO NOT TOUCH PERCENTAGES)
+        el.perPres.innerText = `Periods Present: ${dayPres}`; 
+        el.perAbs.innerText = `Periods Absent: ${dayAbs}`; 
+        el.perTot.innerText = `Total Periods: ${dayPres + dayAbs}`;
+        el.attClasses.innerText = `Attended: ${dayPres}`;
+        el.absClasses.innerText = `Absent: ${dayAbs}`;
+        el.totClasses.innerText = `Total: ${dayPres + dayAbs}`;
+
+        listEl.innerHTML = html;
+
+    } catch(e) { 
+        console.error(e);
+        listEl.innerHTML = `<div class="no-data-text" style="color:red; margin-top:20px;">Error loading daily records.</div>`;
+    }
+}
+
+// ==========================================
+// 📅 OPTIMIZED ATTENDANCE LEDGER POPUP
+// ==========================================
+const ledgerOverlay = document.getElementById("attendanceLedgerOverlay");
+
+// Pagination & Cache Variables
+let ledgerTimelineCache = {}; 
+let ledgerCurrentData = [];
+let ledgerRenderLimit = 15;
+
+window.CloseAttendanceLedger = function() {
+    ledgerOverlay.style.opacity = '0';
+    setTimeout(() => { ledgerOverlay.style.display = 'none'; }, 300);
+};
+
+window.OpenAttendanceLedger = async (subjectNameFromUI, presentCount, totalCount) => {
+    ledgerOverlay.style.display = 'flex';
+    setTimeout(() => { ledgerOverlay.style.opacity = '1'; }, 10);
+    
+    document.getElementById("ledgerSubjectTitle").innerText = subjectNameFromUI.split('<')[0].trim();
+    document.getElementById("ledgerStatsSubtitle").innerText = `Attended: ${presentCount} / ${totalCount} Classes`;
+    
+    const listContainer = document.getElementById("ledgerListContainer");
+    listContainer.innerHTML = `<div style="text-align:center; padding:30px 20px; color:#64748b; font-size:13px; font-weight:bold;"><i class="fas fa-circle-notch fa-spin" style="margin-right:8px; color:var(--brand-green);"></i> Digging through records...</div>`;
+
+    let semDisplay = sortedSemesterKeys[currentSemesterIndex].replace("_", " ");
+    
+    // 🚀 CACHE CHECK: Zero Read Cost on Re-opens
+    let cacheKey = `${currentRollNo}_${semDisplay}_${subjectNameFromUI}`;
+
+    if (!ledgerTimelineCache[cacheKey]) {
+        ledgerTimelineCache[cacheKey] = await FetchDatesForSubject(subjectNameFromUI, semDisplay);
+    }
+
+    ledgerCurrentData = ledgerTimelineCache[cacheKey];
+    ledgerRenderLimit = 15; // Reset pagination limit on fresh open
+    
+    RenderLedgerList();
+};
+
+function RenderLedgerList() {
+    const listContainer = document.getElementById("ledgerListContainer");
+    
+    if (ledgerCurrentData.length === 0) {
+        listContainer.innerHTML = `<div class="no-data-text" style="padding: 20px 0;">No timeline records found.</div>`;
+        return;
+    }
+
+    let renderBatch = ledgerCurrentData.slice(0, ledgerRenderLimit);
+    let oldScroll = listContainer.scrollTop;
+
+    let html = renderBatch.map(record => {
+        let badgeClass = record.isPresent ? "present" : "absent";
+        let badgeText = record.isPresent ? "Present" : "Absent";
+        let icon = record.isPresent ? '<i class="fas fa-check-circle"></i>' : '<i class="fas fa-times-circle"></i>';
+        
+        return `
+        <div class="ledger-row" style="display:flex; justify-content:space-between; align-items:center; padding:15px; background:var(--bg-base); border:1px solid var(--border-color); border-radius:12px; margin-bottom:10px; transition:0.2s;">
+            
+            <div style="display:flex; flex-direction:column; gap:8px; flex:1; min-width:0; padding-right:10px;">
+                
+                <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <span style="font-size:14px; font-weight:800; color:var(--text-main); white-space:nowrap;">${record.dateFormatted}</span>
+                    <span style="font-size:10px; font-weight:700; color:#64748b; background:var(--bg-main, #f8fafc); border:1px solid var(--border-color); padding:3px 8px; border-radius:6px; display:inline-flex; align-items:center; white-space:nowrap;">
+                        <i class="far fa-clock" style="margin-right:4px;"></i> ${record.timeFormatted}
+                    </span>
+                </div>
+                
+                <div style="font-size:11px; font-weight:700; background:var(--theme-light); color:var(--theme-main); padding:4px 8px; border-radius:6px; display:inline-flex; align-items:center; width:fit-content; max-width:100%;">
+                    <span style="white-space:nowrap;">PERIOD ${record.period}</span>
+                    <span style="margin: 0 6px; opacity:0.4;">|</span>
+                    <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        <i class="fas fa-user-edit" style="margin-right:4px;"></i> ${record.teacherName}
+                    </span>
+                </div>
+                
+            </div>
+
+            <div class="ledger-badge ${badgeClass}" style="display:flex; align-items:center; gap:4px; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:800; text-transform:uppercase; flex-shrink:0;">
+                ${icon} ${badgeText}
+            </div>
+            
+        </div>`;
+    }).join('');
+
+    if (ledgerRenderLimit < ledgerCurrentData.length) {
+        html += `<div style="text-align:center; padding:15px; font-size:11px; color:#94a3b8; font-weight:bold; letter-spacing:1px; text-transform:uppercase;">Scroll for more records</div>`;
+    } else {
+        html += `<div style="text-align:center; padding:15px; font-size:11px; color:#cbd5e1; font-weight:bold; letter-spacing:1px; text-transform:uppercase;">End of Timeline</div>`;
+    }
+
+    listContainer.innerHTML = html;
+    listContainer.scrollTop = oldScroll;
+}
+
+// 🚀 SCROLL LISTENER: Triggers when user hits the bottom
+document.getElementById("ledgerListContainer").addEventListener("scroll", (e) => {
+    let el = e.target;
+    if (el.scrollHeight - el.scrollTop <= el.clientHeight + 50) {
+        if (ledgerRenderLimit < ledgerCurrentData.length) {
+            ledgerRenderLimit += 15; // Load 15 more
+            RenderLedgerList();
+        }
+    }
+});
+
+async function FetchDatesForSubject(subjectNameFromUI, semDisplay) {
+    let timeline = [];
+    let dbSubjectName = subjectNameFromUI.split('<')[0].trim().replace("/", "-");
+
+    try {
+        let format1 = semDisplay; 
+        let format2 = semDisplay.replace(/\s+/g, "_"); 
+        let format3 = semDisplay.replace(/\s+/g, ""); 
+
+        const [snap1, snap2, snap3] = await Promise.all([
+            getDocs(query(collection(db, "colleges", collegeID, "attendance"), where("semester", "==", format1))),
+            getDocs(query(collection(db, "colleges", collegeID, "attendance"), where("semester", "==", format2))),
+            getDocs(query(collection(db, "colleges", collegeID, "attendance"), where("semester", "==", format3)))
+        ]);
+
+        let allDocsMap = new Map();
+        snap1.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+        snap2.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+        snap3.forEach(doc => allDocsMap.set(doc.id, doc.data()));
+
+        allDocsMap.forEach((d, docId) => {
+            let rawDateStr = d.date || "Unknown Date";
+            let dateObj = new Date(rawDateStr);
+            let dateFormatted = isNaN(dateObj.getTime()) ? rawDateStr : dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+            let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+            for (let i = 1; i <= pCount; i++) {
+                let pKey = `period_${i}`;
+
+                if (d[pKey] && d[pKey].subject) {
+                    let logSubjectClean = d[pKey].subject.trim();
+                    
+                    if (logSubjectClean === subjectNameFromUI || logSubjectClean === dbSubjectName) {
+                        if (d[pKey].attendance && d[pKey].attendance[currentRollNo] !== undefined) {
+                            
+                            let timeString = "--:--";
+                            if (d[pKey].timestamp) {
+                                let jsDate = d[pKey].timestamp.toDate ? d[pKey].timestamp.toDate() : new Date(d[pKey].timestamp.seconds * 1000);
+                                timeString = jsDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                            }
+                            
+                            let teacherName = d[pKey].markedByTeacherName || "Unknown Teacher";
+
+                            timeline.push({
+                                dateFormatted: dateFormatted,
+                                timeFormatted: timeString,
+                                teacherName: teacherName,
+                                rawDate: dateObj,
+                                period: i,
+                                isPresent: d[pKey].attendance[currentRollNo]
+                            });
+                        }
+                    }
+                }
+            }
+        });
+
+        timeline.sort((a, b) => b.rawDate - a.rawDate);
+
+    } catch (error) {
+        console.error("Firestore Error Fetching Timeline:", error);
+    }
+
+    return timeline;
+}
+
+// ==========================================
+// 🚨 NATIVE ANDROID HAPTIC FEEDBACK (VIBRATION)
+// ==========================================
+document.addEventListener('pointerdown', (e) => {
+    // Check if the user touched a button, or a card that acts like a button
+    const target = e.target.closest('button, .icon-btn, .profile-card, .day-btn, .period-btn, .color-swatch, .ledger-row, [onclick]');
+    
+    if (target) {
+        // Fire a premium, tiny 15-millisecond vibration (Android only)
+        if (navigator.vibrate) {
+            // Use 15ms for a subtle "tick" feel, rather than a buzzing phone call feel
+            navigator.vibrate(15); 
+        }
+    }
+});
