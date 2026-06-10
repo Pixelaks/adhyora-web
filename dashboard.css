@@ -1,6 +1,12 @@
 /* Add this to the VERY TOP of your CSS file */
 @import url('https://fonts.googleapis.com/css2?family=Yatra+One&display=swap');
 
+/* 🚨 PREMIUM TEXT SHIMMER (REVERSED DIRECTION) */
+@keyframes textShimmer {
+    0% { background-position: 200% center; }
+    100% { background-position: -200% center; }
+}
+
 /* =========================================
    🚨 MOBILE NATIVE UX FIXES
    ========================================= */
@@ -62,11 +68,18 @@ button, .icon-btn, .day-btn, .period-btn, .close-modal-btn, .nav-btn, .color-swa
 }
 
 .logo-text { 
-    color: #3b82f6; 
     font-size: 32px; 
     letter-spacing: 3px; 
     font-family: 'Yatra One', system-ui, sans-serif; 
     margin: 0;
+    
+    /* 🚨 SUBTLE SHIMMER EFFECT */
+    background: linear-gradient(110deg, var(--theme-main) 40%, rgba(255,255,255,0.3) 50%, var(--theme-main) 60%);
+    background-size: 200% auto;
+    color: transparent !important;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: textShimmer 4s linear infinite; /* Slightly slower for a premium feel */
 }
 
 /* =========================================
@@ -720,10 +733,12 @@ body.dark-mode {
     --theme-nav: #0f172a;
 }
 
-body, .dashboard-container, .scrollable-content { background-color: var(--bg-main) !important; color: var(--text-main) !important; transition: background-color 0.3s, color 0.3s; }
-.data-card, .daily-card, .calendar-container, .sidebar-drawer, .profile-card, .list-container, .session-card, .upcoming-card, .tt-card { background-color: var(--bg-card) !important; border-color: var(--border-color) !important; color: var(--text-main); transition: background-color 0.3s; }
+/* 🚨 FIX: Removed background transitions so the GPU only focuses on the View Transition Wave! */
+body, .dashboard-container, .scrollable-content { background-color: var(--bg-main) !important; color: var(--text-main) !important; }
+.data-card, .daily-card, .calendar-container, .sidebar-drawer, .profile-card, .list-container, .session-card, .upcoming-card, .tt-card { background-color: var(--bg-card) !important; border-color: var(--border-color) !important; color: var(--text-main); }
 
-.logo-text, .cat-pill { color: var(--theme-main) !important; }
+/* Removed .logo-text so it doesn't block the transparent shimmer */
+.cat-pill { color: var(--theme-main) !important; }
 .semester-nav, .daily-header-blue, .day-btn.active, .marks-header-container, .status-badge { background-color: var(--theme-main) !important; }
 
 .bottom-nav { background-color: var(--theme-nav) !important; border: 1px solid var(--border-color); }
@@ -1171,4 +1186,62 @@ body.dark-mode .ledger-badge.absent {
 @keyframes barShimmer {
     0% { transform: translateX(-100%); }
     100% { transform: translateX(100%); }
+}
+
+/* =========================================
+   🚨 PREMIUM ISOMETRIC DOCUMENT STACK
+   ========================================= */
+.isometric-loader {
+    position: relative;
+    width: 45px;
+    height: 45px;
+    margin: 0 auto 35px auto;
+    /* Tilts the square into a perfect 3D isometric perspective */
+    transform: rotateX(60deg) rotateZ(45deg);
+    transform-style: preserve-3d;
+}
+
+/* Base style for the stacked documents */
+.iso-layer {
+    position: absolute;
+    inset: 0;
+    background: var(--theme-main);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Bottom Shadow Layer */
+.iso-layer:nth-child(1) {
+    transform: translateZ(0px);
+    opacity: 0.2;
+    animation: isoLayer1 1.5s infinite ease-in-out alternate;
+}
+
+/* Middle Floating Layer */
+.iso-layer:nth-child(2) {
+    transform: translateZ(15px);
+    opacity: 0.5;
+    animation: isoLayer2 1.5s infinite ease-in-out alternate;
+}
+
+/* Top Glowing Layer */
+.iso-layer:nth-child(3) {
+    transform: translateZ(30px);
+    opacity: 1;
+    box-shadow: -10px 10px 20px rgba(0,0,0,0.2);
+    animation: isoLayer3 1.5s infinite ease-in-out alternate;
+}
+
+/* Hardware-Accelerated 3D Hover Animations */
+@keyframes isoLayer1 {
+    0% { transform: translateZ(0px); }
+    100% { transform: translateZ(-10px); }
+}
+@keyframes isoLayer2 {
+    0% { transform: translateZ(15px); }
+    100% { transform: translateZ(25px); }
+}
+@keyframes isoLayer3 {
+    0% { transform: translateZ(30px); }
+    100% { transform: translateZ(65px); background: var(--theme-nav); border-color: rgba(255,255,255,0.6); }
 }
