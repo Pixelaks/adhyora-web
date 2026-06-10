@@ -996,7 +996,8 @@ function loadAssignments() {
         else {
             // Active
             badge = `<span class="card-due" style="color:#f59e0b; font-size:11px; font-weight:bold; letter-spacing:0.5px;">Due: ${n.due}</span>`;
-            actionBtn = `<button onclick="window.toggleAssignment('${n.id}', true)" style="background:var(--brand-green); border:none; color:white; padding:4px 10px; border-radius:6px; font-size:10px; font-weight:bold; cursor:pointer; box-shadow:0 2px 5px rgba(74, 222, 128, 0.4);">Mark Done</button>`;
+            // 🚨 FIX: Replaced missing var(--brand-green) with hardcoded #10b981
+actionBtn = `<button onclick="window.toggleAssignment('${n.id}', true)" style="background:#10b981; border:none; color:white; padding:6px 12px; border-radius:6px; font-size:10px; font-weight:bold; cursor:pointer; box-shadow:0 2px 5px rgba(16, 185, 129, 0.4); transition:0.2s;">Mark Done</button>`;
         }
 
         return `
