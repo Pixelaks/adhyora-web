@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, deleteDoc, serverTimestamp, onSnapshot, collection, query, where, getDocs, orderBy, limit, arrayUnion, arrayRemove, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, serverTimestamp, onSnapshot, collection, query, where, getDocs, orderBy, limit, startAfter, arrayUnion, arrayRemove, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getMessaging, getToken, deleteToken } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging.js";
 
 // 🚨 PASTE YOUR REAL CONFIG HERE 🚨
@@ -120,8 +120,24 @@ function hideAppLoader() {
     }
 }
 
+// 🚨 NATIVE TOAST ENGINE 🚨
 function showToast(msg) {
-    alert(msg);
+    const toast = document.getElementById("toast");
+    if (toast) {
+        toast.innerText = msg;
+        // Force native styling just in case CSS is missing
+        toast.style.visibility = "visible";
+        toast.style.opacity = "1";
+        toast.style.transform = "translate(-50%, 0)";
+        
+        setTimeout(() => { 
+            toast.style.opacity = "0"; 
+            toast.style.transform = "translate(-50%, 20px)";
+            setTimeout(() => { toast.style.visibility = "hidden"; }, 300); 
+        }, 2000);
+    } else {
+        alert(msg);
+    }
 }
 
 // ==========================================
@@ -343,27 +359,47 @@ async function fetchGlobalCalendarData() {
 }
 
 function startBackgroundListeners() {
+    // 🚨 CACHE-FIRST ASSIGNMENTS
     let cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+    let localAssignCache = localStorage.getItem(`adhyora_assignments_${currentRollNo}`);
+    if (localAssignCache) {
+        try {
+            cachedAssignments = JSON.parse(localAssignCache).map(item => ({ ...item, time: new Date(item.time) }));
+            if (!el.assignView.classList.contains("hidden-view")) loadAssignments();
+        } catch (e) { console.warn("Cache parse error", e); }
+    }
+
     onSnapshot(query(collection(db, "colleges", collegeID, "assignments"), where("createdAt", ">=", cutoff), orderBy("createdAt", "desc")), (snap) => {
-        cachedAssignments = []; let mySemStr = `Semester ${currentSemesterIndex + 1}`;
+        let freshAssignments = []; let mySemStr = `Semester ${currentSemesterIndex + 1}`;
         snap.forEach(doc => {
             let d = doc.data(); let sub = d.subject || "Unknown";
             let isExplicitMatch = enrolledSubjectsList.some(s => s.trim().toLowerCase() === sub.trim().toLowerCase());
             let isDepartmentMatch = (d.teacherDeptID || "").trim().toLowerCase() === myDepartmentID.toLowerCase() && (d.semester || "").trim().toLowerCase() === mySemStr.toLowerCase();
             if (isExplicitMatch || isDepartmentMatch || enrolledSubjectsList.length === 0) {
-                // 🚨 FIX: Injected doc.id into the cache so we can uniquely track completions
-                cachedAssignments.push({ id: doc.id, title: `Assignment: ${sub}`, body: d.topic || "No Topic", teach: d.teacherName || "Teacher", due: d.dueDate || "N/A", time: d.createdAt ? d.createdAt.toDate() : new Date() });
+                freshAssignments.push({ id: doc.id, title: `Assignment: ${sub}`, body: d.topic || "No Topic", teach: d.teacherName || "Teacher", due: d.dueDate || "N/A", time: d.createdAt ? d.createdAt.toDate() : new Date() });
             }
         });
+        cachedAssignments = freshAssignments;
+        localStorage.setItem(`adhyora_assignments_${currentRollNo}`, JSON.stringify(cachedAssignments));
         if (!el.assignView.classList.contains("hidden-view")) loadAssignments();
     });
 
     function getSafeTopic(input) { return (!input || input === "All") ? "ALL" : input.replace(/[^a-zA-Z0-9]/g, ''); }
     let safeCol = getSafeTopic(collegeID); let safeDept = getSafeTopic(rawDept); let safeYear = getSafeTopic(myYearStr);
     let myTopics = [`${safeCol}_ALL`, `${safeCol}_STUDENTS_ALL_ALL`, `${safeCol}_STUDENTS_${safeDept}_ALL`, `${safeCol}_STUDENTS_${safeDept}_${safeYear}`];
+    // 🚨 CACHE-FIRST NOTIFICATIONS
     let inboxCache = []; let globalCache = [];
+    let localNotifCache = localStorage.getItem(`adhyora_notifs_${currentRollNo}`);
+    if (localNotifCache) {
+        try {
+            cachedNotifs = JSON.parse(localNotifCache).map(item => ({ ...item, time: new Date(item.time) }));
+            if (!el.actualNotifView.classList.contains("hidden-view")) loadActualNotifications();
+        } catch (e) { console.warn("Cache parse error", e); }
+    }
+
     const updateNotifUI = () => {
         cachedNotifs = [...inboxCache, ...globalCache].sort((a,b) => b.time - a.time);
+        localStorage.setItem(`adhyora_notifs_${currentRollNo}`, JSON.stringify(cachedNotifs));
         if (!el.actualNotifView.classList.contains("hidden-view")) loadActualNotifications();
     };
     onSnapshot(query(collection(db, "colleges", collegeID, "inbox_messages"), where("targetTopic", "in", myTopics), orderBy("timestamp", "desc"), limit(30)), (snap) => {
@@ -375,9 +411,19 @@ function startBackgroundListeners() {
         updateNotifUI();
     });
 
+    // 🚨 CACHE-FIRST MESSAGES
     let broadcastCache = []; let privateChatCache = [];
+    let localMsgCache = localStorage.getItem(`adhyora_msgs_${currentRollNo}`);
+    if (localMsgCache) {
+        try {
+            cachedMessages = JSON.parse(localMsgCache).map(item => ({ ...item, time: new Date(item.time) }));
+            if (!el.msgView.classList.contains("hidden-view")) loadMessages();
+        } catch (e) { console.warn("Cache parse error", e); }
+    }
+
     const updateMsgUI = () => {
         cachedMessages = [...broadcastCache, ...privateChatCache].sort((a,b) => b.time - a.time);
+        localStorage.setItem(`adhyora_msgs_${currentRollNo}`, JSON.stringify(cachedMessages));
         if (!el.msgView.classList.contains("hidden-view")) loadMessages();
     };
     onSnapshot(query(collection(db, "colleges", collegeID, "sent_messages"), orderBy("timestamp", "desc"), limit(30)), (snap) => {
@@ -1311,19 +1357,54 @@ document.getElementById("btnSignOut").addEventListener("click", handleSignOut);
 document.getElementById("btnBlockSignOut").addEventListener("click", handleSignOut);
 document.getElementById("btnContact").addEventListener("click", () => window.open(`mailto:pixelaks.technologies@gmail.com`, '_blank'));
 
-// --- NATIVE BACK BUTTON TRAP (TAB HISTORY & SIGN OUT WARNING) ---
+// --- NATIVE BACK BUTTON TRAP (MODALS, HISTORY & EXIT LOGIC) ---
 window.history.replaceState({ panelId: "base_trap" }, "", "");
 window.history.pushState({ panelId: "mainDashboardView" }, "", "");
 
+let isReadyToExit = false;
+let backPressTimer = null;
+
 window.addEventListener("popstate", (e) => {
+    
+    // 🚨 1. MODAL/POPUP INTERCEPTOR (Close popups first!)
+    let modalClosed = false;
+
+    if (el.sidebar && el.sidebar.classList.contains("open")) { el.sidebar.classList.remove("open"); el.overlay.classList.remove("active"); modalClosed = true; }
+    else if (el.profileModal && el.profileModal.classList.contains("active")) { el.profileModal.classList.remove("active"); modalClosed = true; }
+    else if (el.sessionsModal && el.sessionsModal.classList.contains("active")) { el.sessionsModal.classList.remove("active"); modalClosed = true; }
+    else if (el.predictorModal && el.predictorModal.classList.contains("active")) { el.predictorModal.classList.remove("active"); modalClosed = true; }
+    else if (el.detailModal && el.detailModal.classList.contains("active")) { el.detailModal.classList.remove("active"); modalClosed = true; }
+    else if (typeof themesModal !== 'undefined' && themesModal.classList.contains("active")) { themesModal.classList.remove("active"); modalClosed = true; }
+    else if (el.calModal && el.calModal.classList.contains("active")) { el.calModal.classList.remove("active"); modalClosed = true; }
+    else if (typeof ledgerOverlay !== 'undefined' && (ledgerOverlay.style.display === 'flex' || ledgerOverlay.style.opacity === '1')) { window.CloseAttendanceLedger(); modalClosed = true; }
+
+    // If we closed a modal, we push the state back so the user doesn't actually navigate away
+    if (modalClosed) {
+        let currentPanel = (e.state && e.state.panelId) ? e.state.panelId : "mainDashboardView";
+        if (currentPanel === "base_trap") currentPanel = "mainDashboardView"; 
+        window.history.pushState({ panelId: currentPanel }, "", "");
+        return; 
+    }
+
+    // 🚨 2. STANDARD NAVIGATION & DOUBLE-TAP TO EXIT LOGIC
     if (e.state && e.state.panelId) {
         let pid = e.state.panelId;
 
         if (pid === "base_trap") {
-            if (confirm("Do you want to sign out?")) {
-                handleSignOut(); 
+            if (isReadyToExit) {
+                // Execute Native App Exit (Cordova/Capacitor/WebView)
+                if (window.navigator && window.navigator.app && window.navigator.app.exitApp) {
+                    window.navigator.app.exitApp(); 
+                } 
+                // For PWAs, letting it pass without pushing state automatically closes the app.
             } else {
-                window.history.pushState({ panelId: "mainDashboardView" }, "", "");
+                showToast("Press back again to exit");
+                isReadyToExit = true;
+                // Trap them again to wait for the second tap
+                window.history.pushState({ panelId: "mainDashboardView" }, "", ""); 
+                
+                clearTimeout(backPressTimer);
+                backPressTimer = setTimeout(() => { isReadyToExit = false; }, 2000);
             }
         }
         else if (pid === "mainDashboardView") { switchView(btnNavMain, el.mainView, false); }
@@ -1338,6 +1419,10 @@ window.addEventListener("popstate", (e) => {
             if (!validDays.includes(todayName)) todayName = "Monday";
             document.querySelectorAll('.day-btn').forEach(btn => btn.classList.toggle("active", btn.dataset.day === todayName));
             loadTimetableForDay(todayName);
+        }
+        else if (pid === "feesView") { 
+            switchView(document.getElementById("btnNavFees"), el.feesView, false);
+            if (typeof FEES_Init === "function") FEES_Init();
         }
     }
 });
@@ -1696,6 +1781,7 @@ document.querySelectorAll('.color-swatch').forEach(swatch => {
         let selectedColor = e.currentTarget.dataset.theme;
         let isDark = document.body.classList.contains("dark-mode");
         applyTheme(selectedColor, isDark);
+        UI_Audio.playWhoosh();
     });
 });
 
@@ -1705,6 +1791,7 @@ document.getElementById("btnDarkMode").addEventListener("click", (e) => {
 
     let currentColor = localStorage.getItem("adhyora_theme_color") || "blue";
     applyTheme(currentColor, true);
+    UI_Audio.playWhoosh();
 });
 
 document.getElementById("btnLightMode").addEventListener("click", (e) => {
@@ -1713,6 +1800,7 @@ document.getElementById("btnLightMode").addEventListener("click", (e) => {
 
     let currentColor = localStorage.getItem("adhyora_theme_color") || "blue";
     applyTheme(currentColor, false);
+    UI_Audio.playWhoosh();
 });
 
 function loadSavedTheme() {
@@ -2141,7 +2229,7 @@ if (studentDateFilter && btnAllTimeFilter) {
 
 async function FetchSubjectDailyAttendance(targetDate) {
     const listEl = el.subList; 
-    listEl.innerHTML = `<div style="text-align:center; padding:30px 20px; color:#64748b; font-size:13px; font-weight:bold;"><i class="fas fa-circle-notch fa-spin" style="margin-right:8px; color:var(--brand-green);"></i> Loading daily records...</div>`;
+    listEl.innerHTML = `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:30px 20px; color:#64748b; font-size:13px; font-weight:bold;"><div style="transform: scale(0.5); margin-bottom: -10px;"><div class="isometric-loader"><div class="iso-layer"></div><div class="iso-layer"></div><div class="iso-layer"></div></div></div> Loading daily records...</div>`;
     
     let semDisplay = sortedSemesterKeys[currentSemesterIndex].replace("_", " ");
     
@@ -2283,7 +2371,7 @@ window.OpenAttendanceLedger = async (subjectNameFromUI, presentCount, totalCount
     document.getElementById("ledgerStatsSubtitle").innerText = `Attended: ${presentCount} / ${totalCount} Classes`;
     
     const listContainer = document.getElementById("ledgerListContainer");
-    listContainer.innerHTML = `<div style="text-align:center; padding:30px 20px; color:#64748b; font-size:13px; font-weight:bold;"><i class="fas fa-circle-notch fa-spin" style="margin-right:8px; color:var(--brand-green);"></i> Digging through records...</div>`;
+    listContainer.innerHTML = `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:30px 20px; color:#64748b; font-size:13px; font-weight:bold;"><div style="transform: scale(0.5); margin-bottom: -10px;"><div class="isometric-loader"><div class="iso-layer"></div><div class="iso-layer"></div><div class="iso-layer"></div></div></div> Digging through records...</div>`;
 
     let semDisplay = sortedSemesterKeys[currentSemesterIndex].replace("_", " ");
     
@@ -2433,17 +2521,104 @@ async function FetchDatesForSubject(subjectNameFromUI, semDisplay) {
 }
 
 // ==========================================
-// 🚨 NATIVE ANDROID HAPTIC FEEDBACK (VIBRATION)
+// 🚨 NATIVE WEB AUDIO ENGINE (CINEMATIC SFX)
+// ==========================================
+const UI_Audio = {
+    ctx: null,
+    init: function() {
+        if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+    },
+    playClick: function() {
+        if (localStorage.getItem("adhyora_sound_enabled") === "false") return;
+        try {
+            this.init();
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine'; // Premium soft tick
+            osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(200, this.ctx.currentTime + 0.05);
+            gain.gain.setValueAtTime(0.04, this.ctx.currentTime); // Very quiet
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            osc.start(); osc.stop(this.ctx.currentTime + 0.05);
+        } catch(e){}
+    },
+    playWhoosh: function() {
+        if (localStorage.getItem("adhyora_sound_enabled") === "false") return;
+        try {
+            this.init();
+            const duration = 0.65; // 🚨 EXACTLY matches your CSS liquidWaveSwipe duration!
+            
+            // 1. Generate Cinematic "Air/Liquid" White Noise Buffer
+            const bufferSize = this.ctx.sampleRate * duration;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1; // Fills memory with raw static
+            }
+            const noiseSource = this.ctx.createBufferSource();
+            noiseSource.buffer = buffer;
+            
+            // 2. The "Whoosh" Sweep Filter (Low to High to Low)
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.Q.value = 1.2; // Adds a slight resonant "wind" tunnel feel
+            
+            filter.frequency.setValueAtTime(150, this.ctx.currentTime); // Start low
+            filter.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + (duration / 2)); // Sweep up
+            filter.frequency.exponentialRampToValueAtTime(150, this.ctx.currentTime + duration); // Sweep down
+            
+            // 3. Volume Swell Envelope
+            const gainNode = this.ctx.createGain();
+            gainNode.gain.setValueAtTime(0, this.ctx.currentTime); // Start silent
+            gainNode.gain.linearRampToValueAtTime(0.12, this.ctx.currentTime + (duration / 2)); // Swell to max volume as wave crosses screen
+            gainNode.gain.linearRampToValueAtTime(0, this.ctx.currentTime + duration); // Fade to silent as wave finishes
+            
+            // Connect and Play
+            noiseSource.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(this.ctx.destination);
+            noiseSource.start();
+        } catch(e){}
+    }
+};
+
+// 🚨 SOUND TOGGLE LOGIC
+const btnToggleSounds = document.getElementById("btnToggleSounds");
+const soundToggleSwitch = document.getElementById("soundToggleSwitch");
+
+if (btnToggleSounds && soundToggleSwitch) {
+    // Load saved preference
+    if (localStorage.getItem("adhyora_sound_enabled") === "false") {
+        soundToggleSwitch.classList.remove("active");
+    }
+    
+    // Listen for clicks on the ENTIRE button, not just the tiny switch
+    btnToggleSounds.addEventListener("click", () => {
+        const isActive = soundToggleSwitch.classList.toggle("active");
+        localStorage.setItem("adhyora_sound_enabled", isActive ? "true" : "false");
+        
+        // Wake up the audio engine & play test sound
+        UI_Audio.init();
+        if (isActive) UI_Audio.playClick(); 
+    });
+}
+
+// ==========================================
+// 🚨 NATIVE ANDROID HAPTIC FEEDBACK & CLICK SOUNDS
 // ==========================================
 document.addEventListener('pointerdown', (e) => {
-    // Check if the user touched a button, or a card that acts like a button
-    const target = e.target.closest('button, .icon-btn, .profile-card, .day-btn, .period-btn, .color-swatch, .ledger-row, [onclick]');
+    // 🚨 FIX: Added .water-progress to the list of recognized clickable targets!
+    const target = e.target.closest('button, .icon-btn, .profile-card, .day-btn, .period-btn, .color-swatch, .ledger-row, .water-progress, [onclick]');
     
     if (target) {
-        // Fire a premium, tiny 15-millisecond vibration (Android only)
+        // 1. Fire a premium, tiny 15-millisecond vibration (Android only)
         if (navigator.vibrate) {
-            // Use 15ms for a subtle "tick" feel, rather than a buzzing phone call feel
             navigator.vibrate(15); 
         }
+        
+        // 2. Fire the native click sound (Works on all devices: Android, iOS, PC!)
+        UI_Audio.playClick(); 
     }
 });
