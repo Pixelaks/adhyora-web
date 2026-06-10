@@ -1990,6 +1990,9 @@ if (navMainContent) {
 
 // 4. Handle Hardware / Browser Back Button
 window.addEventListener('popstate', (e) => {
+    // 🚨 ADD THIS: Immediate haptic feedback on back action
+    if (navigator.vibrate) navigator.vibrate(15);
+    
     if (isProgrammaticBack) {
         isProgrammaticBack = false;
         return;
