@@ -955,17 +955,16 @@ const btnNavMsg = document.getElementById("btnNavMsg");
 const btnNavTimetable = document.getElementById("btnNavTimetable");
 const btnNavDaily = document.getElementById("btnNavDaily");
 
-function switchView(activeBtn, viewToShow, pushToHistory = true) {
+function switchView(activeBtn, viewToShow) {
     [btnNavMain, btnNavAssign, btnNavNotif, btnNavMsg, btnNavTimetable, btnNavDaily, document.getElementById("btnNavFees")].forEach(btn => btn.classList.remove("active"));
     
     [el.mainView, el.assignView, el.actualNotifView, el.msgView, el.ttView, el.dailyView, el.feesView].forEach(view => view.classList.add("hidden-view"));
     
     activeBtn.classList.add("active");
     viewToShow.classList.remove("hidden-view");
-
-    if (pushToHistory) {
-        window.history.pushState({ panelId: viewToShow.id }, "", "");
-    }
+    
+    // 🚨 REMOVED: history.pushState is completely gone! 
+    // The v3 Observer Engine will handle it cleanly below.
 }
 
 btnNavMain.addEventListener("click", () => switchView(btnNavMain, el.mainView));
@@ -1357,73 +1356,135 @@ document.getElementById("btnSignOut").addEventListener("click", handleSignOut);
 document.getElementById("btnBlockSignOut").addEventListener("click", handleSignOut);
 document.getElementById("btnContact").addEventListener("click", () => window.open(`mailto:pixelaks.technologies@gmail.com`, '_blank'));
 
-// --- NATIVE BACK BUTTON TRAP (MODALS, HISTORY & EXIT LOGIC) ---
-window.history.replaceState({ panelId: "base_trap" }, "", "");
-window.history.pushState({ panelId: "mainDashboardView" }, "", "");
+// ==========================================
+// 🚀 SMART BACK BUTTON NAVIGATION ENGINE v3 (Double-Tap Exit)
+// ==========================================
+let navActiveModals = [];
+let isProgrammaticBack = false;
+let lastBackPressTime = 0;
 
-let isReadyToExit = false;
-let backPressTimer = null;
+// 1. Initialize Base State
+window.history.replaceState({ layer: 'base' }, '');
+window.history.pushState({ layer: 'home' }, '');
 
-window.addEventListener("popstate", (e) => {
-    
-    // 🚨 1. MODAL/POPUP INTERCEPTOR (Close popups first!)
-    let modalClosed = false;
+// 2. Track Standard Modals & Sidebar Overlays
+const modalObserver = new MutationObserver((mutations) => {
+    mutations.forEach(mutation => {
+        if (mutation.attributeName === 'class') {
+            const elem = mutation.target;
+            const isActive = elem.classList.contains('active');
+            const index = navActiveModals.indexOf(elem);
 
-    if (el.sidebar && el.sidebar.classList.contains("open")) { el.sidebar.classList.remove("open"); el.overlay.classList.remove("active"); modalClosed = true; }
-    else if (el.profileModal && el.profileModal.classList.contains("active")) { el.profileModal.classList.remove("active"); modalClosed = true; }
-    else if (el.sessionsModal && el.sessionsModal.classList.contains("active")) { el.sessionsModal.classList.remove("active"); modalClosed = true; }
-    else if (el.predictorModal && el.predictorModal.classList.contains("active")) { el.predictorModal.classList.remove("active"); modalClosed = true; }
-    else if (el.detailModal && el.detailModal.classList.contains("active")) { el.detailModal.classList.remove("active"); modalClosed = true; }
-    else if (typeof themesModal !== 'undefined' && themesModal.classList.contains("active")) { themesModal.classList.remove("active"); modalClosed = true; }
-    else if (el.calModal && el.calModal.classList.contains("active")) { el.calModal.classList.remove("active"); modalClosed = true; }
-    else if (typeof ledgerOverlay !== 'undefined' && (ledgerOverlay.style.display === 'flex' || ledgerOverlay.style.opacity === '1')) { window.CloseAttendanceLedger(); modalClosed = true; }
-
-    // If we closed a modal, we push the state back so the user doesn't actually navigate away
-    if (modalClosed) {
-        let currentPanel = (e.state && e.state.panelId) ? e.state.panelId : "mainDashboardView";
-        if (currentPanel === "base_trap") currentPanel = "mainDashboardView"; 
-        window.history.pushState({ panelId: currentPanel }, "", "");
-        return; 
-    }
-
-    // 🚨 2. STANDARD NAVIGATION & DOUBLE-TAP TO EXIT LOGIC
-    if (e.state && e.state.panelId) {
-        let pid = e.state.panelId;
-
-        if (pid === "base_trap") {
-            if (isReadyToExit) {
-                // Execute Native App Exit (Cordova/Capacitor/WebView)
-                if (window.navigator && window.navigator.app && window.navigator.app.exitApp) {
-                    window.navigator.app.exitApp(); 
-                } 
-                // For PWAs, letting it pass without pushing state automatically closes the app.
-            } else {
-                showToast("Press back again to exit");
-                isReadyToExit = true;
-                // Trap them again to wait for the second tap
-                window.history.pushState({ panelId: "mainDashboardView" }, "", ""); 
-                
-                clearTimeout(backPressTimer);
-                backPressTimer = setTimeout(() => { isReadyToExit = false; }, 2000);
+            if (isActive && index === -1) {
+                navActiveModals.push(elem);
+                window.history.pushState({ layer: 'modal', id: elem.id }, '');
+            } 
+            else if (!isActive && index !== -1) {
+                navActiveModals.splice(index, 1);
+                if (window.history.state && window.history.state.id === elem.id) {
+                    isProgrammaticBack = true;
+                    window.history.back();
+                }
             }
         }
-        else if (pid === "mainDashboardView") { switchView(btnNavMain, el.mainView, false); }
-        else if (pid === "assignmentsView") { switchView(btnNavAssign, el.assignView, false); loadAssignments(); }
-        else if (pid === "actualNotifView") { switchView(btnNavNotif, el.actualNotifView, false); loadActualNotifications(); }
-        else if (pid === "messagesView") { switchView(btnNavMsg, el.msgView, false); loadMessages(); }
-        else if (pid === "dailyAttendanceView") { switchView(btnNavDaily, el.dailyView, false); loadDailyAttendance(); }
-        else if (pid === "timetableView") { 
-            switchView(btnNavTimetable, el.ttView, false); 
-            let todayName = new Date().toLocaleString('en-us', {weekday: 'long'});
-            let validDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-            if (!validDays.includes(todayName)) todayName = "Monday";
-            document.querySelectorAll('.day-btn').forEach(btn => btn.classList.toggle("active", btn.dataset.day === todayName));
-            loadTimetableForDay(todayName);
+    });
+});
+
+// Observe all standard modal overlays and the sidebar overlay (Ignoring the Paywall)
+document.querySelectorAll('.modal-overlay, .sidebar-overlay').forEach(overlay => {
+    if(overlay.id !== "subscriptionBlockPanel") {
+        modalObserver.observe(overlay, { attributes: true, attributeFilter: ['class'] });
+    }
+});
+
+// 3. Track the custom Attendance Ledger (Uses inline styles instead of classes)
+const ledgerObserver = new MutationObserver((mutations) => {
+    mutations.forEach(mutation => {
+        if (mutation.attributeName === 'style') {
+            const elem = mutation.target;
+            const isActive = elem.style.display === 'flex' || elem.style.opacity === '1';
+            const index = navActiveModals.indexOf(elem);
+
+            if (isActive && index === -1) {
+                navActiveModals.push(elem);
+                window.history.pushState({ layer: 'modal', id: elem.id }, '');
+            } 
+            else if (!isActive && index !== -1) {
+                navActiveModals.splice(index, 1);
+                if (window.history.state && window.history.state.id === elem.id) {
+                    isProgrammaticBack = true;
+                    window.history.back();
+                }
+            }
         }
-        else if (pid === "feesView") { 
-            switchView(document.getElementById("btnNavFees"), el.feesView, false);
-            if (typeof FEES_Init === "function") FEES_Init();
+    });
+});
+const ledgerOl = document.getElementById("attendanceLedgerOverlay");
+if (ledgerOl) ledgerObserver.observe(ledgerOl, { attributes: true, attributeFilter: ['style'] });
+
+// 4. Track View Navigation (Main Dashboard vs Sub-pages)
+const viewObserver = new MutationObserver((mutations) => {
+    mutations.forEach(mutation => {
+        if (mutation.attributeName === 'class') {
+            const elem = mutation.target;
+            const isHidden = elem.classList.contains('hidden-view');
+            
+            if (isHidden && (!window.history.state || window.history.state.layer !== 'view')) {
+                window.history.pushState({ layer: 'view' }, '');
+            } 
+            else if (!isHidden && window.history.state && window.history.state.layer === 'view') {
+                isProgrammaticBack = true;
+                window.history.back();
+            }
         }
+    });
+});
+if (el.mainView) viewObserver.observe(el.mainView, { attributes: true, attributeFilter: ['class'] });
+
+
+// 5. Execute Hardware / Browser Back Button Logic
+window.addEventListener('popstate', (e) => {
+    if (isProgrammaticBack) {
+        isProgrammaticBack = false;
+        return;
+    }
+
+    // ACTION A: Close top-most modal/popup securely
+    if (navActiveModals.length > 0) {
+        const topModal = navActiveModals[navActiveModals.length - 1]; 
+        
+        if (topModal.id === "attendanceLedgerOverlay" && typeof window.CloseAttendanceLedger === 'function') {
+            window.CloseAttendanceLedger();
+        } else if (topModal.id === "sidebarOverlay") {
+            topModal.classList.remove('active');
+            if (el.sidebar) el.sidebar.classList.remove('open');
+        } else {
+            topModal.classList.remove('active');
+        }
+        return;
+    }
+
+    // ACTION B: Return to Main Dashboard if inside a sub-page
+    if (el.mainView && el.mainView.classList.contains("hidden-view")) {
+        const btnNavMain = document.getElementById("btnNavMain");
+        if (btnNavMain) btnNavMain.click();
+        return;
+    }
+
+    // ACTION C: Double-Tap to Exit App cleanly
+    const currentTime = Date.now();
+    if (currentTime - lastBackPressTime < 2000) {
+        const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+        if (isPWA) {
+            window.history.back(); // Exits PWA cleanly without triggering Sign Out
+        } else {
+            if (typeof showToast === "function") showToast("Please close the browser tab to exit.");
+            window.history.pushState({ layer: 'home' }, '');
+        }
+    } else {
+        lastBackPressTime = currentTime;
+        if (typeof showToast === "function") showToast("Press back again to exit");
+        window.history.pushState({ layer: 'home' }, '');
     }
 });
 
