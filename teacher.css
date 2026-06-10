@@ -2,6 +2,70 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
 
 /* =========================================
+   🚨 MOBILE NATIVE UX FIXES (Bounce & Touch)
+   ========================================= */
+* {
+    /* Removes the ugly default blue tap box on Android Chrome */
+    -webkit-tap-highlight-color: transparent;
+    /* Forces the browser to register taps instantly */
+    touch-action: manipulation;
+}
+
+/* Universal Native "Bounce" Effect on Touch */
+button:active, 
+select:active,
+input[type="checkbox"]:active,
+.toggle-switch:active,
+.nav-icon-btn:active, 
+.menu-btn:active, 
+.data-card:active, 
+.sub-card:active, 
+.ss-stu-card:active, 
+.evt-card:active, 
+.asn-card:active, 
+.attd-row:active,
+.settings-btn:active,
+.ledger-row:active,
+.attd-mark-row:active {
+    transform: scale(0.96) !important; /* Slightly gentler squish for wide rows */
+    transition: transform 0.05s ease !important; 
+}
+
+button, 
+select,
+input[type="checkbox"],
+.toggle-switch,
+.nav-icon-btn, 
+.menu-btn, 
+.data-card, 
+.sub-card, 
+.ss-stu-card, 
+.evt-card, 
+.asn-card, 
+.attd-row,
+.settings-btn,
+.ledger-row,
+.attd-mark-row {
+    transition: all 0.2s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+/* 🚨 PREMIUM TEXT SHIMMER ANIMATION */
+@keyframes textShimmer {
+    0% { background-position: 200% center; }
+    100% { background-position: -200% center; }
+}
+
+.logo-text, .loader-title {
+    /* 🚨 SUBTLE SHIMMER EFFECT (Teacher Red) */
+    background: linear-gradient(110deg, var(--brand-red, #ef4444) 40%, rgba(255,255,255,0.3) 50%, var(--brand-red, #ef4444) 60%);
+    background-size: 200% auto;
+    color: transparent !important;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: textShimmer 4s linear infinite;
+}
+
+/* =========================================
    🚀 DOM VIRTUALIZATION & RED COLOR PALETTE
    ========================================= */
 /* BEFORE: .data-card, .sub-card, .ss-stu-card, .evt-card, .asn-card, .attd-row { */
@@ -1129,4 +1193,82 @@ body.dark-mode .icon-nav-container::before {
     .logo-text {
         font-size: 28px !important; 
     }
+}
+
+/* =========================================
+   🚨 NATIVE VAULT LOCK SCREEN UX (GLASSMORPHISM)
+   ========================================= */
+#appLockScreen {
+    background: #0e1522 !important; /* Pitch black/navy base */
+    overflow: hidden; /* Prevents the orb from stretching the screen */
+}
+
+/* 1. The floating, glowing red orb behind the glass */
+#appLockScreen::before {
+    content: '';
+    position: absolute;
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, var(--brand-red, #ef4444) 0%, transparent 70%);
+    border-radius: 50%;
+    top: 30%;
+    left: 50%;
+    opacity: 0.35;
+    filter: blur(50px); /* Soften the orb edges */
+    z-index: 0; /* Keeps it behind the glass box */
+    pointer-events: none; /* Prevents it from blocking taps */
+    
+    /* 🚨 ZERO-LAG GPU ACCELERATION */
+    transform: translate3d(-50%, -50%, 0);
+    will-change: transform, opacity;
+    animation: floatOrb 8s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+}
+
+/* GPU-friendly movement loop */
+@keyframes floatOrb {
+    0% { transform: translate3d(-80%, -30%, 0) scale(1); opacity: 0.3; }
+    50% { transform: translate3d(-20%, -60%, 0) scale(1.3); opacity: 0.5; }
+    100% { transform: translate3d(-50%, -10%, 0) scale(0.9); opacity: 0.3; }
+}
+
+/* 2. Ghost PIN Dot Styling */
+.pin-display-wrapper {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin: 25px 0 35px 0;
+    cursor: pointer;
+}
+
+.pin-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.2); /* Frosty white border */
+    background: rgba(0, 0, 0, 0.2);
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.pin-dot.filled {
+    background: var(--brand-red);
+    border-color: var(--brand-red);
+    transform: scale(1.3);
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+}
+
+.shake-error {
+    animation: lockShake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+@keyframes lockShake {
+    10%, 90% { transform: translate3d(-2px, 0, 0); }
+    20%, 80% { transform: translate3d(4px, 0, 0); }
+    30%, 50%, 70% { transform: translate3d(-8px, 0, 0); }
+    40%, 60% { transform: translate3d(8px, 0, 0); }
+}
+
+#lockPinInput {
+    position: absolute !important;
+    opacity: 0 !important;
+    left: -9999px !important; 
 }
