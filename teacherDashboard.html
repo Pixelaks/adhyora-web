@@ -42,19 +42,28 @@
     </noscript>
 
     <div id="appLockScreen" style="position:fixed; inset:0; background:#0f172a; z-index:25000; display:none; flex-direction:column; align-items:center; justify-content:center;">
-        <div style="background:#1e293b; padding:40px; border-radius:20px; border:1px solid #334155; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,0.5); width:90%; max-width:400px;">
+        
+        <div style="background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); padding:40px; border-radius:24px; border:1px solid rgba(255,255,255,0.05); border-top:1px solid rgba(255,255,255,0.15); border-left:1px solid rgba(255,255,255,0.1); text-align:center; box-shadow:0 25px 50px rgba(0,0,0,0.5); width:90%; max-width:400px; position:relative; z-index:10;">
+            
             <i class="fas fa-lock" style="color:var(--brand-red); font-size:40px; margin-bottom:20px;"></i>
             <h2 id="lockTitle" style="color:white; font-family:'Yatra One', cursive; margin-bottom:10px; font-size:24px; letter-spacing:1px;">ENTER SECURE PIN</h2>
-            <p id="lockStatus" style="color:#94a3b8; font-size:13px; margin-bottom:25px; line-height:1.5;">Please enter your 4-digit PIN.</p>
+            <p id="lockStatus" style="color:#94a3b8; font-size:13px; margin-bottom:20px; line-height:1.5;">Please enter your 4-digit PIN.</p>
             
-            <input type="password" id="lockPinInput" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" style="text-align:center; font-size:28px; letter-spacing:15px; padding:15px; width:200px; border-radius:12px; border:2px solid #475569; background:#0f172a; color:white; outline:none; margin-bottom:25px; transition:0.3s;" oninput="this.value=this.value.replace(/[^0-9]/g,'');">
+            <div class="pin-display-wrapper" id="pinDisplayWrapper" onclick="document.getElementById('lockPinInput').focus()">
+                <div class="pin-dot"></div>
+                <div class="pin-dot"></div>
+                <div class="pin-dot"></div>
+                <div class="pin-dot"></div>
+            </div>
+
+            <input type="password" id="lockPinInput" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4">
             
-            <button id="btnLockBiometrics" style="width:100%; background:transparent; border:2px solid var(--brand-red); color:var(--brand-red); font-weight:bold; padding:15px; border-radius:12px; cursor:pointer; font-size:16px; margin-bottom:15px; display:none; transition:0.3s; box-shadow: 0 0 15px rgba(220,38,38,0.1);">
+            <button id="btnLockBiometrics" style="width:100%; background:rgba(239, 68, 68, 0.1); border:1px solid var(--brand-red); color:var(--brand-red); font-weight:bold; padding:15px; border-radius:12px; cursor:pointer; font-size:15px; margin-bottom:15px; display:none; transition:0.3s; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);">
                 <i class="fas fa-fingerprint" style="margin-right:8px; font-size:20px; vertical-align:middle;"></i> Use Biometrics
             </button>
             
-            <button id="btnLockSubmit" style="width:100%; background:var(--brand-red); color:white; font-weight:bold; padding:15px; border-radius:12px; border:none; cursor:pointer; font-size:16px; transition:0.2s; box-shadow: 0 4px 10px rgba(220,38,38,0.2);">Unlock Dashboard</button>
-            <button id="btnLockForgot" style="background:transparent; color:#94a3b8; border:none; margin-top:20px; font-size:13px; cursor:pointer; text-decoration:underline; display:none; transition:0.2s;">Forgot PIN?</button>
+            <button id="btnLockSubmit" style="display: none;">Unlock Dashboard</button>
+            <button id="btnLockForgot" style="background:transparent; color:#94a3b8; border:none; margin-top:10px; font-size:13px; cursor:pointer; text-decoration:underline; display:none; transition:0.2s;">Forgot PIN?</button>
         </div>
     </div>
 
@@ -178,7 +187,7 @@
                         <div style="flex: 1; min-width: 300px;">
                             <div style="background: var(--bg-grid-color); color: var(--brand-red); padding: 12px 15px; border-radius: 10px; font-weight: bold; margin-bottom: 15px;">Timetable Assigned</div>
                             <div style="background: white; border: 1px solid var(--border-color); border-radius: 15px; padding: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); overflow-x: auto;">
-                                <div id="mdTimetableGrid" style="display: grid; grid-template-columns: 50px repeat(6, 1fr); gap: 8px; text-align: center; font-size: 13px; min-width: 350px;"></div>
+                                <div id="mdTimetableGrid" style="display: grid; gap: 8px; text-align: center; font-size: 13px; min-width: 350px;"></div>
                             </div>
                         </div>
                     </div>
@@ -213,10 +222,7 @@
 
                         <div style="padding: 15px 25px; display: flex; gap: 10px; flex-wrap: wrap; background: rgba(0,0,0,0.02);">
                             <select id="attSemDropdown" class="filter-select"></select>
-                            <select id="attPeriodDropdown" class="filter-select">
-                                <option value="0">Period 1</option><option value="1">Period 2</option><option value="2">Period 3</option>
-                                <option value="3">Period 4</option><option value="4">Period 5</option><option value="5">Period 6</option>
-                            </select>
+                            <select id="attPeriodDropdown" class="filter-select"></select>
                             <select id="attSubjDropdown" class="filter-select" style="flex: 2;"><option>Loading...</option></select>
                         </div>
 
@@ -533,10 +539,7 @@
                     </div>
                 
                     <div style="padding: 15px 25px; background: transparent; display: flex; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;">
-                        <select id="evtPeriodDrop" class="filter-select" style="flex: 1; max-width: 150px;">
-                            <option value="1">Period 1</option><option value="2">Period 2</option><option value="3">Period 3</option>
-                            <option value="4">Period 4</option><option value="5">Period 5</option><option value="6">Period 6</option>
-                        </select>
+                        <select id="evtPeriodDrop" class="filter-select" style="flex: 1; max-width: 150px;"></select>
                         <input type="text" id="evtNameInput" placeholder="Enter Event Name (e.g., NCC Camp, NSS Duty)" style="flex: 2; padding: 12px 15px; border-radius: 12px; border: 1px solid var(--border-color); outline: none; font-family: 'Poppins'; font-weight: 600; color: var(--text-dark); background: white;">
                     </div>
                 
@@ -643,6 +646,12 @@
                     <span><i class="fas fa-bell"></i> Push Notifications</span>
                     <div class="toggle-switch" id="notifToggleSwitch"></div>
                 </button>
+
+                <button class="settings-btn" id="btnToggleSounds" style="display: flex; justify-content: space-between; align-items: center; padding-right: 15px;">
+                    <span><i class="fas fa-volume-up"></i> UI Sounds</span>
+                    <div class="toggle-switch active" id="soundToggleSwitch"></div>
+                </button>
+
                 <button class="settings-btn" id="btnDevices"><i class="fas fa-laptop-house"></i> Devices</button>
                 <div class="settings-btn" id="btnToggleBiometrics" style="display:flex; justify-content:space-between; align-items:center;">
                     <div style="display:flex; gap:10px; align-items:center;"><i class="fas fa-fingerprint"></i> App Lock</div>
@@ -899,6 +908,7 @@
         </div>
     </div>
 
+    <script src="adhyora-utils.js"></script>
     <script type="module" src="version-check.js"></script>
 </body>
 </html>
