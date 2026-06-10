@@ -27,6 +27,30 @@
     <link rel="apple-touch-icon" href="../AdhyoraSplashLogo5.png">
 </head>
 <body>
+    <script>
+        (function() {
+            var savedColor = localStorage.getItem("adhyora_theme_color") || "blue";
+            var savedMode = localStorage.getItem("adhyora_theme_mode") || "light";
+            var palettes = {
+                blue:   { main: '#3b82f6', light: '#e0f2fe', nav: '#bfdbfe' },
+                yellow: { main: '#eab308', light: '#fef9c3', nav: '#fde047' }, 
+                pink:   { main: '#ec4899', light: '#fce7f3', nav: '#fbcfe8' },
+                purple: { main: '#8b5cf6', light: '#ede9fe', nav: '#ddd6fe' },
+                orange: { main: '#f97316', light: '#ffedd5', nav: '#fed7aa' }
+            };
+            var p = palettes[savedColor] || palettes.blue;
+            
+            // Set colors instantly
+            document.documentElement.style.setProperty('--theme-main', p.main);
+            document.documentElement.style.setProperty('--theme-light', p.light);
+            document.documentElement.style.setProperty('--theme-nav', p.nav);
+            
+            // Set Dark Mode instantly
+            if (savedMode === "dark") {
+                document.body.classList.add("dark-mode");
+            }
+        })();
+    </script>
 
     <div id="initialAppLoader" class="student-loader">
         <div class="student-loader-content">
@@ -35,8 +59,12 @@
             <div class="loader-glow"></div>
             
             <div class="loader-spinner-area">
-                <div class="loader-spinner"></div>
-                <p class="loader-status-text">LOADING ADHYORA...</p>
+                <div class="isometric-loader">
+                    <div class="iso-layer"></div>
+                    <div class="iso-layer"></div>
+                    <div class="iso-layer"></div>
+                </div>
+                <p class="loader-status-text" style="margin-top: 20px;">LOADING ADHYORA...</p>
             </div>
         </div>
     </div>
@@ -56,6 +84,11 @@
             <button class="sidebar-btn" id="btnToggleNotifications" style="display: flex; justify-content: space-between; align-items: center; padding-right: 15px;">
                 <span><i class="fas fa-bell"></i> Notifications</span>
                 <div class="toggle-switch" id="notifToggleSwitch"></div>
+            </button>
+
+            <button class="sidebar-btn" id="btnToggleSounds" style="display: flex; justify-content: space-between; align-items: center; padding-right: 15px;">
+                <span><i class="fas fa-volume-up"></i> UI Sounds</span>
+                <div class="toggle-switch active" id="soundToggleSwitch"></div>
             </button>
             <button class="sidebar-btn" id="btnThemes"><i class="fas fa-palette"></i> Themes</button>
             <button class="sidebar-btn" id="btnDevices"><i class="fas fa-laptop"></i> Devices</button>
@@ -363,9 +396,13 @@
     <div id="toast" class="toast"></div>
 
     <!-- SECURE PAYMENT LOADER OVERLAY -->
-    <div id="paymentLoaderOverlay" class="payment-loader-hidden">
-        <div class="payment-loader-spinner"></div>
-        <div id="paymentLoaderText" class="payment-loader-text">Processing...</div>
+    <div id="paymentLoaderOverlay" class="payment-loader-hidden" style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+        <div class="isometric-loader" style="margin-bottom: 25px;">
+            <div class="iso-layer"></div>
+            <div class="iso-layer"></div>
+            <div class="iso-layer"></div>
+        </div>
+        <div id="paymentLoaderText" class="payment-loader-text" style="color: white; font-weight: bold; letter-spacing: 1px;">Processing...</div>
     </div>
 
     <script>
