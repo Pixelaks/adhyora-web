@@ -41,26 +41,39 @@
             <div class="loader-glow"></div>
             
             <div class="loader-spinner-area">
-                <div class="loader-spinner"></div>
-                <p class="loader-status-text">LOADING ADHYORA...</p>
+                <div class="isometric-loader">
+                    <div class="iso-layer"></div>
+                    <div class="iso-layer"></div>
+                    <div class="iso-layer"></div>
+                </div>
+                <p class="loader-status-text" style="margin-top: 20px;">LOADING ADHYORA...</p>
             </div>
         </div>
     </div>
 
-    <div id="appLockScreen" style="position:fixed; inset:0; background:#0f172a; z-index:25000; display:none; flex-direction:column; align-items:center; justify-content:center;">
-        <div style="background:#1e293b; padding:40px; border-radius:20px; border:1px solid #334155; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,0.5); width:90%; max-width:400px;">
+    <div id="appLockScreen" style="position:fixed; inset:0; background:#0e1522; z-index:25000; display:none; flex-direction:column; align-items:center; justify-content:center;">
+        
+        <div style="background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); padding:40px; border-radius:24px; border:1px solid rgba(255,255,255,0.08); border-top:1px solid rgba(255,255,255,0.2); border-left:1px solid rgba(255,255,255,0.15); text-align:center; box-shadow:0 25px 50px rgba(0,0,0,0.5); width:90%; max-width:400px; position:relative; z-index:10;">
+            
             <i class="fas fa-lock" style="color:var(--brand-green); font-size:40px; margin-bottom:20px;"></i>
             <h2 id="lockTitle" style="color:white; font-family:'Rajdhani', sans-serif; margin-bottom:10px; font-size:24px; letter-spacing:1px;">ENTER SECURE PIN</h2>
-            <p id="lockStatus" style="color:#94a3b8; font-size:13px; margin-bottom:25px; line-height:1.5;">Please enter your 4-digit PIN.</p>
+            <p id="lockStatus" style="color:#94a3b8; font-size:13px; margin-bottom:20px; line-height:1.5;">Please enter your 4-digit PIN.</p>
             
-            <input type="password" id="lockPinInput" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" style="text-align:center; font-size:28px; letter-spacing:15px; padding:15px; width:200px; border-radius:12px; border:2px solid #475569; background:#0f172a; color:white; outline:none; margin-bottom:25px; transition:0.3s;" oninput="this.value=this.value.replace(/[^0-9]/g,'');">
+            <div class="pin-display-wrapper" id="pinDisplayWrapper" onclick="document.getElementById('lockPinInput').focus()">
+                <div class="pin-dot"></div>
+                <div class="pin-dot"></div>
+                <div class="pin-dot"></div>
+                <div class="pin-dot"></div>
+            </div>
+
+            <input type="password" id="lockPinInput" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4">
             
-            <button id="btnLockBiometrics" style="width:100%; background:transparent; border:2px solid var(--brand-green); color:var(--brand-green); font-weight:bold; padding:15px; border-radius:12px; cursor:pointer; font-size:16px; margin-bottom:15px; display:none; transition:0.3s; box-shadow: 0 0 15px rgba(74,222,128,0.1);">
+            <button id="btnLockBiometrics" style="width:100%; background:rgba(74, 222, 128, 0.1); border:1px solid var(--brand-green); color:var(--brand-green); font-weight:bold; padding:15px; border-radius:12px; cursor:pointer; font-size:15px; margin-bottom:15px; display:none; transition:0.3s; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);">
                 <i class="fas fa-fingerprint" style="margin-right:8px; font-size:20px; vertical-align:middle;"></i> Use Biometrics
             </button>
             
-            <button id="btnLockSubmit" style="width:100%; background:var(--brand-green); color:#000; font-weight:bold; padding:15px; border-radius:12px; border:none; cursor:pointer; font-size:16px; transition:0.2s;">Unlock Dashboard</button>
-            <button id="btnLockForgot" style="background:transparent; color:#94a3b8; border:none; margin-top:20px; font-size:13px; cursor:pointer; text-decoration:underline; display:none; transition:0.2s;">Forgot PIN?</button>
+            <button id="btnLockSubmit" style="display: none;">Unlock Dashboard</button>
+            <button id="btnLockForgot" style="background:transparent; color:#94a3b8; border:none; margin-top:10px; font-size:13px; cursor:pointer; text-decoration:underline; display:none; transition:0.2s;">Forgot PIN?</button>
         </div>
     </div>
 
@@ -489,6 +502,14 @@
                     </div>
 
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; flex: 1; align-items: start;">
+                        
+                        <div class="data-upload-card" style="border-color: #8b5cf6; background: #f5f3ff;">
+                            <div class="up-icon" style="color: #8b5cf6; background: #ede9fe;"><i class="fas fa-clock"></i></div>
+                            <h4 style="color: #5b21b6;">Timetable Config</h4>
+                            <p>Set the default daily period counts, start times, and lunch breaks.</p>
+                            <button onclick="document.getElementById('timetableConfigOverlay').style.display='flex'" style="background: #8b5cf6; box-shadow: 0 4px 10px rgb(139 92 246 / 40%);">Setup Timetable</button>
+                        </div>
+
                         <!-- 💳 NEW DYNAMIC FEE CONFIGURATION CARD -->
                         <div class="data-upload-card" style="border-color: #fca5a5; background: #fff5f5;">
                             <div class="up-icon" style="color: #ef4444; background: #fee2e2;"><i class="fas fa-credit-card"></i></div>
@@ -692,9 +713,8 @@
                             
                             <div style="min-width: 600px; width: 100%; display: flex; flex-direction: column;">
                                 
-                                <div class="attd-row" style="position: sticky; top: 0; z-index: 10; background: var(--bg-grid-color) !important; color: var(--text-green); border-bottom: 2px solid var(--border-color);">
+                                <div id="attdGodModeHeader" class="attd-row" style="position: sticky; top: 0; z-index: 10; background: var(--bg-grid-color) !important; color: var(--text-green); border-bottom: 2px solid var(--border-color);">
                                     <div style="text-align: left;">TEACHER</div>
-                                    <div>P1</div><div>P2</div><div>P3</div><div>P4</div><div>P5</div><div>P6</div>
                                 </div>
                                 
                                 <div id="attdListContainer" style="display: flex; flex-direction: column; padding-bottom: 20px;">
@@ -728,6 +748,12 @@
                     <span><i class="fas fa-bell"></i> Push Notifications</span>
                     <div class="toggle-switch" id="notifToggleSwitch"></div>
                 </button>
+
+                <button class="settings-btn" id="btnToggleSounds" style="display: flex; justify-content: space-between; align-items: center; padding-right: 15px;">
+                    <span><i class="fas fa-volume-up"></i> UI Sounds</span>
+                    <div class="toggle-switch active" id="soundToggleSwitch"></div>
+                </button>
+
                 <button class="settings-btn" id="btnThemes"><i class="fas fa-palette"></i> Themes</button>
                 <button class="settings-btn" id="btnOpenBilling"><i class="fas fa-file-invoice-dollar"></i> Billing & Subscriptions</button>
                 <button class="settings-btn" id="btnDevices"><i class="fas fa-laptop-house"></i> Devices</button>
@@ -1008,6 +1034,46 @@
         </div>
     </div>
 
+    <div id="timetableConfigOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div style="background: var(--bg-surface, #ffffff); width: 90%; max-width: 500px; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.2); overflow: hidden; position: relative; border: 1px solid var(--border-color); animation: fadeInScale 0.3s ease-out;">
+            
+            <button onclick="document.getElementById('timetableConfigOverlay').style.display='none'" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #ef4444; font-size: 20px; cursor: pointer; z-index: 10;"><i class="fas fa-times"></i></button>
+
+            <div style="padding: 25px; background: var(--bg-base); border-bottom: 1px solid var(--border-color);">
+                <h3 style="margin: 0; color: #8b5cf6; font-family: 'Yatra One', cursive; font-size: 22px;"><i class="fas fa-clock"></i> Timetable Rules</h3>
+                <p style="margin: 5px 0 0 0; font-size: 13px; color: var(--text-muted);">Define the daily structure for all teachers and students.</p>
+            </div>
+
+            <div style="padding: 25px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div style="grid-column: span 2;">
+                    <label style="font-size: 12px; font-weight: 600; color: var(--text-dark);">Total Periods in a Day</label>
+                    <input type="number" id="ttPeriodCount" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-base); color: var(--text-dark); margin-top: 5px;" placeholder="e.g., 6">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: 600; color: var(--text-dark);">College Start Time</label>
+                    <input type="time" id="ttStartTime" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-base); color: var(--text-dark); margin-top: 5px;">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: 600; color: var(--text-dark);">Period Duration (Mins)</label>
+                    <input type="number" id="ttPeriodDuration" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-base); color: var(--text-dark); margin-top: 5px;" placeholder="e.g., 60">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: 600; color: var(--text-dark);">Lunch Break happens AFTER Period:</label>
+                    <input type="number" id="ttLunchAfter" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-base); color: var(--text-dark); margin-top: 5px;" placeholder="e.g., 3">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: 600; color: var(--text-dark);">Lunch Duration (Mins)</label>
+                    <input type="number" id="ttLunchDuration" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-base); color: var(--text-dark); margin-top: 5px;" placeholder="e.g., 45">
+                </div>
+            </div>
+
+            <div style="padding: 20px 25px; border-top: 1px solid var(--border-color); background: var(--bg-base); text-align: right;">
+                <button onclick="document.getElementById('timetableConfigOverlay').style.display='none'" style="padding: 10px 20px; border-radius: 8px; border: none; background: #e2e8f0; color: #475569; font-weight: bold; margin-right: 10px; cursor: pointer;">Cancel</button>
+                <button onclick="saveTimetableConfig(this)" style="padding: 10px 20px; border-radius: 8px; border: none; background: #8b5cf6; color: white; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgb(139 92 246 / 40%);">Save Configuration</button>
+            </div>
+        </div>
+    </div>
+
 
     <script>
         if ('serviceWorker' in navigator) {
@@ -1021,6 +1087,7 @@
     
 
     <!--<script type="module" src="principalApp.js"></script> -->
+    <script src="adhyora-utils.js"></script>
     <script type="module" src="version-check.js"></script>
 </body>
 </html>
