@@ -127,19 +127,23 @@ input[type="checkbox"],
 .teacher-loader {
     position: fixed;
     inset: 0;
-    background-color: #0b111e; /* Dark navy from your image */
-    
-    /* Subtle Grid Background Pattern */
+    background-color: #0b111e;
     background-image: 
         linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
     background-size: 40px 40px;
     background-position: center center;
-    
     z-index: 20000;
     display: flex;
     justify-content: center;
     align-items: center;
+    transition: opacity 0.6s ease-out, visibility 0.6s ease-out;
+}
+
+.teacher-loader.hidden {
+    opacity: 0;
+    pointer-events: none; /* 🚀 THE FIX: Instantly lets clicks pass through without waiting for visibility */
+    visibility: hidden;
 }
 
 .teacher-loader-content {
@@ -1271,4 +1275,60 @@ body.dark-mode .icon-nav-container::before {
     position: absolute !important;
     opacity: 0 !important;
     left: -9999px !important; 
+}
+
+/* =========================================
+   🚨 PREMIUM ISOMETRIC DOCUMENT STACK (TEACHER RED)
+   ========================================= */
+.isometric-loader {
+    position: relative;
+    width: 45px;
+    height: 45px;
+    margin: 0 auto 35px auto;
+    transform: rotateX(60deg) rotateZ(45deg);
+    transform-style: preserve-3d;
+}
+
+.iso-layer {
+    position: absolute;
+    inset: 0;
+    background: var(--brand-red);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    
+    /* 🚀 THE FIX: Forces the Graphics Card (GPU) to handle this element */
+    will-change: transform;
+    backface-visibility: hidden;
+    transform: translateZ(0); /* Hardware acceleration trigger */
+}
+
+.iso-layer:nth-child(1) {
+    transform: translateZ(0px);
+    opacity: 0.2;
+    animation: isoLayer1 1.5s infinite ease-in-out alternate;
+}
+.iso-layer:nth-child(2) {
+    transform: translateZ(15px);
+    opacity: 0.5;
+    animation: isoLayer2 1.5s infinite ease-in-out alternate;
+}
+.iso-layer:nth-child(3) {
+    transform: translateZ(30px);
+    opacity: 1;
+    box-shadow: -10px 10px 20px rgba(220, 38, 38, 0.2);
+    animation: isoLayer3 1.5s infinite ease-in-out alternate;
+}
+
+@keyframes isoLayer1 {
+    0% { transform: translateZ(0px); }
+    100% { transform: translateZ(-10px); }
+}
+@keyframes isoLayer2 {
+    0% { transform: translateZ(15px); }
+    100% { transform: translateZ(25px); }
+}
+@keyframes isoLayer3 {
+    0% { transform: translateZ(30px); }
+    /* 🚀 THE FIX: Removed the heavy color repaints. Now it only moves up and down. */
+    100% { transform: translateZ(65px); }
 }
