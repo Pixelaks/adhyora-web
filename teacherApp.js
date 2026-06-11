@@ -397,7 +397,14 @@ async function finalizeProfileUI(rawName, email, deptName) {
     if(deptEl) deptEl.innerText = deptName;
 
     let loader = document.getElementById("initialAppLoader");
-    if(loader) loader.style.display = "none";
+    if(loader && !loader.classList.contains("hidden")) {
+        setTimeout(() => {
+            // 🚀 THE FIX: Queues the fade-out perfectly with the browser's refresh rate
+            requestAnimationFrame(() => {
+                loader.classList.add("hidden");
+            });
+        }, 800); 
+    }
 
     // 🚨 FIX: Force the profile loop to ensure teacherDeptRaw is ready before proceeding
     if (!hasStartedInbox && teacherDeptRaw !== "") {
