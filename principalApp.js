@@ -96,6 +96,7 @@ let attendanceCalculationMode = "SIMPLE";
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxVL1MGATuPxN4cmAkWbd8GsY5YaoWBkyVTkjfDV-f4jJrWBnMvZ-gXdMZU5pnhHmlPHw/exec";
 let myRealName = "Principal"; 
 let currentCollegePlan = "base";
+window.collegeTimeConfig = null; // 🚨 ADD THIS FOR V2 TIMETABLE
 
 const el = {
     settingsOverlay: document.getElementById("settingsOverlay"), btnSettings: document.getElementById("btnSettings"), closeSettingsBtn: document.getElementById("closeSettingsBtn"),
@@ -534,30 +535,37 @@ function applyTheme(isDark) {
 function executeThemeClassToggle(isDark) {
     const metaThemeColor = document.getElementById("pwaThemeColorMeta");
     
-    // 🚨 NEW: Check if the loader is currently covering the screen
+    // 🚨 NEW: Check if the loader or lock screen is currently covering the screen
     const loader = document.getElementById("initialAppLoader");
     const isLoaderVisible = loader && !loader.classList.contains("hidden");
+    const lockScreen = document.getElementById("appLockScreen");
+    const isLocked = lockScreen && lockScreen.style.display === "flex";
     
     if (isDark) {
         document.body.classList.add("dark-mode");
         document.getElementById("btnDarkMode").style.border = "2px solid var(--brand-green)";
         document.getElementById("btnLightMode").style.border = "1px solid #475569";
-        
-        // ONLY update the bar if the loader is GONE
-        if(metaThemeColor && !isLoaderVisible) metaThemeColor.setAttribute("content", "#0f172a"); 
     } else {
         document.body.classList.remove("dark-mode");
         document.getElementById("btnLightMode").style.border = "2px solid var(--brand-green)";
         document.getElementById("btnDarkMode").style.border = "1px solid #cbd5e1";
-        
-        // ONLY update the bar if the loader is GONE
-        if(metaThemeColor && !isLoaderVisible) metaThemeColor.setAttribute("content", "#ffffff"); 
     }
+
+    // 🚨 THE FIX: Enforce the #0e1522 color if locked/loading, otherwise respect the theme
+    if (metaThemeColor) {
+        if (isLocked || isLoaderVisible) {
+            metaThemeColor.setAttribute("content", "#0e1522");
+        } else {
+            metaThemeColor.setAttribute("content", isDark ? "#0f172a" : "#ffffff");
+        }
+    }
+    
     localStorage.setItem("adhyora_principal_theme", isDark ? "dark" : "light");
 }
 
-document.getElementById("btnDarkMode").addEventListener("click", () => applyTheme(true));
-document.getElementById("btnLightMode").addEventListener("click", () => applyTheme(false));
+// 🚨 Added UI_Audio.playWhoosh() to sync with the liquid wave swipe!
+document.getElementById("btnDarkMode").addEventListener("click", () => { applyTheme(true); UI_Audio.playWhoosh(); });
+document.getElementById("btnLightMode").addEventListener("click", () => { applyTheme(false); UI_Audio.playWhoosh(); });
 
 // Load saved theme immediately on boot
 applyTheme(localStorage.getItem("adhyora_principal_theme") === "dark");
@@ -1303,15 +1311,22 @@ async function TD_FetchTimetableAndSubjects(filterDate) {
     } catch(e) {}
 }
 function TD_GenerateTimetableGrid(ttSnap) {
-    const gridEl = document.getElementById("tdTimetableGrid"); let grid = Array.from({ length: 6 }, () => Array(6).fill('<span class="tt-empty">--</span>'));
+    const gridEl = document.getElementById("tdTimetableGrid"); 
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    let grid = Array.from({ length: 6 }, () => Array(pCount).fill('<span class="tt-empty">--</span>'));
     const dayMap = { "monday":0, "tuesday":1, "wednesday":2, "thursday":3, "friday":4, "saturday":5 };
+    
     ttSnap.forEach(doc => {
         let d = doc.data(); let dIdx = dayMap[(d.day || "").toLowerCase()]; let pIdx = parseInt(d.period) - 1;
-        if (dIdx !== undefined && pIdx >= 0 && pIdx < 6) { let sem = (d.semester || "?").replace("Semester ", "S").replace("Semester_", "S"); grid[dIdx][pIdx] = `<span class="tt-slot">${sem}</span>`; }
+        if (dIdx !== undefined && pIdx >= 0 && pIdx < pCount) { let sem = (d.semester || "?").replace("Semester ", "S").replace("Semester_", "S"); grid[dIdx][pIdx] = `<span class="tt-slot">${sem}</span>`; }
     });
+    
     const dayLabels = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
-    let html = `<div class="tt-header">DAY</div>`; for(let i=1; i<=6; i++) html += `<div class="tt-header">P${i}</div>`;
+    let html = `<div class="tt-header">DAY</div>`; 
+    for(let i=1; i<=pCount; i++) html += `<div class="tt-header">P${i}</div>`;
     for(let i=0; i<6; i++) { html += `<div class="tt-day">${dayLabels[i]}</div>`; grid[i].forEach(cell => html += cell); }
+    
+    gridEl.style.gridTemplateColumns = `50px repeat(${pCount}, 1fr)`;
     gridEl.innerHTML = html;
 }
 async function TD_FetchHours(targetDate) {
@@ -1376,13 +1391,14 @@ async function TD_FetchHours(targetDate) {
 // Helper 1: Data Extractor
 function ExtractTeacherTimeline(snapshot, teacherID) {
     let records = [];
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6; // 🚨 ADDED
     snapshot.forEach(doc => {
         let d = doc.data();
         let rawDateStr = d.date || "Unknown Date";
         let dateObj = new Date(rawDateStr);
         let dateFormatted = isNaN(dateObj.getTime()) ? rawDateStr : dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-        for(let i=1; i<=6; i++) {
+        for(let i=1; i<=pCount; i++) { // 🚨 CHANGED TO pCount
             let pKey = `period_${i}`;
             let pData = d[pKey];
             
@@ -1943,7 +1959,8 @@ async function SD_FetchDailyAttendance(targetDate, dbSemesterFormat) {
 
         // Extract period data
         allDocsMap.forEach((d) => {
-            for (let i = 1; i <= 6; i++) {
+            let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+            for (let i = 1; i <= pCount; i++) {
                 let pKey = `period_${i}`;
                 let pData = d[pKey];
                 
@@ -2266,7 +2283,6 @@ async function BCH_ExecuteMove(sourceID, targetID, studentIDsArray) {
 let ttLoaded = false; let ttPhase = 0; let ttCurrentSem = "1"; let ttSelectedDay = "Monday";
 let ttSubjectsCached = false; let ttAllSubjectsMasterList = []; let ttCachedCategoriesList = []; let ttCachedSubjectsByCategory = {}; let ttCachedTimetableStructures = {}; let ttStructureListener = null;
 let ttActiveSlotsData = []; 
-const ttPeriodEndTimes = [10.5, 11.5, 12.5, 14.5, 15.5, 16.5];
 
 function TT_Init() {
     if (ttLoaded) return;
@@ -2359,7 +2375,10 @@ function TT_LoadTimetableForDay() {
 
 function TT_BuildSlotsFromData(slotsData) {
     ttActiveSlotsData = []; let hasStructure = Object.keys(slotsData).length > 0;
-    for (let p = 1; p <= 6; p++) {
+    // 🚨 V2 DYNAMIC PERIOD COUNT
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    
+    for (let p = 1; p <= pCount; p++) {
         let mainKey = `P${p}`; let mainCat = slotsData[mainKey] || "Select Category";
         ttActiveSlotsData.push({ period: p, splitIndex: 0, isSplit: false, category: mainCat, subject: "Select Subject", teacher: "Waiting for HOD", room: "", bgCol: "white" });
     }
@@ -2378,6 +2397,9 @@ function TT_RenderLayout() {
     let wrapper = document.getElementById("ttMainWrapper");
     ttActiveSlotsData.sort((a, b) => { if (a.period !== b.period) return a.period - b.period; return a.splitIndex - b.splitIndex; });
 
+    // 🚨 ADDED: Bring in pCount for the line renderer!
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+
     let html = "";
     ttActiveSlotsData.forEach((slot, idx) => {
         let idBase = `tt_${slot.period}_${slot.splitIndex}`;
@@ -2391,7 +2413,7 @@ function TT_RenderLayout() {
         let nodeColor = slot.isSplit ? "transparent" : "white"; let nodeBorder = slot.isSplit ? "none" : "2px solid #333"; let bgPaint = slot.bgCol || "white";
 
         html += `<div class="tt-row" id="row_${idBase}">
-            <div class="tt-timeline-col"><div class="tt-node" id="node_${idBase}" style="background:${nodeColor}; border:${nodeBorder}">${nodeNum}</div>${!slot.isSplit && slot.period < 6 ? `<div class="tt-line-bg"><div class="tt-line-fill" id="fill_${idBase}"></div></div>` : ''}</div>
+            <div class="tt-timeline-col"><div class="tt-node" id="node_${idBase}" style="background:${nodeColor}; border:${nodeBorder}">${nodeNum}</div>${!slot.isSplit && slot.period < pCount ? `<div class="tt-line-bg"><div class="tt-line-fill" id="fill_${idBase}"></div></div>` : ''}</div>
             <div class="${cardClass}" style="background-color: ${bgPaint}">
                 <select class="tt-input-field select" id="cat_${idBase}" ${catLocked}>${catOpts}</select>
                 <select class="tt-input-field select" id="sub_${idBase}" ${subLocked}>${subOpts}</select>
@@ -2428,7 +2450,12 @@ function TT_OnSubjectSelectedByPrincipal(period, subjectName) {
 function TT_CheckAttendanceCompliance(slotObj, subjectName) {
     let currentDayNum = new Date().getDay(); if (currentDayNum === 0) currentDayNum = 7; const daysList = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
     let targetDayNum = daysList.indexOf(ttSelectedDay) + 1; let daysDiff = targetDayNum - currentDayNum; let targetDate = new Date(); targetDate.setDate(targetDate.getDate() + daysDiff); let dateStr = targetDate.toISOString().split('T')[0];
-    let now = new Date(); let currentHour = now.getHours() + (now.getMinutes() / 60.0); let endTime = ttPeriodEndTimes[slotObj.period - 1]; let isDeadlinePassed = false;
+    
+    // 🚨 V2 DYNAMIC DEADLINE MATH
+    let timing = window.getPeriodTiming(window.collegeTimeConfig, slotObj.period);
+    const toDec = (t) => { let [hm, m] = t.split(' '); let [h, min] = hm.split(':').map(Number); if(m==='PM'&&h!==12)h+=12; if(m==='AM'&&h===12)h=0; return h+(min/60); };
+    
+    let now = new Date(); let currentHour = now.getHours() + (now.getMinutes() / 60.0); let endTime = toDec(timing.end); let isDeadlinePassed = false;
     let targetDateOnly = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()); let nowDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     if (targetDateOnly < nowDateOnly) isDeadlinePassed = true; else if (targetDateOnly.getTime() === nowDateOnly.getTime()) { if (currentHour >= endTime) isDeadlinePassed = true; }
     if (!isDeadlinePassed) { slotObj.bgCol = "white"; TT_RenderLayout(); return; }
@@ -2487,7 +2514,14 @@ function TT_UpdateTimelineVisuals() {
     let now = new Date(); let currentHour = now.getHours() + (now.getMinutes() / 60.0);
     ttActiveSlotsData.forEach(slot => {
         if (slot.isSplit) return;
-        let pIndex = slot.period - 1; let endTime = ttPeriodEndTimes[pIndex]; let startTime = endTime - 1.0; let idBase = `tt_${slot.period}_0`;
+        
+        // 🚨 V2 DYNAMIC LIVE CLOCK SYNC
+        let timing = window.getPeriodTiming(window.collegeTimeConfig, slot.period);
+        const toDec = (t) => { let [hm, m] = t.split(' '); let [h, min] = hm.split(':').map(Number); if(m==='PM'&&h!==12)h+=12; if(m==='AM'&&h===12)h=0; return h+(min/60); };
+        
+        let startTime = toDec(timing.start);
+        let endTime = toDec(timing.end);
+        let idBase = `tt_${slot.period}_0`;
         let nodeEl = document.getElementById(`node_${idBase}`); let fillEl = document.getElementById(`fill_${idBase}`);
         if (nodeEl) { let nodeColor = (currentHour >= endTime) ? "#94a3b8" : (currentHour >= startTime && currentHour < endTime) ? "#4ade80" : "white"; nodeEl.style.background = nodeColor; nodeEl.style.color = (nodeColor === "white") ? "#333" : "white"; }
         if (fillEl) { let fillAmount = (currentHour >= endTime) ? 100 : (currentHour <= startTime) ? 0 : ((currentHour - startTime) / (endTime - startTime)) * 100; fillEl.style.height = `${fillAmount}%`; }
@@ -2561,7 +2595,10 @@ async function ASN_LoadData() {
     if (!structSnap.exists() || !structSnap.data().slots) { document.getElementById("asnListContainer").innerHTML = `<div class="no-data-text">No General classes structure set for this day.</div>`; return; }
     
     let slots = structSnap.data().slots; let validPeriods = []; let pCats = {};
-    for(let i=1; i<=6; i++) {
+    // 🚨 V2 DYNAMIC PERIOD COUNT
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    
+    for(let i=1; i<=pCount; i++) {
         if(slots[`P${i}`]) {
             let cat = slots[`P${i}`].trim();
             if(!cat.toUpperCase().includes("TUTORIAL") && validCats.has(cat)) { validPeriods.push(i); pCats[i] = cat; }
@@ -3585,7 +3622,11 @@ document.getElementById("btnExecuteExport").addEventListener("click", async () =
                 let students = sSnap.docs;
 
                 if (students.length > 0) {
-                    let logCSV = "Date,Semester,Roll No,Name,P1,P2,P3,P4,P5,P6,Status\n";
+                    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+                    let pHeaders = [];
+                    for(let i=1; i<=pCount; i++) pHeaders.push(`P${i}`);
+                    
+                    let logCSV = `Date,Semester,Roll No,Name,${pHeaders.join(",")},Status\n`;
                     logCSV += GenerateLogsCSV(students, logsData);
                     DownloadCSV(logCSV, `${dName.replace(/\s+/g, '')}_Logs_Year${year}.csv`);
                 }
@@ -3719,6 +3760,8 @@ async function GenerateStatsCSV(students, sem) {
 function GenerateLogsCSV(students, logsData) {
     let csv = "";
     let groupedLogs = {};
+    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+
     logsData.forEach(l => {
         let parts = l.id.split('_'); 
         let key = parts.length >= 2 ? `${parts[0]}_${parts[1]}` : l.id;
@@ -3732,21 +3775,22 @@ function GenerateLogsCSV(students, logsData) {
 
         for (let stu of students) {
             let r = stu.id;
-            let p1="-", p2="-", p3="-", p4="-", p5="-", p6="-";
+            let p = Array(pCount).fill("-");
 
             dailyData.forEach(d => {
-                if (d.period_1 && d.period_1.attendance && d.period_1.attendance[r] !== undefined) p1 = d.period_1.attendance[r] ? "P" : "A";
-                if (d.period_2 && d.period_2.attendance && d.period_2.attendance[r] !== undefined) p2 = d.period_2.attendance[r] ? "P" : "A";
-                if (d.period_3 && d.period_3.attendance && d.period_3.attendance[r] !== undefined) p3 = d.period_3.attendance[r] ? "P" : "A";
-                if (d.period_4 && d.period_4.attendance && d.period_4.attendance[r] !== undefined) p4 = d.period_4.attendance[r] ? "P" : "A";
-                if (d.period_5 && d.period_5.attendance && d.period_5.attendance[r] !== undefined) p5 = d.period_5.attendance[r] ? "P" : "A";
-                if (d.period_6 && d.period_6.attendance && d.period_6.attendance[r] !== undefined) p6 = d.period_6.attendance[r] ? "P" : "A";
+                for (let i = 1; i <= pCount; i++) {
+                    if (d[`period_${i}`] && d[`period_${i}`].attendance && d[`period_${i}`].attendance[r] !== undefined) {
+                        p[i-1] = d[`period_${i}`].attendance[r] ? "P" : "A";
+                    }
+                }
             });
 
-            let status = (p1==="P"||p2==="P"||p3==="P"||p4==="P"||p5==="P"||p6==="P") ? "Present" : "Absent";
-            csv += `${dateStr},${semStr},${r},${stu.data().Name || ""},${p1},${p2},${p3},${p4},${p5},${p6},${status}\n`;
+            let status = p.includes("P") ? "Present" : "Absent";
+            csv += `${dateStr},${semStr},${r},${stu.data().Name || ""},${p.join(",")},${status}\n`;
         }
-        csv += ",,,,,,,,,,\n"; 
+        
+        let spacer = Array(4 + pCount + 1).fill("").join(",");
+        csv += `${spacer}\n`; 
     }
     return csv;
 }
@@ -4358,8 +4402,6 @@ let attdSelectedDayName = "Monday";
 let attdAllocListener = null;
 let attdAttListener = null;
 
-const attdPeriodEndTimes = [10.5, 11.5, 12.5, 14.0, 15.0, 16.0];
-
 function ATTD_Init() {
     if (attdLoaded) return;
     attdLoaded = true;
@@ -4453,9 +4495,11 @@ function ATTD_LoadDataForSelectedDay() {
 
     attdAttListener = onSnapshot(query(collection(db, "colleges", currentCollegeID, "attendance"), where("date", "==", dateStr)), (snap) => {
         let tempAttd = {};
+        let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+        
         snap.forEach(doc => {
             let d = doc.data();
-            for (let i = 1; i <= 6; i++) {
+            for (let i = 1; i <= pCount; i++) {
                 let pKey = `period_${i}`;
                 if (d[pKey] && d[pKey].subject && d[pKey].markedByTeacherID) {
                     let comboKey = `${i - 1}_${d[pKey].subject}`;
@@ -4488,9 +4532,10 @@ function ATTD_RenderGrid() {
         }
 
         visibleCount++;
-        let rowHtml = `<div class="attd-row"><div class="attd-teacher-col"><span class="attd-teacher-name">${teacher.name}</span><span class="attd-teacher-dept">${teacher.dept}</span></div>`;
+        let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+        let rowHtml = `<div class="attd-row" style="grid-template-columns: 200px repeat(${pCount}, 1fr);"><div class="attd-teacher-col"><span class="attd-teacher-name">${teacher.name}</span><span class="attd-teacher-dept">${teacher.dept}</span></div>`;
 
-        for (let p = 0; p < 6; p++) {
+        for (let p = 0; p < pCount; p++) {
             let alloc = myAllocs.find(a => a.periodIndex === p);
             
             if (!alloc) {
@@ -4514,6 +4559,16 @@ function ATTD_RenderGrid() {
         container.innerHTML = `<div class="no-data-text">No data found for this filter.</div>`;
     } else {
         container.innerHTML = html;
+        
+        // 🚨 V2 DYNAMIC HEADER RENDER
+        let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+        let headerEl = document.getElementById("attdGodModeHeader");
+        if (headerEl) {
+            headerEl.style.gridTemplateColumns = `200px repeat(${pCount}, 1fr)`;
+            let headerHtml = `<div style="text-align: left;">TEACHER</div>`;
+            for(let i=1; i<=pCount; i++) headerHtml += `<div>P${i}</div>`;
+            headerEl.innerHTML = headerHtml;
+        }
     }
 }
 
@@ -4532,8 +4587,11 @@ function ATTD_GetStatusColorClass(periodIndex, assignedTeacherID, markedByTeache
 
     if (tDateOnly > nDateOnly) return "attd-black"; 
 
+    // 🚨 V2 DYNAMIC TIME SYNC FOR RED SQUARES
     let currentHour = now.getHours() + (now.getMinutes() / 60.0);
-    let endTime = attdPeriodEndTimes[periodIndex];
+    let timing = window.getPeriodTiming(window.collegeTimeConfig, periodIndex + 1);
+    const toDec = (t) => { let [hm, m] = t.split(' '); let [h, min] = hm.split(':').map(Number); if(m==='PM'&&h!==12)h+=12; if(m==='AM'&&h===12)h=0; return h+(min/60); };
+    let endTime = toDec(timing.end);
 
     if (currentHour > endTime) return "attd-red"; 
     
@@ -4768,6 +4826,18 @@ function startSubscriptionListener() {
         
         if (data.currentSemesterType) collegeSemesterType = data.currentSemesterType;
         if (data.settings && data.settings.attendanceCalculationMode) attendanceCalculationMode = data.settings.attendanceCalculationMode;
+
+        // 👇 NEW: Auto-fill Timetable Popup if data exists 👇
+        if (data.timetable_config) {
+            window.collegeTimeConfig = data.timetable_config; // 🚨 STORE IT IN MEMORY
+            const config = data.timetable_config;
+            if(document.getElementById("ttPeriodCount")) document.getElementById("ttPeriodCount").value = config.periodCount;
+            if(document.getElementById("ttStartTime")) document.getElementById("ttStartTime").value = config.startTime;
+            if(document.getElementById("ttPeriodDuration")) document.getElementById("ttPeriodDuration").value = config.periodDurationMin;
+            if(document.getElementById("ttLunchAfter")) document.getElementById("ttLunchAfter").value = config.lunchBreakAfterPeriod;
+            if(document.getElementById("ttLunchDuration")) document.getElementById("ttLunchDuration").value = config.lunchDurationMin;
+        }
+        // 👆 END OF NEW CODE 👆
 
         let subData = data.subscription;
         if (!subData) {
@@ -5073,11 +5143,11 @@ let isFirstSecurityLoad = true;
 function CheckSecurityPin() {
 
     const metaThemeColor = document.getElementById("pwaThemeColorMeta");
-    if(metaThemeColor) metaThemeColor.setAttribute("content", "#0f172a");
+    if(metaThemeColor) metaThemeColor.setAttribute("content", "#0e1522");
 
     // 🚨 NEW: Force the bottom nav bar to match the dark lockscreen
-    document.documentElement.style.backgroundColor = "#0f172a";
-    document.body.style.backgroundColor = "#0f172a";
+    document.documentElement.style.backgroundColor = "#0e1522";
+    document.body.style.backgroundColor = "#0e1522";
     
     document.querySelector(".main-content").style.display = "none";
     document.getElementById("mainSidebar").style.display = "none";
@@ -5270,6 +5340,11 @@ if(elLock.btnBio) {
 function SetLockMode(mode) {
     lockMode = mode;
     elLock.input.value = "";
+    
+    // 🚨 NEW: Clear the ghost dots!
+    const dots = document.querySelectorAll("#pinDisplayWrapper .pin-dot");
+    if (dots.length > 0) dots.forEach(d => d.classList.remove("filled"));
+    
     elLock.btnForgot.style.display = "none";
     elLock.btnForgot.innerText = "Forgot PIN?"; // Reset the text
     elLock.input.style.display = "inline-block"; // Ensure input is visible by default
@@ -5328,7 +5403,6 @@ elLock.btnSubmit.addEventListener("click", async () => {
     }
 
     if (lockMode === "LOGIN") {
-        // 🚨 Hash what the user typed, and compare it to the memory hash!
         let hashedInput = await hashText(val);
         
         if (hashedInput === cachedAdminPinHash) {
@@ -5338,9 +5412,20 @@ elLock.btnSubmit.addEventListener("click", async () => {
             elLock.status.innerText = "Incorrect PIN.";
             elLock.status.style.color = "#ef4444";
             elLock.input.value = "";
+            
+            // 🚨 NEW: Clear input, empty the dots, and trigger the CSS shake
+            const dots = document.querySelectorAll("#pinDisplayWrapper .pin-dot");
+            if (dots.length > 0) {
+                dots.forEach(d => d.classList.remove("filled"));
+                const wrapper = document.getElementById("pinDisplayWrapper");
+                wrapper.classList.remove("shake-error");
+                void wrapper.offsetWidth; // Force CSS reflow to restart animation
+                wrapper.classList.add("shake-error");
+            }
+            
             if (failedPinAttempts >= 2) elLock.btnForgot.style.display = "block";
         }
-    } 
+    }
     else if (lockMode === "SETUP_1" || lockMode === "RESET_NEW_1") {
         setupTempPin = val;
         SetLockMode(lockMode === "SETUP_1" ? "SETUP_2" : "RESET_NEW_2");
@@ -5532,7 +5617,7 @@ document.addEventListener("visibilitychange", () => {
             // 🚨 THE FIX: Force the phone's status bar to match the dark lock screen!
             const metaThemeColor = document.getElementById("pwaThemeColorMeta");
             if (metaThemeColor) {
-                metaThemeColor.setAttribute("content", "#0f172a");
+                metaThemeColor.setAttribute("content", "#0e1522");
             }
         }
     }
@@ -6219,7 +6304,8 @@ async function FetchDatesForSubject(subjectNameFromUI) {
             let dateObj = new Date(rawDateStr);
             let dateFormatted = isNaN(dateObj.getTime()) ? rawDateStr : dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-            for (let i = 1; i <= 6; i++) {
+            let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+            for (let i = 1; i <= pCount; i++) {
                 let pKey = `period_${i}`;
 
                 if (d[pKey] && d[pKey].subject) {
@@ -6261,125 +6347,248 @@ async function FetchDatesForSubject(subjectNameFromUI) {
 }
 
 // ==========================================
-// 🚀 SMART BACK BUTTON NAVIGATION ENGINE v3 (Double-Tap Exit)
+// 🚀 SMART BACK BUTTON NAVIGATION ENGINE v9 (Pure Native Stack - Principal)
 // ==========================================
-let navActiveModals = [];
-let isProgrammaticBack = false;
 let lastBackPressTime = 0;
+let isProgrammaticClose = false;
 
-// 1. Initialize Base State with a Buffer for the Home Screen
-// We replace the initial load state, then push a "home" state so the first back press is caught.
-history.replaceState({ layer: 'base' }, '');
-history.pushState({ layer: 'home' }, '');
+// 1. Establish the baseline history state
+history.replaceState({ appState: 'home' }, '');
 
-// 2. Track Modals (Popups/Overlays) using Unique IDs
-const modalObserver = new MutationObserver((mutations) => {
-    mutations.forEach(mutation => {
-        if (mutation.attributeName === 'class') {
-            const el = mutation.target;
-            const isActive = el.classList.contains('active');
-            const index = navActiveModals.indexOf(el);
+// 2. THE WATCHER: Pushes history natively ONLY when UI opens (requires user gesture)
+const uiObserver = new MutationObserver((mutations) => {
+    if (isProgrammaticClose) return; 
 
-            if (isActive && index === -1) {
-                // A) Modal Opened: Push native state into browser history
-                navActiveModals.push(el);
-                history.pushState({ layer: 'modal', id: el.id }, '');
-            } 
-            else if (!isActive && index !== -1) {
-                // B) Modal Closed (via X button or code)
-                navActiveModals.splice(index, 1);
-                
-                // Clean up the browser history if it was closed via UI buttons
-                if (history.state && history.state.id === el.id) {
-                    isProgrammaticBack = true;
-                    history.back();
+    let shouldPushState = false;
+
+    mutations.forEach(m => {
+        if (shouldPushState) return;
+        const el = m.target;
+
+        if (m.attributeName === 'class') {
+            const oldClass = m.oldValue || '';
+            
+            // Modals & Overlays Opening
+            if (el.classList.contains('active') && !oldClass.includes('active')) {
+                if (el.classList.contains('modal-overlay') || el.id === 'settingsOverlay' || el.classList.contains('compose-modal') || el.id === 'composeOverlay') {
+                    shouldPushState = true;
+                }
+            }
+            // Main Sidebar Views Opening
+            if (el.classList.contains('mobile-active') && !oldClass.includes('mobile-active')) {
+                shouldPushState = true;
+            }
+            // Sub-views Opening
+            if (el.id === 'studentDashboardView' || el.id === 'teacherDashboardView' || el.id === 'assignView') {
+                if (!el.classList.contains('hidden-view') && oldClass.includes('hidden-view')) {
+                    shouldPushState = true;
+                }
+            }
+            // Event Accordions Opening
+            if (el.classList.contains('evt-body') && el.classList.contains('active') && !oldClass.includes('active')) {
+                shouldPushState = true;
+            }
+        }
+
+        // Standard Accordions & Record Screens Opening
+        if (m.attributeName === 'style') {
+            const oldStyle = m.oldValue || '';
+            const newDisplay = window.getComputedStyle(el).display;
+            
+            if (el.id.startsWith('bch_group_body_') || el.id.startsWith('sa_group_body_')) {
+                if (newDisplay === 'block' && !oldStyle.includes('display: block')) {
+                    shouldPushState = true;
+                }
+            }
+
+            if (el.id === 'attRecordScreen' || el.id === 'attHistoryScreen') {
+                if (newDisplay === 'flex' && !oldStyle.includes('display: flex')) {
+                    shouldPushState = true;
                 }
             }
         }
     });
+
+    if (shouldPushState) {
+        history.pushState({ appState: 'ui_open' }, '');
+    }
 });
 
-// Attach observer to all overlays
-document.querySelectorAll('.modal-overlay').forEach(overlay => {
-    modalObserver.observe(overlay, { attributes: true, attributeFilter: ['class'] });
+uiObserver.observe(document.body, { 
+    attributes: true, 
+    subtree: true, 
+    attributeFilter: ['class', 'style'],
+    attributeOldValue: true
 });
 
-// 3. Track Sidebar Views (Teacher List, Roomcode, Batch, etc.)
-const viewObserver = new MutationObserver((mutations) => {
-    mutations.forEach(mutation => {
-        if (mutation.attributeName === 'class') {
-            const el = mutation.target;
-            const isViewOpen = el.classList.contains('mobile-active');
-            
-            if (isViewOpen && (!history.state || history.state.layer !== 'view')) {
-                history.pushState({ layer: 'view' }, '');
-            } 
-            else if (!isViewOpen && history.state && history.state.layer === 'view') {
-                isProgrammaticBack = true;
-                history.back();
+// 3. THE BACK BUTTON HANDLER
+window.addEventListener('popstate', (e) => {
+    if (navigator.vibrate) navigator.vibrate(15);
+    
+    // Pause the observer so our programmatic closings don't trigger infinite loops
+    isProgrammaticClose = true; 
+
+    try {
+        const closedSomething = attemptToCloseTopUI();
+
+        // 🚨 CRITICAL FIX: Notice there is NO pushState here if closedSomething is true!
+        // We just let the browser's stack naturally unwind. This eliminates the "Screen Tap" bug on Android.
+
+        if (!closedSomething) {
+            // We are at the bottom of the stack (Home screen).
+            const currentTime = Date.now();
+            if (currentTime - lastBackPressTime < 2000) {
+                // Double tap confirmed. Exit natively.
+                window.close();
+                if (typeof showRcToast === "function") showRcToast("Please close the app manually.");
+            } else {
+                // First tap on home screen. Show toast.
+                lastBackPressTime = currentTime;
+                if (typeof showRcToast === "function") showRcToast("Press back again to exit");
+                
+                // Re-push a state so the 2nd tap has something to pop.
+                // THIS is allowed by Chrome because it only happens on the home screen, not during menu navigation!
+                history.pushState({ appState: 'home_trap' }, '');
             }
         }
-    });
+    } catch (err) {
+        console.error("Navigation failsafe:", err);
+        history.pushState({ appState: 'home' }, '');
+        if (typeof switchView === "function") switchView("HOME");
+    }
+
+    setTimeout(() => { isProgrammaticClose = false; }, 100);
 });
 
-const navMainContent = document.querySelector(".main-content");
-if (navMainContent) {
-    viewObserver.observe(navMainContent, { attributes: true, attributeFilter: ['class'] });
+// 4. THE WATERFALL CLOSING LOGIC (PRINCIPAL MAPPED)
+function attemptToCloseTopUI() {
+    // LEVEL 1: Modals
+    const modals = Array.from(document.querySelectorAll('.modal-overlay.active, #settingsOverlay.active, #composeOverlay.active, .compose-modal.active'));
+    if (modals.length > 0) {
+        modals[modals.length - 1].classList.remove('active');
+        return true;
+    }
+
+    // LEVEL 2: Accordions
+    const accordionPrefixes = ['bch_group_body_', 'sa_group_body_'];
+    for (let prefix of accordionPrefixes) {
+        let panels = document.querySelectorAll(`[id^='${prefix}']`);
+        for (let p of panels) {
+            if (window.getComputedStyle(p).display === 'block') {
+                p.style.display = 'none';
+                let icon = document.getElementById(p.id.replace('body', 'icon'));
+                if (icon) icon.style.transform = 'rotate(0deg)';
+                return true;
+            }
+        }
+    }
+
+    let evtPanels = document.querySelectorAll(".evt-body.active");
+    if (evtPanels.length > 0) {
+        evtPanels[evtPanels.length - 1].classList.remove("active");
+        return true;
+    }
+
+    // LEVEL 3: Sub-Views
+    const sdView = document.getElementById("studentDashboardView");
+    if (sdView && !sdView.classList.contains("hidden-view")) {
+        document.getElementById("btnBackToStudents")?.click();
+        return true;
+    }
+
+    const tdView = document.getElementById("teacherDashboardView");
+    if (tdView && !tdView.classList.contains("hidden-view")) {
+        document.getElementById("btnBackToTeachers")?.click();
+        return true;
+    }
+
+    const assignView = document.getElementById("assignView");
+    if (assignView && !assignView.classList.contains("hidden-view")) {
+        if (typeof switchView === "function" && typeof views !== "undefined") {
+            switchView(views.timetable);
+        } else {
+            document.getElementById("btnBackToTimetable")?.click();
+        }
+        return true;
+    }
+
+    const recordScreen = document.getElementById("attRecordScreen");
+    if (recordScreen && window.getComputedStyle(recordScreen).display === "flex") {
+        document.getElementById("backFromRecordBtn")?.click();
+        return true;
+    }
+    
+    const historyScreen = document.getElementById("attHistoryScreen");
+    if (historyScreen && window.getComputedStyle(historyScreen).display === "flex") {
+        document.getElementById("backFromHistoryBtn")?.click();
+        return true;
+    }
+
+    // LEVEL 4: Main Panels
+    const navMainContent = document.querySelector(".main-content");
+    if (navMainContent && navMainContent.classList.contains("mobile-active")) {
+        if (typeof switchView === "function") switchView("HOME");
+        else document.getElementById("btnHome")?.click();
+        return true;
+    }
+
+    return false;
 }
 
-// 4. Handle Hardware / Browser Back Button Swipe
-window.addEventListener('popstate', (e) => {
-    // If our script triggered the back button to clean up an "X" click, ignore it
-    if (isProgrammaticBack) {
-        isProgrammaticBack = false;
+// =================================================================
+// 🚨 SAVE DYNAMIC TIMETABLE CONFIG (PHASE 2) 🚨
+// =================================================================
+window.saveTimetableConfig = async function(btnElement) {
+    if (!currentCollegeID) {
+        if(typeof showToast === "function") showToast("❌ College ID not found. Please refresh.");
         return;
     }
 
-    // ACTION A: Are there any modals open? Close the top-most one.
-    if (navActiveModals.length > 0) {
-        const topModal = navActiveModals[navActiveModals.length - 1]; 
-        topModal.classList.remove('active');
-        return;
-    }
+    const originalText = btnElement.innerText;
+    btnElement.innerText = "Saving...";
+    btnElement.disabled = true;
+    
+    try {
+        // Read values from popup inputs
+        const periodCount = parseInt(document.getElementById("ttPeriodCount").value) || 6;
+        const startTime = document.getElementById("ttStartTime").value || "09:30";
+        const periodDuration = parseInt(document.getElementById("ttPeriodDuration").value) || 60;
+        const lunchAfter = parseInt(document.getElementById("ttLunchAfter").value) || 3;
+        const lunchDuration = parseInt(document.getElementById("ttLunchDuration").value) || 45;
 
-    // ACTION B: Are we inside a Sidebar View? Click the Home button.
-    if (navMainContent && navMainContent.classList.contains("mobile-active")) {
-        const btnHome = document.getElementById("btnHome");
-        if (btnHome) btnHome.click();
-        return;
-    }
-
-    // ACTION C: We are on the Main Page. Handle Double-Tap to Exit.
-    const currentTime = Date.now();
-    if (currentTime - lastBackPressTime < 2000) {
-        // Double tap confirmed (< 2 seconds).
-        
-        // ENVIRONMENT SNIFFER: Are we in a PWA or a regular browser?
-        const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-        
-        if (isPWA) {
-            // In a PWA, popping the history natively closes the app.
-            history.back();
-        } else {
-            // In a browser, trap the history so they don't get kicked to index.html
-            if (typeof showRcToast === "function") {
-                showRcToast("Please close the browser tab to exit.");
+        const configData = {
+            timetable_config: {
+                periodCount: periodCount,
+                startTime: startTime,
+                periodDurationMin: periodDuration,
+                lunchBreakAfterPeriod: lunchAfter,
+                lunchDurationMin: lunchDuration
             }
-            // Push the home state back so they stay on the dashboard safely
-            history.pushState({ layer: 'home' }, '');
-        }
-    } else {
-        // First tap on the main page.
-        lastBackPressTime = currentTime;
+        };
+
+        // Save directly to the main college document (0 extra read costs!)
+        // Using the imported modular SDK functions from your file
+        const { updateDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js");
+        const collegeRef = doc(db, "colleges", currentCollegeID);
+        await updateDoc(collegeRef, configData);
         
-        if (typeof showRcToast === "function") {
-            showRcToast("Press back again to exit");
+        // Trigger cache sync if available
+        if (typeof notifyTeachersOfStudentUpdate === "function") {
+            await notifyTeachersOfStudentUpdate();
         }
         
-        // Push the 'home' state back into the buffer so the app doesn't navigate away yet!
-        history.pushState({ layer: 'home' }, '');
+        if(typeof showToast === "function") showToast("✅ Timetable settings saved!");
+        
+        // Close the popup
+        document.getElementById('timetableConfigOverlay').style.display = 'none';
+    } catch (error) {
+        console.error("Error saving timetable config:", error);
+        if(typeof showToast === "function") showToast("❌ Failed to save configuration.");
+    } finally {
+        btnElement.innerText = originalText;
+        btnElement.disabled = false;
     }
-});
+};
 
 // ==========================================
 // 💳 RAZORPAY GATEWAY CONFIGURATION
@@ -6471,15 +6680,45 @@ window.ExecuteSaveRazorpayKeys = async function() {
 // 🚀 ENTER KEY BINDINGS (KEYBOARD & MOBILE)
 // ==========================================
 
-// 1. Lock Screen PIN (App Boot & Auto-Lock)
+// 1. Lock Screen PIN (Ghost Pad, Auto-Submit & Keystroke Tracking)
 const mainPinInput = document.getElementById("lockPinInput");
-if (mainPinInput) {
-    mainPinInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-            e.preventDefault(); // Stops the keyboard from jumping/refreshing
-            document.getElementById("btnLockSubmit").click();
+const pinDisplayWrapper = document.getElementById("pinDisplayWrapper");
+
+if (mainPinInput && pinDisplayWrapper) {
+    const pinDots = pinDisplayWrapper.querySelectorAll(".pin-dot");
+
+    mainPinInput.addEventListener("input", (e) => {
+        let val = e.target.value.replace(/[^0-9]/g, ''); // Force numbers only
+        if (val.length > 4) val = val.slice(0, 4); // Cap at 4 digits
+        e.target.value = val;
+
+        // Animate the dots based on input length
+        pinDots.forEach((dot, index) => {
+            if (index < val.length) {
+                if (!dot.classList.contains("filled")) {
+                    dot.classList.add("filled");
+                    if (navigator.vibrate) navigator.vibrate(10); // Tiny haptic on every digit typed!
+                    if (typeof UI_Audio !== 'undefined') UI_Audio.playClick();
+                }
+            } else {
+                dot.classList.remove("filled");
+            }
+        });
+
+        // Remove error shake if they start typing again
+        pinDisplayWrapper.classList.remove("shake-error");
+
+        // 🚨 AUTO-SUBMIT MAGIC
+        if (val.length === 4) {
+            // Slight delay so the user actually sees the 4th dot light up
+            setTimeout(() => {
+                document.getElementById("btnLockSubmit").click();
+            }, 150);
         }
     });
+
+    // Ensure the invisible input stays focused if they click anywhere near the dots
+    pinDisplayWrapper.addEventListener("click", () => mainPinInput.focus());
 }
 
 // 2. Action Verification PIN (Deleting, Moving, Exporting, etc.)
@@ -6536,6 +6775,99 @@ function startLogoAnimation() {
         iterations += 1 / 3;
     }, 50);
 }
+
+// ==========================================
+// 🚨 NATIVE WEB AUDIO ENGINE & HAPTICS
+// ==========================================
+const UI_Audio = {
+    ctx: null,
+    init: function() {
+        if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+    },
+    playClick: function() {
+        if (localStorage.getItem("adhyora_principal_sound") === "false") return;
+        try {
+            this.init();
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine'; // Premium soft tick
+            osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(200, this.ctx.currentTime + 0.05);
+            gain.gain.setValueAtTime(0.04, this.ctx.currentTime); // Very quiet
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            osc.start(); osc.stop(this.ctx.currentTime + 0.05);
+        } catch(e){}
+    },
+    playWhoosh: function() {
+        if (localStorage.getItem("adhyora_principal_sound") === "false") return;
+        try {
+            this.init();
+            const duration = 0.65; // Matches the CSS liquidWaveSwipe
+            
+            const bufferSize = this.ctx.sampleRate * duration;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1; 
+            const noiseSource = this.ctx.createBufferSource();
+            noiseSource.buffer = buffer;
+            
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.Q.value = 1.2; 
+            filter.frequency.setValueAtTime(150, this.ctx.currentTime); 
+            filter.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + (duration / 2)); 
+            filter.frequency.exponentialRampToValueAtTime(150, this.ctx.currentTime + duration); 
+            
+            const gainNode = this.ctx.createGain();
+            gainNode.gain.setValueAtTime(0, this.ctx.currentTime); 
+            gainNode.gain.linearRampToValueAtTime(0.12, this.ctx.currentTime + (duration / 2)); 
+            gainNode.gain.linearRampToValueAtTime(0, this.ctx.currentTime + duration); 
+            
+            noiseSource.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(this.ctx.destination);
+            noiseSource.start();
+        } catch(e){}
+    }
+};
+
+// 🚨 SOUND TOGGLE LOGIC
+const btnToggleSounds = document.getElementById("btnToggleSounds");
+const soundToggleSwitch = document.getElementById("soundToggleSwitch");
+
+if (btnToggleSounds && soundToggleSwitch) {
+    if (localStorage.getItem("adhyora_principal_sound") === "false") {
+        soundToggleSwitch.classList.remove("active");
+    }
+    btnToggleSounds.addEventListener("click", () => {
+        const isActive = soundToggleSwitch.classList.toggle("active");
+        localStorage.setItem("adhyora_principal_sound", isActive ? "true" : "false");
+        UI_Audio.init();
+        if (isActive) UI_Audio.playClick(); 
+    });
+}
+
+// 🚨 GLOBAL HAPTICS & CLICK SOUND DETECTOR
+document.addEventListener('click', (e) => {
+    // 🚨 FIX: Added 'select' so all dropdowns trigger the haptics and sound!
+    const target = e.target.closest('button, select, .nav-icon-btn, .menu-btn, .data-card, .data-upload-card, .asn-day-btn, .tt-day-btn, .settings-btn, [onclick]');
+    
+    if (target) {
+        if (navigator.vibrate) navigator.vibrate(15); 
+        UI_Audio.playClick(); 
+    }
+});
+
+// 🚨 DROPDOWN SELECTION SOUND & HAPTICS
+document.addEventListener('change', (e) => {
+    // If the element that changed is a <select> dropdown
+    if (e.target.tagName.toLowerCase() === 'select') {
+        if (navigator.vibrate) navigator.vibrate(15); 
+        UI_Audio.playClick(); 
+    }
+});
 
 // ==========================================
 // 🚨 CACHE INVALIDATOR (Pings Teachers to refresh RAM)
