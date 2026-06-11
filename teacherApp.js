@@ -389,10 +389,15 @@ function ListenToProfile() {
 
         if (status === "Approved") {
             blockerPanel.style.display = "none";
+            // If they were previously blocked, refocus the PIN box so they can type
+            if (document.getElementById("appLockScreen").style.display === "flex") {
+                document.getElementById("lockPinInput").focus();
+            }
         } else {
             blockerPanel.style.display = "flex";
-            let statusText = document.getElementById("approvalStatusText");
+            if (document.activeElement) document.activeElement.blur(); // 🚨 THE FIX: Force hide the mobile keyboard!
             
+            let statusText = document.getElementById("approvalStatusText");
             if (status === "Declined") {
                 statusText.innerText = "Your access has been revoked by the Principal.";
             } else {
@@ -511,7 +516,7 @@ async function finalizeProfileUI(rawName, email, deptName) {
         initSmartStudentCacheSync(); 
         
         // 🚨 CRITICAL ORDER CHANGE: Run permission verification AFTER all background engines load
-        await requestPushPermissions();
+        await requestPushPermissions(true); // 🚨 ADDED 'true' to make it silent on boot!
         updateNotificationToggleUI(); 
     }
 }
@@ -1955,6 +1960,10 @@ function cleanupAttendanceView() {
 }
 
 function switchView(targetView, clickedBtn) {
+    // 🚨 THE FIX: Block all UI routing if the account is not approved yet!
+    let blocker = document.getElementById("approvalBlockerPanel");
+    if (blocker && blocker.style.display !== "none") return;
+    
     navButtons.forEach(btn => btn.classList.remove("active-nav"));
     if (clickedBtn && (clickedBtn.classList.contains('nav-icon-btn') || clickedBtn.classList.contains('nav-btn') || clickedBtn.classList.contains('menu-btn'))) clickedBtn.classList.add("active-nav");
     Object.values(views).forEach(v => { if (v) v.classList.add("hidden-view"); });
@@ -8184,6 +8193,8 @@ function CheckSecurityPin() {
     document.getElementById("initialAppLoader").style.display = "none"; 
     elLock.screen.style.display = "flex"; 
 
+    updateSystemThemeBar(); // 🚨 THE FIX: Instantly paint the bottom nav bar dark
+
     if (securityListener) securityListener(); 
 
     // 🚨 LISTENS DIRECTLY TO THE TEACHER'S PROFILE FOR THE PIN
@@ -8369,7 +8380,9 @@ function SetLockMode(mode) {
     // Hide the ugly button for PIN entry modes.
     elLock.btnSubmit.style.display = (mode === "SETUP_BIO") ? "block" : "none";
     
-    if (mode !== "SETUP_BIO") elLock.input.focus();
+    // 🚨 THE FIX: Only steal keyboard focus if the Blocker Panel is NOT active
+    let isBlocked = document.getElementById("approvalBlockerPanel") && document.getElementById("approvalBlockerPanel").style.display !== "none";
+    if (mode !== "SETUP_BIO" && !isBlocked) elLock.input.focus();
 
     if (mode === "LOGIN") {
         elLock.title.innerText = "ENTER SECURE PIN";
@@ -8623,11 +8636,8 @@ document.addEventListener("visibilitychange", () => {
             elLock.screen.style.display = "flex";
             SetLockMode("LOGIN");
 
-            // 🚨 FIX: Force the phone's status bar to match the dark lock screen when auto-locking!
-            const metaThemeColor = document.getElementById("pwaThemeColorMeta");
-            if (metaThemeColor) {
-                metaThemeColor.setAttribute("content", "#0e1522");
-            }
+            // 🚨 THE FIX: Delegate to the master theme function so top AND bottom bars sync!
+            updateSystemThemeBar(); 
         }
     }
 });
@@ -9189,22 +9199,24 @@ function startLogoAnimation() {
 
 function updateSystemThemeBar() {
     const metaThemeColor = document.getElementById("pwaThemeColorMeta");
-    const isDark = localStorage.getItem("adhyora_teacher_theme") === "dark";
+    const isDark = localStorage.getItem("adhyora_principal_theme") === "dark"; // 🚨 Uses Principal Theme
     
     // If the lock screen is currently visible (flex), force dark mode bar color
     const isLocked = document.getElementById("appLockScreen").style.display === "flex";
     
-    // 🚨 FIX: Check if the initial app loader is still blocking the screen
+    // Check if the initial app loader is still blocking the screen
     const loader = document.getElementById("initialAppLoader");
-    const isLoaderVisible = loader && loader.style.display !== "none";
+    const isLoaderVisible = loader && !loader.classList.contains("hidden");
 
-    if (metaThemeColor) {
-        // If it is locked OR loading, strictly enforce the new dark background
-        if (isLocked || isLoaderVisible) {
-            metaThemeColor.setAttribute("content", "#0e1522"); 
-        } else {
-            metaThemeColor.setAttribute("content", isDark ? "#0f172a" : "#ffffff");
-        }
+    // 🚨 THE FIX: Synchronize both the Meta Tag AND the CSS Body exactly
+    if (isLocked || isLoaderVisible) {
+        if (metaThemeColor) metaThemeColor.setAttribute("content", "#0e1522"); 
+        document.documentElement.style.backgroundColor = "#0e1522";
+        document.body.style.backgroundColor = "#0e1522";
+    } else {
+        if (metaThemeColor) metaThemeColor.setAttribute("content", isDark ? "#0f172a" : "#ffffff");
+        document.documentElement.style.backgroundColor = "";
+        document.body.style.backgroundColor = "";
     }
 }
 
