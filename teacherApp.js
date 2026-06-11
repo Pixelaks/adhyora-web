@@ -342,27 +342,81 @@ function initSmartStudentCacheSync() {
 }
 
 // ==========================================
-// 🚨 PROFILE ENGINE
+// 🚨 PROFILE ENGINE (WITH C# APPROVAL WAITER LOGIC)
 // ==========================================
 function ListenToProfile() {
     if (profileListener) profileListener(); 
     const teacherDocRef = doc(db, "colleges", currentCollegeID, "teachers", currentUserID);
 
     profileListener = onSnapshot(teacherDocRef, async (snapshot) => {
+        // 1. Force Logout if document was deleted (Exactly like C#)
         if (!snapshot.exists()) {
             document.getElementById("teacherInfoName").innerText = "Profile Not Found";
+            handleSignOut(); 
             return;
         }
 
         registerTeacherWebSession();
 
         const data = snapshot.data();
+        let status = data.status || "Pending";
+
+        // =======================================================
+        // 🚨 SUBSCRIPTION MECHANISM CLONE (Teacher Approval Waiter)
+        // =======================================================
+        let blockerPanel = document.getElementById("approvalBlockerPanel");
+        
+        // Dynamically create the Blocker UI if it doesn't exist yet
+        if (!blockerPanel) {
+            blockerPanel = document.createElement("div");
+            blockerPanel.id = "approvalBlockerPanel";
+            blockerPanel.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:var(--bg-base, #0f172a); z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:20px;";
+            blockerPanel.innerHTML = `
+                <i class="fas fa-user-clock" style="font-size: 50px; color: var(--brand-red, #dc2626); margin-bottom: 20px;"></i>
+                <h2 style="color: var(--text-dark, white); margin-bottom: 10px;">Account Status</h2>
+                <p id="approvalStatusText" style="color: var(--text-muted, #94a3b8); font-size: 16px; margin-bottom: 30px; line-height: 1.5;"></p>
+                <button id="btnApprovalLogout" style="background: transparent; border: 1px solid var(--border-color, #334155); color: var(--text-light, #cbd5e1); padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s;"><i class="fas fa-sign-out-alt"></i> Logout</button>
+            `;
+            document.body.appendChild(blockerPanel);
+            
+            // Bind the logout button
+            document.getElementById("btnApprovalLogout").addEventListener("click", () => {
+                if (confirm("Sign out of Adhyora?")) handleSignOut();
+            });
+        }
+
+        // Check the status logic
+        if (status === "Approved") {
+            // Hide the blocker if they are approved
+            blockerPanel.style.display = "none";
+        } else {
+            // Show the blocker panel
+            blockerPanel.style.display = "flex";
+            let statusText = document.getElementById("approvalStatusText");
+            
+            if (status === "Declined") {
+                statusText.innerText = "Your access has been revoked by the Principal.";
+            } else {
+                statusText.innerText = "Account is Pending.\nWaiting for Principal approval...";
+            }
+
+            // Hide the initial app loader so it doesn't spin forever over the blocker
+            let loader = document.getElementById("initialAppLoader");
+            if (loader) loader.classList.add("hidden");
+
+            // 🚨 CRITICAL: Return here so the rest of the app (Inbox, Attendance, etc.) NEVER initializes!
+            return; 
+        }
+        // =======================================================
+
+
+        // Continue Normal Execution if Approved...
         isHOD = data.isHOD || false;
         currentTeacherName = data.name || "Unknown";
         const email = auth.currentUser ? auth.currentUser.email : data.email;
         let deptName = "Unknown Dept";
 
-        // 🚨 FIX: Prioritize departmentID like C# to prevent Security Rule rejection!
+        // Prioritize departmentID like C# to prevent Security Rule rejection!
         if (data.departmentID) {
             teacherDeptRaw = data.departmentID; 
             try {
@@ -381,6 +435,7 @@ function ListenToProfile() {
             currentDeptName = deptName; // Save globally
             teacherDeptRaw = "DEPT_" + deptName.replace(/ /g, ""); 
         }
+        
         finalizeProfileUI(currentTeacherName, email, deptName);
     });
 }
@@ -8263,52 +8318,79 @@ function SetLockMode(mode) {
     lockMode = mode;
     elLock.input.value = "";
     
-    // 🚨 NEW: Clear the ghost dots!
+    // Clear the ghost dots!
     const dots = document.querySelectorAll("#pinDisplayWrapper .pin-dot");
     if (dots.length > 0) dots.forEach(d => d.classList.remove("filled"));
     
+    // Explicitly hide the visual PIN dots if setting up Biometrics
+    const pinWrapper = document.getElementById("pinDisplayWrapper");
+    if (pinWrapper) {
+        pinWrapper.style.display = (mode === "SETUP_BIO") ? "none" : "flex";
+    }
+
     elLock.btnForgot.style.display = "none";
     elLock.btnForgot.innerText = "Forgot PIN?"; 
-    elLock.input.style.display = "inline-block"; 
+    elLock.input.style.display = (mode === "SETUP_BIO") ? "none" : "inline-block"; 
+    
+    // Hide the ugly button for PIN entry modes.
+    elLock.btnSubmit.style.display = (mode === "SETUP_BIO") ? "block" : "none";
     
     if (mode !== "SETUP_BIO") elLock.input.focus();
 
     if (mode === "LOGIN") {
         elLock.title.innerText = "ENTER SECURE PIN";
         elLock.status.innerText = "Enter 4-digit PIN to unlock.";
-        elLock.status.style.color = "#94a3b8";
-        elLock.btnSubmit.innerText = "Unlock Dashboard";
+        elLock.status.style.color = "#94a3b8"; // Default Gray
+        
         if (failedPinAttempts >= 2) elLock.btnForgot.style.display = "block";
         
         if (isBioEnabledLocally && isBiometricSupported) {
             elLock.btnBio.style.display = "block";
             setTimeout(() => elLock.btnBio.click(), 500); 
         } else {
-            elLock.btnBio.style.display = "none";
+            if(elLock.btnBio) elLock.btnBio.style.display = "none";
         }
     } 
     else if (mode === "SETUP_1" || mode === "RESET_NEW_1") {
         elLock.title.innerText = "CREATE SECURITY PIN";
         elLock.status.innerText = "Set a 4-digit PIN to secure your dashboard.";
-        elLock.status.style.color = "#10b981";
-        elLock.btnSubmit.innerText = "Next Step";
-        elLock.btnBio.style.display = "none";
+        elLock.status.style.color = "#10b981"; // 🟢 Restored to Green
+        if(elLock.btnBio) elLock.btnBio.style.display = "none";
     }
     else if (mode === "SETUP_2" || mode === "RESET_NEW_2") {
         elLock.title.innerText = "CONFIRM NEW PIN";
         elLock.status.innerText = "Please re-enter the PIN to confirm.";
-        elLock.status.style.color = "#f59e0b";
-        elLock.btnSubmit.innerText = "Save Security PIN";
-        elLock.btnBio.style.display = "none";
+        elLock.status.style.color = "#f59e0b"; // 🟡 Restored to Yellow
+        if(elLock.btnBio) elLock.btnBio.style.display = "none";
     }
     else if (mode === "SETUP_BIO") {
-        elLock.title.innerHTML = '<i class="fas fa-fingerprint" style="color:#10b981; font-size:40px; margin-bottom:10px;"></i><br>ENABLE BIOMETRICS';
+        // 🔴 Icon remains Red
+        elLock.title.innerHTML = '<i class="fas fa-fingerprint" style="color:var(--brand-red); font-size:40px; margin-bottom:10px;"></i><br>ENABLE BIOMETRICS';
         elLock.status.innerText = "Unlock your dashboard instantly with your Fingerprint or Face ID.";
-        elLock.status.style.color = "#10b981";
-        elLock.input.style.display = "none"; 
-        elLock.btnSubmit.innerText = "Enable Fingerprint";
+        elLock.status.style.color = "var(--text-muted)"; // Neutral gray for instructions
+        
+        // 🔴 Button remains Red
+        elLock.btnSubmit.innerHTML = '<i class="fas fa-fingerprint" style="margin-right:8px;"></i> Enable Fingerprint';
+        elLock.btnSubmit.style.cssText = `
+            display: block; 
+            width: 100%; 
+            max-width: 250px; 
+            margin: 20px auto 0 auto; 
+            padding: 12px 20px; 
+            background: var(--brand-red); 
+            color: white; 
+            border: none; 
+            border-radius: 12px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            font-size: 15px; 
+            box-shadow: 0 4px 10px rgba(220, 38, 38, 0.3);
+            transition: 0.2s;
+        `;
+        
         elLock.btnForgot.innerText = "Skip for now";
         elLock.btnForgot.style.display = "block";
+        if(elLock.btnBio) elLock.btnBio.style.display = "none";
     }
 
     updateSystemThemeBar();
