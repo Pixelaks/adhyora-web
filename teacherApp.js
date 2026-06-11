@@ -248,9 +248,13 @@ if (!currentCollegeID) {
             InitBiometricUI(); 
             CheckSecurityPin(); 
 
+            // 🚨 THE FIX: Request push permissions in the background instantly!
+            // This ensures the Principal can send the "Account Approved" push.
+            requestPushPermissions(true); 
+
             ListenToProfile(); 
             
-            // 🚨 OPTIMIZATION: Hash Router Recovery
+            // OPTIMIZATION: Hash Router Recovery
             const currentHash = window.location.hash.replace("#", "");
             if (currentHash && currentHash !== "HOME" && views[currentHash]) {
                 setTimeout(() => {
@@ -342,7 +346,7 @@ function initSmartStudentCacheSync() {
 }
 
 // ==========================================
-// 🚨 PROFILE ENGINE (WITH C# APPROVAL WAITER LOGIC)
+// 🚨 PROFILE ENGINE (WITH C# APPROVAL WAITER LOGIC & HOD NOTIFICATION)
 // ==========================================
 function ListenToProfile() {
     if (profileListener) profileListener(); 
@@ -366,7 +370,6 @@ function ListenToProfile() {
         // =======================================================
         let blockerPanel = document.getElementById("approvalBlockerPanel");
         
-        // Dynamically create the Blocker UI if it doesn't exist yet
         if (!blockerPanel) {
             blockerPanel = document.createElement("div");
             blockerPanel.id = "approvalBlockerPanel";
@@ -379,18 +382,14 @@ function ListenToProfile() {
             `;
             document.body.appendChild(blockerPanel);
             
-            // Bind the logout button
             document.getElementById("btnApprovalLogout").addEventListener("click", () => {
                 if (confirm("Sign out of Adhyora?")) handleSignOut();
             });
         }
 
-        // Check the status logic
         if (status === "Approved") {
-            // Hide the blocker if they are approved
             blockerPanel.style.display = "none";
         } else {
-            // Show the blocker panel
             blockerPanel.style.display = "flex";
             let statusText = document.getElementById("approvalStatusText");
             
@@ -400,16 +399,12 @@ function ListenToProfile() {
                 statusText.innerText = "Account is Pending.\nWaiting for Principal approval...";
             }
 
-            // Hide the initial app loader so it doesn't spin forever over the blocker
             let loader = document.getElementById("initialAppLoader");
             if (loader) loader.classList.add("hidden");
-
-            // 🚨 CRITICAL: Return here so the rest of the app (Inbox, Attendance, etc.) NEVER initializes!
             return; 
         }
+
         // =======================================================
-
-
         // Continue Normal Execution if Approved...
         isHOD = data.isHOD || false;
         currentTeacherName = data.name || "Unknown";
@@ -429,12 +424,50 @@ function ListenToProfile() {
             } catch (e) {
                 deptName = data.departmentID;
             }
-            currentDeptName = deptName; // Save globally
+            currentDeptName = deptName; 
         } else if (data.department) {
             deptName = data.department;
-            currentDeptName = deptName; // Save globally
+            currentDeptName = deptName; 
             teacherDeptRaw = "DEPT_" + deptName.replace(/ /g, ""); 
         }
+
+        // =======================================================
+        // 🚨 HOD NOTIFICATION LOGIC (C# PORT)
+        // =======================================================
+        let seenKey = `HOD_Seen_${currentUserID}`;
+        if (isHOD) {
+            // If the key is NOT 1, show the popup and set it to 1
+            if (localStorage.getItem(seenKey) !== "1") {
+                
+                // Create and show the popup dynamically
+                let hodPanel = document.getElementById("hodNotificationPanel");
+                if (!hodPanel) {
+                    hodPanel = document.createElement("div");
+                    hodPanel.id = "hodNotificationPanel";
+                    hodPanel.className = "modal-overlay active"; // Ensure it captures your CSS backdrop
+                    hodPanel.style.cssText = "z-index: 100000; display: flex;"; // Fallback in case class isn't enough
+                    hodPanel.innerHTML = `
+                        <div class="compose-modal" style="background: var(--bg-base, white); width: 90%; max-width: 350px; margin: auto; border-radius: 20px; padding: 30px; text-align: center; border: 1px solid var(--border-color, #e2e8f0); box-shadow: 0 20px 50px rgba(0,0,0,0.2);">
+                            <i class="fas fa-crown" style="font-size: 50px; color: #f59e0b; margin-bottom: 20px; filter: drop-shadow(0px 4px 6px rgba(245, 158, 11, 0.4));"></i>
+                            <h2 style="color: var(--text-dark, #1e293b); margin-bottom: 10px; font-size: 22px;">Congratulations!</h2>
+                            <p style="color: var(--text-muted, #64748b); font-size: 14px; line-height: 1.6; margin-bottom: 25px;">You have been assigned as the <b>Head of Department (HOD)</b> by the Principal.</p>
+                            <button onclick="document.getElementById('hodNotificationPanel').remove()" style="width: 100%; padding: 14px; border-radius: 12px; background: #f59e0b; color: white; border: none; font-weight: bold; cursor: pointer; font-size: 15px; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3); transition: 0.2s;">Awesome!</button>
+                        </div>
+                    `;
+                    document.body.appendChild(hodPanel);
+                }
+                
+                // Mark as seen
+                localStorage.setItem(seenKey, "1");
+                
+                // Optional: Play a sound effect to draw attention
+                if (typeof UI_Audio !== 'undefined') UI_Audio.playClick();
+            }
+        } else {
+            // 🚨 RESET LOGIC: If they are demoted, remove the key so the popup triggers again if they get re-promoted later!
+            localStorage.removeItem(seenKey);
+        }
+        // =======================================================
         
         finalizeProfileUI(currentTeacherName, email, deptName);
     });
@@ -7594,7 +7627,7 @@ document.getElementById("btnToggleNotifications")?.addEventListener("click", asy
 });
 
 // 4. Permission Request & Webhook Registration (コスト最適化版)
-async function requestPushPermissions() {
+async function requestPushPermissions(isSilent = false) {
     try {
         console.log('Requesting notification permission...');
         const permission = await Notification.requestPermission();
@@ -7602,7 +7635,6 @@ async function requestPushPermissions() {
         if (permission === 'granted') {
             console.log('Notification permission granted.');
             
-            // Explicitly use the root service worker route to match dev tools setup
             const swRegistration = await navigator.serviceWorker.register('firebase-messaging-sw.js');
             
             const currentToken = await getToken(messaging, { 
@@ -7614,7 +7646,6 @@ async function requestPushPermissions() {
                 console.log("Web Push Token Generated:", currentToken);
                 myCurrentPushToken = currentToken; 
 
-                // Direct collection document mapping to avoid reading outdated cache streams
                 const teacherRef = doc(db, "colleges", currentCollegeID, "teachers", currentUserID);
                 const tSnap = await getDoc(teacherRef);
                 
@@ -7623,14 +7654,12 @@ async function requestPushPermissions() {
                     activeTokens = tSnap.data().webFcmTokens;
                 }
 
-                // Clean old instances and cap the array at a maximum of 3 web locations
                 activeTokens = activeTokens.filter(t => t !== currentToken);
                 activeTokens.push(currentToken);
                 if (activeTokens.length > 3) {
                     activeTokens = activeTokens.slice(activeTokens.length - 3);
                 }
 
-                // 🚨 BULLETPROOF FALLBACK: Write directly with an isolated setDoc layout
                 await setDoc(teacherRef, { 
                     webFcmTokens: activeTokens,
                     lastWebLogin: serverTimestamp()
@@ -7638,9 +7667,9 @@ async function requestPushPermissions() {
                 
                 console.log("Token synced into Firestore collection doc successfully.");
 
-                // 🚨 LOOPHOLE SYNC: Push the web worker token straight up to native FCM maps
                 let safeCol = getSafeTopic(currentCollegeID);
-                let safeDept = getSafeTopic(teacherDeptRaw);
+                // 🚨 THE FIX: Fallback to "PENDING" if they don't have a department yet to prevent crashes
+                let safeDept = getSafeTopic(teacherDeptRaw || "PENDING");
 
                 let topicsToJoin = [
                     `${safeCol}_ALL`, 
@@ -7663,6 +7692,11 @@ async function requestPushPermissions() {
                 }).then(() => {
                     console.log("✅ Loophole Complete: Teacher Dashboard bound to Native Topics!");
                     updateNotificationToggleUI();
+                    
+                    // 🚨 THE FIX: Only show the popup if they manually clicked the button!
+                    if (!isSilent && typeof showRcToast === "function") {
+                        showRcToast("✅ Notifications Enabled!");
+                    }
                 }).catch(err => console.error("Apps Script Hook Rejected:", err));
             } else {
                 console.warn("FCM registration returned blank. Verify cloud configuration files.");
