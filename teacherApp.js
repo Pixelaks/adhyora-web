@@ -2006,22 +2006,20 @@ window.addEventListener('popstate', (e) => {
     }
 
     // ========================================================
-    // 🚨 NEW ACTION A.5: Intercept internal Sub-Views before closing to Home!
+    // 🚨 NEW ACTION A.5: Intercept internal Sub-Views natively!
     // ========================================================
     
     // 1. Check if Student Dashboard is open
     const sdView = document.getElementById("studentDashboardView");
     if (sdView && !sdView.classList.contains("hidden-view")) {
         document.getElementById("btnBackToStudents")?.click();
-        setTimeout(() => history.pushState({ layer: 'view' }, ''), 50); // 🚨 FIX: Wrapped in setTimeout to bypass mobile browser block
-        return;
+        return; // 🚨 FIX: No more pushState hacks! The browser pops naturally.
     }
 
     // 2. Check if Teacher Dashboard is open
     const tdView = document.getElementById("teacherDashboardView");
     if (tdView && !tdView.classList.contains("hidden-view")) {
         document.getElementById("btnBackToTeachers")?.click();
-        setTimeout(() => history.pushState({ layer: 'view' }, ''), 50); // 🚨 FIX
         return;
     }
 
@@ -2029,8 +2027,7 @@ window.addEventListener('popstate', (e) => {
     const assignView = document.getElementById("assignView");
     if (assignView && !assignView.classList.contains("hidden-view")) {
         document.getElementById("btnBackFromAssign")?.click();
-        setTimeout(() => history.pushState({ layer: 'view' }, ''), 50); // 🚨 FIX: Restores the stack securely!
-        return;
+        return; // 🚨 FIX: Closes panel and natively drops you back to the Timetable layer!
     }
     // ========================================================
 
@@ -2044,14 +2041,10 @@ window.addEventListener('popstate', (e) => {
     // ACTION C: Double-Tap to Exit
     const currentTime = Date.now();
     if (currentTime - lastBackPressTime < 2000) {
-        const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-        
-        if (isPWA) {
-            history.back();
-        } else {
-            if (typeof showRcToast === "function") showRcToast("Please close the browser tab to exit.");
-            history.pushState({ layer: 'home' }, '');
-        }
+        // 🚨 FIX: Do not use history.back() as it jumps to the previous login URL!
+        // If the user wants to leave, they simply swipe away the app via OS controls.
+        if (typeof showRcToast === "function") showRcToast("Please swipe away to close the app.");
+        history.pushState({ layer: 'home' }, '');
     } else {
         lastBackPressTime = currentTime;
         if (typeof showRcToast === "function") showRcToast("Press back again to exit");
@@ -3652,6 +3645,8 @@ async function fetchGlobalSubjects() {
 window.SL_OpenDashboard = async (sID) => {
     sdCurrentStudentID = sID;
     switchView(views.studentDashboard, document.getElementById('btnNavStudentList'));
+    // 🚨 FIX: Push history state when dashboard opens
+    history.pushState({ layer: 'subview' }, '');
     
     document.getElementById("sdNameText").innerText = "Loading..."; document.getElementById("sdRollText").innerText = ""; document.getElementById("sdStatusBadge").innerText = "..."; document.getElementById("sdSemesterTitle").innerText = "Loading...";
     SD_UpdateWaveUI(0); ["sdStatAtt", "sdStatAbs", "sdStatTot", "sdStatPAtt", "sdStatPAbs", "sdStatPTot"].forEach(id => document.getElementById(id).innerText = "0");
@@ -5805,6 +5800,8 @@ function initTimetableEngine() {
     document.getElementById("btnOpenHodAssign").addEventListener("click", () => {
         switchView(views.assign);
         initAssignEngine();
+        // 🚨 FIX: Push history state when opening so the back button has ammunition!
+        history.pushState({ layer: 'subview' }, '');
     });
 
     let dayBtns = document.querySelectorAll("#ttMyDaysContainer .tt-day-btn");
