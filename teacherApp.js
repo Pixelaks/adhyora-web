@@ -389,13 +389,12 @@ function ListenToProfile() {
 
         if (status === "Approved") {
             blockerPanel.style.display = "none";
-            // If they were previously blocked, refocus the PIN box so they can type
             if (document.getElementById("appLockScreen").style.display === "flex") {
                 document.getElementById("lockPinInput").focus();
             }
         } else {
             blockerPanel.style.display = "flex";
-            if (document.activeElement) document.activeElement.blur(); // 🚨 THE FIX: Force hide the mobile keyboard!
+            if (document.activeElement) document.activeElement.blur(); 
             
             let statusText = document.getElementById("approvalStatusText");
             if (status === "Declined") {
@@ -411,12 +410,14 @@ function ListenToProfile() {
 
         // =======================================================
         // Continue Normal Execution if Approved...
-        isHOD = data.isHOD || false;
+        
+        // 🚨 THE FIX: Make it bulletproof against backend casing issues (isHOD vs isHod)
+        isHOD = data.isHOD === true || data.isHod === true || false;
+        
         currentTeacherName = data.name || "Unknown";
         const email = auth.currentUser ? auth.currentUser.email : data.email;
         let deptName = "Unknown Dept";
 
-        // Prioritize departmentID like C# to prevent Security Rule rejection!
         if (data.departmentID) {
             teacherDeptRaw = data.departmentID; 
             try {
@@ -441,16 +442,17 @@ function ListenToProfile() {
         // =======================================================
         let seenKey = `HOD_Seen_${currentUserID}`;
         if (isHOD) {
-            // If the key is NOT 1, show the popup and set it to 1
             if (localStorage.getItem(seenKey) !== "1") {
                 
-                // Create and show the popup dynamically
                 let hodPanel = document.getElementById("hodNotificationPanel");
                 if (!hodPanel) {
                     hodPanel = document.createElement("div");
                     hodPanel.id = "hodNotificationPanel";
-                    hodPanel.className = "modal-overlay active"; // Ensure it captures your CSS backdrop
-                    hodPanel.style.cssText = "z-index: 100000; display: flex;"; // Fallback in case class isn't enough
+                    hodPanel.className = "modal-overlay active"; 
+                    
+                    // 🚨 THE FIX: Added position fixed, top 0, width 100% so it covers the whole screen!
+                    hodPanel.style.cssText = "z-index: 100000; position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);"; 
+                    
                     hodPanel.innerHTML = `
                         <div class="compose-modal" style="background: var(--bg-base, white); width: 90%; max-width: 350px; margin: auto; border-radius: 20px; padding: 30px; text-align: center; border: 1px solid var(--border-color, #e2e8f0); box-shadow: 0 20px 50px rgba(0,0,0,0.2);">
                             <i class="fas fa-crown" style="font-size: 50px; color: #f59e0b; margin-bottom: 20px; filter: drop-shadow(0px 4px 6px rgba(245, 158, 11, 0.4));"></i>
@@ -460,16 +462,17 @@ function ListenToProfile() {
                         </div>
                     `;
                     document.body.appendChild(hodPanel);
+                } else {
+                    // Just in case it already exists but was hidden
+                    hodPanel.style.display = "flex";
+                    hodPanel.classList.add("active");
                 }
                 
-                // Mark as seen
                 localStorage.setItem(seenKey, "1");
                 
-                // Optional: Play a sound effect to draw attention
                 if (typeof UI_Audio !== 'undefined') UI_Audio.playClick();
             }
         } else {
-            // 🚨 RESET LOGIC: If they are demoted, remove the key so the popup triggers again if they get re-promoted later!
             localStorage.removeItem(seenKey);
         }
         // =======================================================
@@ -5375,7 +5378,7 @@ async function evtSaveEventAttendance() {
             // 🚨 WEBOOK: Blast notification to Principal safely via Google Script
             const safeCol = currentCollegeID.replace(/[^a-zA-Z0-9]/g, '');
             fetch("https://script.google.com/macros/s/AKfycbxVL1MGATuPxN4cmAkWbd8GsY5YaoWBkyVTkjfDV-f4jJrWBnMvZ-gXdMZU5pnhHmlPHw/exec", {
-                method: "POST", mode: "no-cors",
+                method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, // 🚨 ADD THIS HERE TOO!
                 body: JSON.stringify({
                     title: "New Event Request 📅",
                     body: `${currentTeacherName} has requested attendance approval for '${eventName}'.`,
@@ -7810,7 +7813,7 @@ async function registerTeacherWebSession() {
 
                 if (tokens.length > 0) {
                     fetch("https://script.google.com/macros/s/AKfycbxVL1MGATuPxN4cmAkWbd8GsY5YaoWBkyVTkjfDV-f4jJrWBnMvZ-gXdMZU5pnhHmlPHw/exec", {
-                        method: "POST", mode: "no-cors",
+                        method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, // 🚨 ADD THIS LINE!
                         body: JSON.stringify({
                             title: "Security Alert 🔒",
                             body: `A new login was detected on ${osName}.`,
