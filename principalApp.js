@@ -112,20 +112,22 @@ function hideAppLoader() {
     const loader = document.getElementById("initialAppLoader");
     if (loader && !loader.classList.contains("hidden")) {
         setTimeout(() => {
-            loader.classList.add("hidden");
-            
-            const metaThemeColor = document.getElementById("pwaThemeColorMeta");
-            const isDark = localStorage.getItem("adhyora_principal_theme") === "dark";
-            const activeHex = isDark ? "#0f172a" : "#ffffff";
-            
-            if (metaThemeColor) {
-                metaThemeColor.setAttribute("content", activeHex);
-            }
-            
-            // 🚨 NEW: Clean up the loader's background color override
-            document.documentElement.style.backgroundColor = "";
-            document.body.style.backgroundColor = "";
-            
+            // 🚀 THE FIX: Queues the fade-out perfectly with the browser's refresh rate
+            requestAnimationFrame(() => {
+                loader.classList.add("hidden");
+                
+                const metaThemeColor = document.getElementById("pwaThemeColorMeta");
+                const isDark = localStorage.getItem("adhyora_principal_theme") === "dark";
+                const activeHex = isDark ? "#0f172a" : "#ffffff";
+                
+                if (metaThemeColor) {
+                    metaThemeColor.setAttribute("content", activeHex);
+                }
+                
+                // 🚨 NEW: Clean up the loader's background color override
+                document.documentElement.style.backgroundColor = "";
+                document.body.style.backgroundColor = "";
+            });
         }, 800); 
     }
 }
@@ -823,67 +825,163 @@ function updateUpcomingEvent() {
 }
 
 // ==========================================
-// MESSAGES SYSTEM (WITH INFINITE SCROLL)
+// MESSAGES SYSTEM (WITH INFINITE SCROLL & BLUE TICKS)
 // ==========================================
-let cachedMessages = [];
-let messageLimit = 30; // Start with 30 messages
+let allMessagesMap = new Map();
+let activeChatRoomListeners = new Map();
+let messageLimit = 30; 
 let messageListenerUnsub = null;
 let isFetchingMessages = false;
 
 function startMessagesListener() {
-    if (messageListenerUnsub) messageListenerUnsub(); // Clear old listener when limit increases
+    if (messageListenerUnsub) messageListenerUnsub(); 
 
+    // 1. Listen for standard Broadcasts sent by the Principal
     messageListenerUnsub = onSnapshot(query(collection(db, "colleges", currentCollegeID, "sent_messages"), orderBy("timestamp", "desc"), limit(messageLimit)), (snap) => {
-        cachedMessages = [];
-        snap.forEach(doc => {
-            let d = doc.data(); let roleClass = (d.senderRole || "").toLowerCase().includes("teacher") ? "msg-teacher" : "msg-principal";
-            cachedMessages.push({ title: d.title || "Notice", body: d.body || "", sender: d.senderName || "System", target: d.targetSummary || "", roleClass: roleClass, time: d.timestamp ? d.timestamp.toDate() : new Date() });
+        snap.docChanges().forEach((change) => {
+            const doc = change.doc;
+            if (change.type === "removed") { allMessagesMap.delete(doc.id); return; }
+            let d = doc.data(); 
+            let roleClass = (d.senderRole || "").toLowerCase().includes("teacher") ? "msg-teacher" : "msg-principal";
+            
+            if (d.senderID === currentUserID || !d.senderID) {
+                allMessagesMap.set(doc.id, { 
+                    id: doc.id, title: d.title || "Notice", body: d.body || "", 
+                    sender: d.senderName || "System", target: d.targetSummary || "", 
+                    roleClass: roleClass, time: d.timestamp ? d.timestamp.toDate() : new Date(),
+                    isMe: true, type: d.type || "broadcast", status: d.status || "sent",
+                    linkedChatID: d.linkedChatID || "", linkedMessageID: d.linkedMessageID || ""
+                });
+            }
         });
-        
-        // 🚨 THE RED DOT FIX: Compare timestamps for the Messages Inbox
-        let lastViewed = parseInt(localStorage.getItem(`lastViewedMessages_${currentUserID}`) || "0");
-        let hasNew = cachedMessages.some(m => m.time.getTime() > lastViewed);
-        
-        let isViewing = document.getElementById("messagesView") && !document.getElementById("messagesView").classList.contains("hidden-view");
-        
-        if (isViewing) {
-            localStorage.setItem(`lastViewedMessages_${currentUserID}`, Date.now());
-            document.querySelector("#btnMessages .notification-dot").style.display = "none";
-        } else {
-            document.querySelector("#btnMessages .notification-dot").style.display = hasNew ? "block" : "none";
-        }
-
+        updateMessagesDot();
         renderMessages();
     });
+
+    // 2. Listen for Private Chats (For Blue Ticks & Incoming Replies)
+    const chatsRef = collection(db, "colleges", currentCollegeID, "chats");
+    onSnapshot(query(chatsRef, where("participants", "array-contains", currentUserID), orderBy("lastUpdated", "desc"), limit(10)), (snap) => {
+        snap.forEach(roomDoc => {
+            if (!activeChatRoomListeners.has(roomDoc.id)) {
+                let unsub = onSnapshot(query(collection(db, "colleges", currentCollegeID, "chats", roomDoc.id, "messages"), orderBy("timestamp", "desc"), limit(20)), (msgSnap) => {
+                    msgSnap.docChanges().forEach(change => {
+                        const msgDoc = change.doc;
+                        if (change.type === "removed") { allMessagesMap.delete(msgDoc.id); return; }
+                        
+                        const md = msgDoc.data();
+
+                        // Catch blue ticks dynamically!
+                        if ((md.senderID || "") === currentUserID) {
+                            if (md.status === "read") {
+                                allMessagesMap.forEach((msgData) => {
+                                    if (msgData.linkedMessageID === msgDoc.id) {
+                                        msgData.status = "read";
+                                    }
+                                });
+                            }
+                            return; 
+                        }
+
+                        allMessagesMap.set(msgDoc.id, {
+                            id: msgDoc.id, title: md.title || "Private Message", body: md.body || "",
+                            time: md.timestamp ? md.timestamp.toDate() : new Date(),
+                            sender: md.senderName || "User", roleClass: "msg-teacher", 
+                            target: "Me", type: "incoming", isMe: false,
+                            status: md.status || "sent",
+                            linkedChatID: roomDoc.id,
+                            linkedMessageID: msgDoc.id
+                        });
+                    });
+                    updateMessagesDot();
+                    renderMessages();
+                });
+                activeChatRoomListeners.set(roomDoc.id, unsub);
+            }
+        });
+    });
+}
+
+function updateMessagesDot() {
+    let lastViewed = parseInt(localStorage.getItem(`lastViewedMessages_${currentUserID}`) || "0");
+    let hasNew = Array.from(allMessagesMap.values()).some(m => !m.isMe && m.time.getTime() > lastViewed);
+    
+    let isViewing = document.getElementById("messagesView") && !document.getElementById("messagesView").classList.contains("hidden-view");
+    if (isViewing) {
+        localStorage.setItem(`lastViewedMessages_${currentUserID}`, Date.now());
+        document.querySelector("#btnMessages .notification-dot").style.display = "none";
+    } else {
+        document.querySelector("#btnMessages .notification-dot").style.display = hasNew ? "block" : "none";
+    }
 }
 
 function renderMessages() {
     const listEl = document.getElementById("messagesList");
-    if (cachedMessages.length === 0) { listEl.innerHTML = `<div class="no-data-text">Inbox is empty</div>`; return; }
+    if (!listEl) return;
+    let sortedMessages = Array.from(allMessagesMap.values()).sort((a, b) => b.time - a.time);
+    if (sortedMessages.length === 0) { listEl.innerHTML = `<div class="no-data-text" style="text-align: center; color: #94a3b8; margin-top: 20px;">Inbox is empty</div>`; return; }
     
-    // Remember scroll position before updating
     let oldScroll = listEl.scrollTop;
     
-    listEl.innerHTML = cachedMessages.map(m => {
-        return `<div class="data-card ${m.roleClass}"><div class="card-title">${m.title}</div><div class="card-body">${m.body}</div><div class="card-meta"><span>${m.sender} <span style="color:#94a3b8; font-weight:normal;">→ ${m.target}</span></span><span>${m.time.toLocaleString('en-US', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</span></div></div>`;
+    listEl.innerHTML = sortedMessages.map(m => {
+        let borderColor = m.roleClass === "msg-teacher" ? "#3b82f6" : "var(--brand-green)"; 
+        let icon = m.type === 'incoming' ? 'fa-comment' : 'fa-bullhorn';
+        let headerTxt = m.isMe ? `Sent to: ${m.target}` : `From: ${m.sender} <span style="font-weight:normal; opacity:0.7;">• Private Chat</span>`;
+
+        let cornerIconHTML = "";
+        let clickAction = "";
+        let cursorStyle = "default";
+
+        if (m.type === "broadcast" || !m.linkedChatID) {
+            cornerIconHTML = `<i class="fas fa-thumbtack" style="color: #cbd5e1; font-size: 16px; transform: rotate(45deg);"></i>`;
+        } else if (m.isMe) {
+            let tickColor = (m.status === "read") ? "#3b82f6" : "#94a3b8"; 
+            cornerIconHTML = `<i class="fas fa-check-double" id="tick_${m.id}" style="color: ${tickColor}; font-size: 14px; transition: color 0.3s;"></i>`;
+        } else {
+            if (m.status !== "read") {
+                cornerIconHTML = `<div id="unread_dot_${m.id}" style="width:10px; height:10px; background:var(--brand-green); border-radius:50%; box-shadow:0 0 5px rgba(74,222,128,0.5);"></div>`;
+                clickAction = `onclick="window.markMessageAsRead('${m.linkedChatID}', '${m.linkedMessageID}', '${m.id}')"`;
+                cursorStyle = "pointer";
+            }
+        }
+
+        return `
+        <div id="msg_card_${m.id}" ${clickAction} style="position:relative; cursor:${cursorStyle}; background:var(--bg-base); border:1px solid var(--border-color); border-radius:12px; padding:15px; padding-right:45px; margin-bottom:10px; box-shadow:0 4px 10px rgba(0,0,0,0.03); border-left: 4px solid ${borderColor}; transition: 0.2s;">
+            <div style="position:absolute; top:15px; right:15px; display:flex; align-items:center; justify-content:center;">
+                ${cornerIconHTML}
+            </div>
+            <div style="font-weight:bold; color:var(--text-dark); font-size:15px; margin-bottom:5px;">${m.title}</div>
+            <div style="font-size:13px; color:var(--text-muted); margin-bottom:10px; line-height:1.5;">${m.body}</div>
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-light); font-weight:600;">
+                <span><i class="fas ${icon}" style="margin-right:4px; color:${borderColor};"></i> ${headerTxt}</span>
+                <span>${m.time.toLocaleString('en-US', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
+            </div>
+        </div>`;
     }).join('');
 
-    // Restore scroll position so it doesn't snap to top
     if (isFetchingMessages) { listEl.scrollTop = oldScroll; }
 }
+
+window.markMessageAsRead = async function(chatID, msgID, mapID) {
+    if (!chatID || !msgID) return;
+    let dot = document.getElementById(`unread_dot_${mapID}`);
+    if (dot) dot.style.display = "none";
+    let card = document.getElementById(`msg_card_${mapID}`);
+    if (card) { card.style.cursor = "default"; card.onclick = null; }
+    if (allMessagesMap.has(mapID)) allMessagesMap.get(mapID).status = "read";
+
+    try {
+        await updateDoc(doc(db, "colleges", currentCollegeID, "chats", chatID, "messages", msgID), { status: "read" });
+    } catch (e) { console.error("Failed to mark as read", e); }
+};
 
 // 🚀 INFINITE SCROLL DETECTOR
 document.getElementById("messagesList").addEventListener("scroll", (e) => {
     let el = e.target;
-    // If user scrolls within 50px of the bottom
     if (el.scrollHeight - el.scrollTop <= el.clientHeight + 50) {
-        // Only load more if we aren't currently fetching AND there might be more data
-        if (!isFetchingMessages && cachedMessages.length >= messageLimit) {
+        if (!isFetchingMessages && Array.from(allMessagesMap.keys()).length >= messageLimit) {
             isFetchingMessages = true;
-            messageLimit += 30; // Load 30 more older messages
+            messageLimit += 30; 
             startMessagesListener(); 
-            
-            // Prevent spamming the scroll event
             setTimeout(() => { isFetchingMessages = false; }, 1000); 
         }
     }
@@ -898,10 +996,11 @@ const elCompose = {
     deptDrop: document.getElementById("composeDept"), yearDrop: document.getElementById("composeYear"), title: document.getElementById("composeTitle"),
     body: document.getElementById("composeBody"), sendBtn: document.getElementById("btnSendMessage"), status: document.getElementById("composeStatusText")
 };
-let composeIsPersonal = false; let composeTargetTokens = [];
+let composeIsPersonal = false; let composeTargetTokens = []; let composeTargetID = "";
 
-window.OpenCompose = async (isPersonal = false, name = "", tokens = []) => {
-    composeIsPersonal = isPersonal; composeTargetTokens = tokens; elCompose.overlay.classList.add("active");
+window.OpenCompose = async (isPersonal = false, name = "", tokens = [], targetID = "") => {
+    composeIsPersonal = isPersonal; composeTargetTokens = tokens; composeTargetID = targetID; 
+    elCompose.overlay.classList.add("active");
     elCompose.title.value = ""; elCompose.body.value = ""; elCompose.status.innerText = "";
     if (isPersonal) {
         elCompose.titleText.innerHTML = `<i class="fas fa-comment-dots"></i> Message to: ${name}`;
@@ -955,16 +1054,59 @@ elCompose.sendBtn.addEventListener("click", async () => {
     }
     
     try {
-        // SECURE DATABASE WRITE
-        await principalAPI({
-            routeAction: "SEND_ANNOUNCEMENT",
-            collegeId: currentCollegeID,
-            title: title,
-            body: body,
-            targetSummary: targetDescription,
-            isPersonal: composeIsPersonal,
-            senderName: myRealName
-        });
+        if (composeIsPersonal && composeTargetID) {
+            let targetName = elCompose.titleText.innerHTML.replace('<i class="fas fa-comment-dots"></i> Message to: ', '').trim();
+            
+            // 🚀 PURE FRONTEND WRITE BATCH: Bypasses the 400 Cloud Error completely!
+            let chatID = currentUserID < composeTargetID ? `${currentUserID}_${composeTargetID}` : `${composeTargetID}_${currentUserID}`;
+            let batchWrite = writeBatch(db);
+            
+            let roomRef = doc(db, "colleges", currentCollegeID, "chats", chatID);
+            batchWrite.set(roomRef, {
+                participants: [currentUserID, composeTargetID],
+                lastUpdated: serverTimestamp()
+            }, { merge: true });
+            
+            let msgRef = doc(collection(roomRef, "messages"));
+            batchWrite.set(msgRef, {
+                senderID: currentUserID,
+                senderName: myRealName,
+                senderRole: "Principal",
+                title: title,
+                body: body,
+                timestamp: serverTimestamp(),
+                status: "sent"
+            });
+            
+            let sentRef = doc(collection(db, "colleges", currentCollegeID, "sent_messages"));
+            batchWrite.set(sentRef, {
+                title: title,
+                body: body,
+                senderID: currentUserID,
+                senderName: myRealName,
+                senderRole: "Principal",
+                targetSummary: targetName,
+                timestamp: serverTimestamp(),
+                type: "private",
+                status: "sent",
+                linkedChatID: chatID,
+                linkedMessageID: msgRef.id
+            });
+            
+            await batchWrite.commit();
+            
+        } else {
+            // MASSIVE BROADCASTS still use the Cloud Function securely
+            await principalAPI({
+                routeAction: "SEND_ANNOUNCEMENT",
+                collegeId: currentCollegeID,
+                title: title,
+                body: body,
+                targetSummary: targetDescription,
+                isPersonal: composeIsPersonal,
+                senderName: myRealName
+            });
+        }
 
         // TRIGGER PUSH NOTIFICATIONS
         let payload = { title: `${title} • ${myRealName} (Principal)`, body: body, image: "https://raw.githubusercontent.com/Pixelaks/pixelaks.in/4c9dc43b4b3fd2c66679498581de26d690053f61/AdhyoraSplashLogo5.png", type: "chat", priority: "high" };
@@ -1209,18 +1351,20 @@ function renderTeacherList(searchTerm = "") {
         let tokensJson = JSON.stringify(tokensArr).replace(/"/g, '&quot;'); 
 
         return `<div class="data-card ${statusClass}" style="display:flex; justify-content:space-between; align-items:center; padding:15px 20px;">
-            <div style="flex:1; cursor:pointer;" onclick="window.TL_OpenDashboard('${t.id}')">
+            <div style="flex:1; cursor:pointer; padding-right: 10px;" onclick="window.TL_OpenDashboard('${t.id}')">
                 <div class="card-title" style="margin-bottom:2px;">${t.name || "Unknown"} ${hodBadge}</div>
                 <div style="font-size:11px; color:#64748b;">${t.email || "No Email"}</div><div style="font-size:12px; font-weight:bold; color:#475569; margin-top:2px;">Dept: ${cleanDept}</div>
             </div>
-            <div style="display:flex; gap:10px; align-items:center;">
-                <label style="display:flex; align-items:center; gap:5px; font-size:11px; font-weight:bold; color:#64748b; cursor:pointer;">
+            <div style="display:flex; gap:10px; align-items:center; flex-shrink: 0;">
+                <label style="display:flex; align-items:center; gap:5px; font-size:11px; font-weight:bold; color:#64748b; cursor:pointer;" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation()">
                     <input type="checkbox" ${isHod ? 'checked' : ''} onchange="window.TL_ToggleHOD('${t.id}', '${t.departmentID || ""}', this.checked)" style="accent-color:var(--brand-green);"> HOD
                 </label>
-                <select class="input-field" style="margin:0; padding:6px 10px; font-size:12px; width:auto; border-radius:8px;" onchange="window.TL_UpdateStatus('${t.id}', this.value)">
+                <select class="input-field" style="margin:0; padding:6px 10px; font-size:12px; width:auto; border-radius:8px;" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation()" onchange="window.TL_UpdateStatus('${t.id}', this.value)">
                     ${pendingOption} <option value="Approved" ${status === 'Approved' ? 'selected' : ''}>Approved</option> <option value="Declined" ${status === 'Declined' ? 'selected' : ''}>Declined</option>
                 </select>
-                <button class="action-icon-btn" title="Message" onclick="window.OpenCompose(true, '${t.name || ""}', ${tokensJson})"><i class="fas fa-comment-dots"></i></button>
+                <button class="action-icon-btn" title="Message" style="min-width: 44px; min-height: 44px; display: flex; justify-content: center; align-items: center; position: relative; z-index: 10;" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation(); window.OpenCompose(true, '${(t.name || "").replace(/'/g, "\\'")}', ${tokensJson}, '${t.id}')">
+                    <i class="fas fa-comment-dots" style="pointer-events: none;"></i>
+                </button>
             </div>
         </div>`;
     }).join('');
@@ -1561,14 +1705,20 @@ function renderStudentList(searchTerm = "") {
 
         let tokensJson = JSON.stringify(tokensArr).replace(/"/g, '&quot;');
         return `<div class="data-card ${statusClass}" style="display:flex; justify-content:space-between; align-items:center; padding:15px 20px;">
-            <div style="flex:1; cursor:pointer;" onclick="window.SL_OpenDashboard('${s.id}')">
+            <div style="flex:1; cursor:pointer; padding-right: 10px;" onclick="window.SL_OpenDashboard('${s.id}')">
                 <div class="card-title" style="margin-bottom:2px;">${s.Name || "Unknown"} <span style="font-size:11px; color:#94a3b8; font-weight:normal;">(${s.RollNumber || "N/A"})</span></div>
                 <div style="font-size:12px; font-weight:bold; color:#475569; margin-top:4px;">${cleanDept} - Year ${s.Year || "1"}</div>
             </div>
-            <div style="display:flex; gap:10px; align-items:center;">
+            <div style="display:flex; gap:10px; align-items:center; flex-shrink: 0;">
                 <span class="hod-badge" style="background:transparent; border:none; color:inherit; opacity:0.8;">${statusLabel}</span>
-                <button class="action-icon-btn" title="Manage Access" onclick="window.SL_OpenAdmin('${s.id}', '${s.Name}', '${status}')"><i class="fas fa-user-shield"></i></button>
-                <button class="action-icon-btn" title="Message" onclick="window.OpenCompose(true, '${s.Name || ""}', ${tokensJson})"><i class="fas fa-comment-dots"></i></button>
+                
+                <button class="action-icon-btn" title="Manage Access" style="min-width: 44px; min-height: 44px; display: flex; justify-content: center; align-items: center; position: relative; z-index: 10;" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation(); window.SL_OpenAdmin('${s.id}', '${(s.Name || "").replace(/'/g, "\\'")}', '${status}')">
+                    <i class="fas fa-user-shield" style="pointer-events: none;"></i>
+                </button>
+                
+                <button class="action-icon-btn" title="Message" style="min-width: 44px; min-height: 44px; display: flex; justify-content: center; align-items: center; position: relative; z-index: 10;" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation(); window.OpenCompose(true, '${(s.Name || "").replace(/'/g, "\\'")}', ${tokensJson}, '${s.id}')">
+                    <i class="fas fa-comment-dots" style="pointer-events: none;"></i>
+                </button>
             </div>
         </div>`;
     }).join('');
@@ -6849,25 +6999,25 @@ if (btnToggleSounds && soundToggleSwitch) {
     });
 }
 
-// 🚨 GLOBAL HAPTICS & CLICK SOUND DETECTOR
+// 🚨 GLOBAL HAPTICS & CLICK SOUND DETECTOR (UPGRADED FOR CAPTURE PHASE)
 document.addEventListener('click', (e) => {
-    // 🚨 FIX: Added 'select' so all dropdowns trigger the haptics and sound!
-    const target = e.target.closest('button, select, .nav-icon-btn, .menu-btn, .data-card, .data-upload-card, .asn-day-btn, .tt-day-btn, .settings-btn, [onclick]');
+    // 🚀 Added input[type="checkbox"] for the HOD toggles
+    const target = e.target.closest('button, select, input[type="checkbox"], .nav-icon-btn, .menu-btn, .data-card, .data-upload-card, .asn-day-btn, .tt-day-btn, .settings-btn, [onclick]');
     
     if (target) {
         if (navigator.vibrate) navigator.vibrate(15); 
-        UI_Audio.playClick(); 
+        if (typeof UI_Audio !== 'undefined') UI_Audio.playClick(); 
     }
-});
+}, true); // 🚀 THE FIX: 'true' forces the detector to run BEFORE stopPropagation() kills the event
 
-// 🚨 DROPDOWN SELECTION SOUND & HAPTICS
+// 🚨 DROPDOWN & CHECKBOX SELECTION SOUND & HAPTICS (UPGRADED FOR CAPTURE PHASE)
 document.addEventListener('change', (e) => {
-    // If the element that changed is a <select> dropdown
-    if (e.target.tagName.toLowerCase() === 'select') {
+    // 🚀 Added checkboxes to the change detector
+    if (e.target.tagName.toLowerCase() === 'select' || e.target.type === 'checkbox') {
         if (navigator.vibrate) navigator.vibrate(15); 
-        UI_Audio.playClick(); 
+        if (typeof UI_Audio !== 'undefined') UI_Audio.playClick(); 
     }
-});
+}, true); // 🚀 THE FIX: 'true' enables the Capture Phase
 
 // ==========================================
 // 🚨 CACHE INVALIDATOR (Pings Teachers to refresh RAM)
