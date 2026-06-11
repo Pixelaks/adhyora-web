@@ -2013,7 +2013,7 @@ window.addEventListener('popstate', (e) => {
     const sdView = document.getElementById("studentDashboardView");
     if (sdView && !sdView.classList.contains("hidden-view")) {
         document.getElementById("btnBackToStudents")?.click();
-        history.pushState({ layer: 'view' }, ''); // Restore popped state!
+        setTimeout(() => history.pushState({ layer: 'view' }, ''), 50); // 🚨 FIX: Wrapped in setTimeout to bypass mobile browser block
         return;
     }
 
@@ -2021,16 +2021,15 @@ window.addEventListener('popstate', (e) => {
     const tdView = document.getElementById("teacherDashboardView");
     if (tdView && !tdView.classList.contains("hidden-view")) {
         document.getElementById("btnBackToTeachers")?.click();
-        history.pushState({ layer: 'view' }, ''); 
+        setTimeout(() => history.pushState({ layer: 'view' }, ''), 50); // 🚨 FIX
         return;
     }
 
     // 3. Check if Assign Classes (Timetable) is open
     const assignView = document.getElementById("assignView");
     if (assignView && !assignView.classList.contains("hidden-view")) {
-        // 🚨 FIX: Corrected the button ID to match the actual exit button in initAssignEngine
         document.getElementById("btnBackFromAssign")?.click();
-        history.pushState({ layer: 'view' }, ''); 
+        setTimeout(() => history.pushState({ layer: 'view' }, ''), 50); // 🚨 FIX: Restores the stack securely!
         return;
     }
     // ========================================================
