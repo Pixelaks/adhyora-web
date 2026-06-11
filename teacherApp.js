@@ -1809,7 +1809,7 @@ document.getElementById("btnNavStudentList")?.addEventListener("click", () => {
 });
 
 document.getElementById("btnBackToStudents")?.addEventListener("click", () => {
-    switchView(views.studentList, document.getElementById("btnNavStudentList"));
+    navCloseSubPanel(() => switchView(views.studentList, document.getElementById("btnNavStudentList")));
 });
 
 document.getElementById("btnNavSubjectAssign")?.addEventListener("click", () => {
@@ -1928,9 +1928,10 @@ attachSafeClick("btnNavEventAttendance", (e) => switchView(views.eventAttendance
 attachSafeClick("jumpCloseBtn", () => document.getElementById("jumpDateModal").classList.remove("active"));
 
 // ==========================================
-// 🚀 SMART BACK BUTTON NAVIGATION ENGINE v3 (Double-Tap Exit)
+// 🚀 SMART BACK BUTTON NAVIGATION ENGINE v4 (Sub-Panel Aware + True Exit)
 // ==========================================
 let navActiveModals = [];
+let navSubPanelStack = []; // 🚨 NEW: Tracks sub-panels (Assign Classes, Student Dashboard, etc.)
 let isProgrammaticBack = false;
 let lastBackPressTime = 0;
 
@@ -1938,11 +1939,37 @@ let lastBackPressTime = 0;
 history.replaceState({ layer: 'base' }, '');
 history.pushState({ layer: 'home' }, '');
 
-// 2. Track Modals (Popups/Overlays)
+// 🚨 NEW: Call this whenever you open a "sub-panel" inside an already-open view
+// closeFn = the function that switches the UI back to the parent view
+function navOpenSubPanel(closeFn) {
+    navSubPanelStack.push(closeFn);
+    history.pushState({ layer: 'subpanel' }, '');
+}
+
+// 🚨 NEW: Call this when an in-app "Back/Close" BUTTON (not the hardware back button)
+// is used to leave a sub-panel
+function navCloseSubPanel(fallbackFn) {
+    if (navSubPanelStack.length > 0) {
+        const closeFn = navSubPanelStack.pop();
+        if (typeof closeFn === "function") closeFn();
+        isProgrammaticBack = true;
+        history.back();
+    } else if (typeof fallbackFn === "function") {
+        fallbackFn();
+    }
+}
+
+// 2. Track Modals (Popups/Overlays) — including ones created dynamically at runtime!
 const modalObserver = new MutationObserver((mutations) => {
     mutations.forEach(mutation => {
         if (mutation.attributeName === 'class') {
             const el = mutation.target;
+
+            // 🚨 Only track real overlay/popup elements (ignore unrelated 'active'
+            // class toggles on buttons, toggle-switches, day selectors, etc.)
+            const isTrackedOverlay = el.classList.contains('modal-overlay') || el.id === 'deptSplitOverlay';
+            if (!isTrackedOverlay) return;
+
             const isActive = el.classList.contains('active');
             const index = navActiveModals.indexOf(el);
 
@@ -1961,9 +1988,9 @@ const modalObserver = new MutationObserver((mutations) => {
     });
 });
 
-document.querySelectorAll('.modal-overlay').forEach(overlay => {
-    modalObserver.observe(overlay, { attributes: true, attributeFilter: ['class'] });
-});
+// 🚨 Observe the WHOLE document (subtree) so popups created later (deptSplitOverlay,
+// asnConfirmModal, medLeaveModal, etc.) are caught automatically!
+modalObserver.observe(document.body, { attributes: true, attributeFilter: ['class'], subtree: true });
 
 // 3. Track Sidebar Views
 const viewObserver = new MutationObserver((mutations) => {
@@ -1990,7 +2017,7 @@ if (navMainContent) {
 
 // 4. Handle Hardware / Browser Back Button
 window.addEventListener('popstate', (e) => {
-    // 🚨 ADD THIS: Immediate haptic feedback on back action
+    // Immediate haptic feedback on back action
     if (navigator.vibrate) navigator.vibrate(15);
     
     if (isProgrammaticBack) {
@@ -1998,38 +2025,27 @@ window.addEventListener('popstate', (e) => {
         return;
     }
 
-    // ACTION A: Close top-most modal
+    // ACTION A: Close top-most modal/popup (covers deptSplitOverlay & dynamic modals too)
     if (navActiveModals.length > 0) {
         const topModal = navActiveModals[navActiveModals.length - 1]; 
         topModal.classList.remove('active');
         return;
     }
 
-    // ========================================================
-    // 🚨 NEW ACTION A.5: Intercept internal Sub-Views natively!
-    // ========================================================
-    
-    // 1. Check if Student Dashboard is open
-    const sdView = document.getElementById("studentDashboardView");
-    if (sdView && !sdView.classList.contains("hidden-view")) {
-        document.getElementById("btnBackToStudents")?.click();
-        return; // 🚨 FIX: No more pushState hacks! The browser pops naturally.
+    // ACTION A.5: Close top-most tracked sub-panel (Assign Classes, Student Dashboard, etc.)
+    if (navSubPanelStack.length > 0) {
+        const closeFn = navSubPanelStack.pop();
+        if (typeof closeFn === "function") closeFn();
+        return; // Browser already moved back one entry — don't push again
     }
 
-    // 2. Check if Teacher Dashboard is open
+    // ACTION A.6: Legacy fallback for Teacher Dashboard sub-view (if present)
     const tdView = document.getElementById("teacherDashboardView");
     if (tdView && !tdView.classList.contains("hidden-view")) {
         document.getElementById("btnBackToTeachers")?.click();
+        history.pushState({ layer: 'view' }, ''); 
         return;
     }
-
-    // 3. Check if Assign Classes (Timetable) is open
-    const assignView = document.getElementById("assignView");
-    if (assignView && !assignView.classList.contains("hidden-view")) {
-        document.getElementById("btnBackFromAssign")?.click();
-        return; // 🚨 FIX: Closes panel and natively drops you back to the Timetable layer!
-    }
-    // ========================================================
 
     // ACTION B: Close Sidebar View (Return to Home)
     if (navMainContent && navMainContent.classList.contains("mobile-active")) {
@@ -2038,12 +2054,15 @@ window.addEventListener('popstate', (e) => {
         return;
     }
 
-    // ACTION C: Double-Tap to Exit
+    // ACTION C: Double-Tap to Exit (NEVER fall back to the Sign-In page)
     const currentTime = Date.now();
     if (currentTime - lastBackPressTime < 2000) {
-        // 🚨 FIX: Do not use history.back() as it jumps to the previous login URL!
-        // If the user wants to leave, they simply swipe away the app via OS controls.
-        if (typeof showRcToast === "function") showRcToast("Please swipe away to close the app.");
+        // Best-effort attempts to actually close the app/tab
+        try { window.close(); } catch(e) {}
+        if (navigator.app && typeof navigator.app.exitApp === "function") {
+            navigator.app.exitApp();
+        }
+        // If we're still here (browser blocked the close), stay on Home — don't go to index.html
         history.pushState({ layer: 'home' }, '');
     } else {
         lastBackPressTime = currentTime;
@@ -3645,8 +3664,8 @@ async function fetchGlobalSubjects() {
 window.SL_OpenDashboard = async (sID) => {
     sdCurrentStudentID = sID;
     switchView(views.studentDashboard, document.getElementById('btnNavStudentList'));
-    // 🚨 FIX: Push history state when dashboard opens
-    history.pushState({ layer: 'subview' }, '');
+    // 🚨 NEW: Register this as a sub-panel so back button closes IT first
+    navOpenSubPanel(() => switchView(views.studentList, document.getElementById('btnNavStudentList')));
     
     document.getElementById("sdNameText").innerText = "Loading..."; document.getElementById("sdRollText").innerText = ""; document.getElementById("sdStatusBadge").innerText = "..."; document.getElementById("sdSemesterTitle").innerText = "Loading...";
     SD_UpdateWaveUI(0); ["sdStatAtt", "sdStatAbs", "sdStatTot", "sdStatPAtt", "sdStatPAbs", "sdStatPTot"].forEach(id => document.getElementById(id).innerText = "0");
@@ -5800,8 +5819,8 @@ function initTimetableEngine() {
     document.getElementById("btnOpenHodAssign").addEventListener("click", () => {
         switchView(views.assign);
         initAssignEngine();
-        // 🚨 FIX: Push history state when opening so the back button has ammunition!
-        history.pushState({ layer: 'subview' }, '');
+        // 🚨 NEW: Register this as a sub-panel so back button closes IT first
+        navOpenSubPanel(() => switchView(views.timetable, document.getElementById("btnNavTimetable")));
     });
 
     let dayBtns = document.querySelectorAll("#ttMyDaysContainer .tt-day-btn");
@@ -5985,7 +6004,9 @@ function initAssignEngine() {
     if (asnLoaded) return;
     asnLoaded = true;
 
-    document.getElementById("btnBackFromAssign").addEventListener("click", () => switchView(views.timetable));
+    document.getElementById("btnBackFromAssign").addEventListener("click", () => {
+        navCloseSubPanel(() => switchView(views.timetable, document.getElementById("btnNavTimetable")));
+    });
     document.getElementById("btnAsnSave").addEventListener("click", asnSaveTimetable);
 
     // Setup Semester Dropdown
@@ -6402,11 +6423,6 @@ function getAsnConfirmModal() {
             </div>
         </div>`;
         document.body.appendChild(modal);
-
-        // 🚨 FIX: Manually tell the smart back button engine to track this dynamic modal!
-        if (typeof modalObserver !== 'undefined') {
-            modalObserver.observe(modal, { attributes: true, attributeFilter: ['class'] });
-        }
     }
     return modal;
 }
