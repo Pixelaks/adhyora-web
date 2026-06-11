@@ -1988,37 +1988,84 @@ if (navMainContent) {
     viewObserver.observe(navMainContent, { attributes: true, attributeFilter: ['class'] });
 }
 
-// 4. Handle Hardware / Browser Back Button
-window.addEventListener('popstate', (e) => {
-    // 🚨 ADD THIS: Immediate haptic feedback on back action
+// ==========================================
+// 🚀 BULLETPROOF BACK BUTTON ENGINE v4
+// ==========================================
+window.onpopstate = function(e) {
+    // 1. Immediate haptic feedback
     if (navigator.vibrate) navigator.vibrate(15);
     
+    // 2. Ignore code-triggered back steps
     if (isProgrammaticBack) {
         isProgrammaticBack = false;
         return;
     }
 
-    // ACTION A: Close top-most modal
+    // 3. CLOSE OVERLAYS & MODALS FIRST
     if (navActiveModals.length > 0) {
         const topModal = navActiveModals[navActiveModals.length - 1]; 
-        topModal.classList.remove('active');
+        if (topModal) topModal.classList.remove('active');
         return;
     }
 
-    // ACTION B: Close Sidebar View (Return to Home)
+    // 4. SMART SUB-VIEW ROUTER (Checks what is visible on screen)
+    const isVisible = (id) => {
+        const el = document.getElementById(id);
+        return el && !el.classList.contains('hidden-view') && el.style.display !== 'none';
+    };
+
+    // A. Student Dashboard -> Go back to Student List
+    if (isVisible("studentDashboardView")) {
+        switchView(views.studentList, document.getElementById("btnNavStudentList"));
+        setTimeout(() => history.pushState({ layer: 'view' }, ''), 10); 
+        return;
+    }
+
+    // B. Teacher Dashboard -> Go back to Teacher List (Principal App)
+    if (isVisible("teacherDashboardView")) {
+        switchView(views.teacherList, document.getElementById("btnNavTeacherList"));
+        setTimeout(() => history.pushState({ layer: 'view' }, ''), 10); 
+        return;
+    }
+
+    // C. Assign Classes -> Go back to Timetable
+    if (isVisible("assignView")) {
+        switchView(views.timetable, document.getElementById("btnNavTimetable"));
+        if (typeof TT_LoadTimetableForDay === "function") TT_LoadTimetableForDay(); // Refresh Principal Timetable if needed
+        if (typeof ttLoadTimetable === "function") ttLoadTimetable(); // Refresh Teacher Timetable if needed
+        setTimeout(() => history.pushState({ layer: 'view' }, ''), 10); 
+        return;
+    }
+
+    // D. Attendance Record Viewer -> Go back to History (Teacher App)
+    const attRec = document.getElementById("attRecordScreen");
+    if (attRec && attRec.style.display === "flex") {
+        attRec.style.display = "none";
+        document.getElementById("attHistoryScreen").style.display = "flex";
+        setTimeout(() => history.pushState({ layer: 'view' }, ''), 10); 
+        return;
+    }
+
+    // E. Attendance History -> Go back to Main Attendance (Teacher App)
+    const attHist = document.getElementById("attHistoryScreen");
+    if (attHist && attHist.style.display === "flex") {
+        attHist.style.display = "none";
+        document.getElementById("attMainScreen").style.display = "flex";
+        setTimeout(() => history.pushState({ layer: 'view' }, ''), 10); 
+        return;
+    }
+
+    // 5. CLOSE SIDEBAR VIEWS (Return to Home Dashboard)
     if (navMainContent && navMainContent.classList.contains("mobile-active")) {
-        const btnHome = document.getElementById("btnHome");
-        if (btnHome) btnHome.click();
+        switchView("HOME", document.getElementById("btnHome"));
         return;
     }
 
-    // ACTION C: Double-Tap to Exit
+    // 6. DOUBLE-TAP TO EXIT THE APP COMPLETELY
     const currentTime = Date.now();
     if (currentTime - lastBackPressTime < 2000) {
-        const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-        
-        if (isPWA) {
-            history.back();
+        if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+            history.back(); 
         } else {
             if (typeof showRcToast === "function") showRcToast("Please close the browser tab to exit.");
             history.pushState({ layer: 'home' }, '');
@@ -2026,9 +2073,9 @@ window.addEventListener('popstate', (e) => {
     } else {
         lastBackPressTime = currentTime;
         if (typeof showRcToast === "function") showRcToast("Press back again to exit");
-        history.pushState({ layer: 'home' }, '');
+        history.pushState({ layer: 'home' }, ''); 
     }
-});
+};
 
 // ==========================================
 // 🚨 SETTINGS DRAWER ACTIONS
@@ -3348,6 +3395,7 @@ let slRenderedStudents = [];
 let slLastVisibleDoc = null; 
 let slIsFetching = false;
 let slHasMoreData = true;
+let slTotalDBCount = 0; // 🚨 ADDED: Tracks the total database count securely
 
 function startStudentListListener() {
     if (slLoaded) return;
@@ -3362,6 +3410,18 @@ function startStudentListListener() {
     slLastVisibleDoc = null;
     slHasMoreData = true;
     
+    // 🚨 NEW: Fetch exact total count securely in the background without costing document reads!
+    import("https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js").then(module => {
+        module.getCountFromServer(collection(db, "colleges", currentCollegeID, "students")).then(snap => {
+            slTotalDBCount = snap.data().count;
+            let headerCountEl = document.getElementById("slTotalStudents");
+            let searchVal = document.getElementById("slSearchInput").value.trim();
+            if (headerCountEl && !searchVal) {
+                headerCountEl.innerText = `Total: ${slTotalDBCount}`;
+            }
+        }).catch(e => console.warn("Could not fetch total count.", e));
+    });
+
     fetchNextStudentBatch("");
 }
 
@@ -3376,6 +3436,8 @@ async function fetchNextStudentBatch(searchTerm) {
     if(t && !slLastVisibleDoc && !searchTerm) { 
         t.innerText = "Loading Students..."; t.style.bottom = "30px"; setTimeout(() => t.style.bottom = "-100px", 1500); 
     }
+
+    let currentSearchMatchCount = 0; // 🚨 Track exact search matches
 
     try {
         if (searchTerm) {
@@ -3402,7 +3464,7 @@ async function fetchNextStudentBatch(searchTerm) {
                 ];
 
                 // If they typed a number first, probe the Year field too
-                if (!isNaN(primaryTerm)) {
+                if (!isNaN(primaryTerm) && primaryTerm.length > 0) {
                     queries.push(getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("Year", "==", primaryTerm), limit(20))));
                     queries.push(getDocs(query(collection(db, "colleges", currentCollegeID, "students"), where("year", "==", primaryTerm), limit(20))));
                 }
@@ -3433,6 +3495,8 @@ async function fetchNextStudentBatch(searchTerm) {
                 return terms.every(term => sStr.includes(term)); 
             });
 
+            currentSearchMatchCount = filtered.length; // 🚨 Save the exact match count
+            
             // Display the top 50 matches
             slRenderedStudents = filtered.slice(0, 50);
 
@@ -3474,6 +3538,11 @@ async function fetchNextStudentBatch(searchTerm) {
             }
             listEl.innerHTML = "";
             slIsFetching = false;
+            
+            // 🚨 Ensure the count hits zero if search fails
+            let headerCountEl = document.getElementById("slTotalStudents");
+            if (headerCountEl) headerCountEl.innerText = `Total: 0`; 
+            
             return;
         }
 
@@ -3530,8 +3599,16 @@ async function fetchNextStudentBatch(searchTerm) {
         if (searchTerm) listEl.innerHTML = htmlChunk;
         else listEl.insertAdjacentHTML('beforeend', htmlChunk);
         
+        // 🚨 THE FIX: Display Exact Total Count instead of "Loaded: X"
         let headerCountEl = document.getElementById("slTotalStudents");
-        if (headerCountEl) headerCountEl.innerText = `Loaded: ${slRenderedStudents.length}`; 
+        if (headerCountEl) {
+            if (searchTerm) {
+                headerCountEl.innerText = `Total: ${currentSearchMatchCount}`;
+            } else {
+                // Fallback to rendered amount ONLY if the database count hasn't loaded yet
+                headerCountEl.innerText = `Total: ${slTotalDBCount > 0 ? slTotalDBCount : slRenderedStudents.length}`; 
+            }
+        }
 
     } catch (error) {
         console.error("Error fetching students:", error);
@@ -9023,7 +9100,7 @@ if (btnToggleSounds && soundToggleSwitch) {
 }
 
 // 🚨 GLOBAL HAPTICS & CLICK SOUND DETECTOR
-document.addEventListener('pointerdown', (e) => {
+document.addEventListener('click', (e) => {
     // 🚨 FIX: Added .attd-mark-row to instantly catch attendance taps!
     const target = e.target.closest('button, select, .toggle-switch, .nav-icon-btn, .menu-btn, .data-card, .sub-card, .ss-stu-card, .evt-card, .asn-card, .attd-row, .settings-btn, .ledger-row, .attd-mark-row, [onclick]');
     
