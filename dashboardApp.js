@@ -443,7 +443,7 @@ function startBackgroundListeners() {
 
     let activeMessageListeners = new Map(); 
 
-    onSnapshot(query(collection(db, "colleges", collegeID, "chats"), where("participants", "array-contains", auth.currentUser.uid)), (snap) => {
+    onSnapshot(query(collection(db, "colleges", collegeID, "chats"), where("participants", "array-contains", currentRollNo)), (snap) => {
         snap.docChanges().forEach(change => {
             let chatID = change.doc.id;
 
@@ -1444,6 +1444,9 @@ if (el.mainView) viewObserver.observe(el.mainView, { attributes: true, attribute
 
 // 5. Execute Hardware / Browser Back Button Logic
 window.addEventListener('popstate', (e) => {
+    // 🚨 ADD THIS: Immediate haptic feedback on back action
+    if (navigator.vibrate) navigator.vibrate(15);
+    
     if (isProgrammaticBack) {
         isProgrammaticBack = false;
         return;
@@ -2669,7 +2672,7 @@ if (btnToggleSounds && soundToggleSwitch) {
 // ==========================================
 // 🚨 NATIVE ANDROID HAPTIC FEEDBACK & CLICK SOUNDS
 // ==========================================
-document.addEventListener('pointerdown', (e) => {
+document.addEventListener('click', (e) => {
     // 🚨 FIX: Added .water-progress to the list of recognized clickable targets!
     const target = e.target.closest('button, .icon-btn, .profile-card, .day-btn, .period-btn, .color-swatch, .ledger-row, .water-progress, [onclick]');
     
