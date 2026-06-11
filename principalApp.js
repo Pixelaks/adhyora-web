@@ -5491,55 +5491,79 @@ function SetLockMode(mode) {
     lockMode = mode;
     elLock.input.value = "";
     
-    // 🚨 NEW: Clear the ghost dots!
+    // Clear the ghost dots!
     const dots = document.querySelectorAll("#pinDisplayWrapper .pin-dot");
     if (dots.length > 0) dots.forEach(d => d.classList.remove("filled"));
     
+    // 🚨 Explicitly hide the visual PIN dots if setting up Biometrics
+    const pinWrapper = document.getElementById("pinDisplayWrapper");
+    if (pinWrapper) {
+        pinWrapper.style.display = (mode === "SETUP_BIO") ? "none" : "flex";
+    }
+
     elLock.btnForgot.style.display = "none";
-    elLock.btnForgot.innerText = "Forgot PIN?"; // Reset the text
-    elLock.input.style.display = "inline-block"; // Ensure input is visible by default
+    elLock.btnForgot.innerText = "Forgot PIN?"; 
+    elLock.input.style.display = (mode === "SETUP_BIO") ? "none" : "inline-block"; 
+    
+    // 🚨 Hide the ugly button for PIN entry modes.
+    elLock.btnSubmit.style.display = (mode === "SETUP_BIO") ? "block" : "none";
     
     if (mode !== "SETUP_BIO") elLock.input.focus();
 
     if (mode === "LOGIN") {
         elLock.title.innerText = "ENTER SECURE PIN";
         elLock.status.innerText = "Enter 4-digit PIN to unlock.";
-        elLock.status.style.color = "#94a3b8";
-        elLock.btnSubmit.innerText = "Unlock Dashboard";
+        elLock.status.style.color = "#94a3b8"; // Default Gray
+        
         if (failedPinAttempts >= 2) elLock.btnForgot.style.display = "block";
         
         if (isBioEnabledLocally && isBiometricSupported) {
             elLock.btnBio.style.display = "block";
             setTimeout(() => elLock.btnBio.click(), 500); 
         } else {
-            elLock.btnBio.style.display = "none";
+            if(elLock.btnBio) elLock.btnBio.style.display = "none";
         }
     } 
     else if (mode === "SETUP_1" || mode === "RESET_NEW_1") {
         elLock.title.innerText = "CREATE SECURITY PIN";
         elLock.status.innerText = "Set a 4-digit PIN to secure your dashboard.";
-        elLock.status.style.color = "#4ade80";
-        elLock.btnSubmit.innerText = "Next Step";
-        elLock.btnBio.style.display = "none";
+        elLock.status.style.color = "#10b981"; // 🟢 Green
+        if(elLock.btnBio) elLock.btnBio.style.display = "none";
     }
     else if (mode === "SETUP_2" || mode === "RESET_NEW_2") {
         elLock.title.innerText = "CONFIRM NEW PIN";
         elLock.status.innerText = "Please re-enter the PIN to confirm.";
-        elLock.status.style.color = "#facc15";
-        elLock.btnSubmit.innerText = "Save Security PIN";
-        elLock.btnBio.style.display = "none";
+        elLock.status.style.color = "#f59e0b"; // 🟡 Yellow
+        if(elLock.btnBio) elLock.btnBio.style.display = "none";
     }
-    // 🚨 NEW: The Biometric Prompt Mode
     else if (mode === "SETUP_BIO") {
-        elLock.title.innerHTML = '<i class="fas fa-fingerprint" style="color:#4ade80; font-size:40px; margin-bottom:10px;"></i><br>ENABLE BIOMETRICS';
+        // 🟢 Icon matches Principal Theme (Green)
+        elLock.title.innerHTML = '<i class="fas fa-fingerprint" style="color:var(--brand-green); font-size:40px; margin-bottom:10px;"></i><br>ENABLE BIOMETRICS';
         elLock.status.innerText = "Unlock your dashboard instantly with your Fingerprint or Face ID.";
-        elLock.status.style.color = "#4ade80";
-        elLock.input.style.display = "none"; // Hide the PIN box
-        elLock.btnSubmit.innerText = "Enable Fingerprint";
+        elLock.status.style.color = "var(--text-muted)"; // Neutral gray for instructions
         
-        // Repurpose the "Forgot" button into a "Skip" button!
+        // 🟢 Button styled for Principal Theme (Green)
+        elLock.btnSubmit.innerHTML = '<i class="fas fa-fingerprint" style="margin-right:8px;"></i> Enable Fingerprint';
+        elLock.btnSubmit.style.cssText = `
+            display: block; 
+            width: 100%; 
+            max-width: 250px; 
+            margin: 20px auto 0 auto; 
+            padding: 12px 20px; 
+            background: var(--brand-green); 
+            color: white; 
+            border: none; 
+            border-radius: 12px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            font-size: 15px; 
+            box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3);
+            transition: 0.2s;
+        `;
+        
         elLock.btnForgot.innerText = "Skip for now";
         elLock.btnForgot.style.display = "block";
+        if(elLock.btnBio) elLock.btnBio.style.display = "none";
     }
 }
 
