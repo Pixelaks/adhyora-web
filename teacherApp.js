@@ -1934,7 +1934,8 @@ let lastBackPressTime = 0;
 let isProgrammaticClose = false;
 
 // 1. Set the baseline history state
-history.replaceState({ appState: 'home' }, '');
+// 🚨 CHANGED: Must be pushState so the browser has a dummy state to pop on the first tap!
+history.pushState({ appState: 'home' }, ''); 
 
 // 2. THE WATCHER: Push history states exactly when UI opens
 const uiObserver = new MutationObserver((mutations) => {
@@ -2014,8 +2015,8 @@ window.addEventListener('popstate', (e) => {
         if (!closedSomething) {
             const currentTime = Date.now();
             if (currentTime - lastBackPressTime < 2000) {
-                window.close();
-                if (typeof showRcToast === "function") showRcToast("Please close the app manually.");
+                // 🚨 CHANGED: Force the browser to natively exit the app on the second tap
+                history.back(); 
             } else {
                 lastBackPressTime = currentTime;
                 if (typeof showRcToast === "function") showRcToast("Press back again to exit");
