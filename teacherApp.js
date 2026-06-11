@@ -1988,84 +1988,67 @@ if (navMainContent) {
     viewObserver.observe(navMainContent, { attributes: true, attributeFilter: ['class'] });
 }
 
-// ==========================================
-// 🚀 BULLETPROOF BACK BUTTON ENGINE v4
-// ==========================================
-window.onpopstate = function(e) {
-    // 1. Immediate haptic feedback
+// 4. Handle Hardware / Browser Back Button
+window.addEventListener('popstate', (e) => {
+    // 🚨 ADD THIS: Immediate haptic feedback on back action
     if (navigator.vibrate) navigator.vibrate(15);
     
-    // 2. Ignore code-triggered back steps
     if (isProgrammaticBack) {
         isProgrammaticBack = false;
         return;
     }
 
-    // 3. CLOSE OVERLAYS & MODALS FIRST
+    // ACTION A: Close top-most modal
     if (navActiveModals.length > 0) {
         const topModal = navActiveModals[navActiveModals.length - 1]; 
-        if (topModal) topModal.classList.remove('active');
+        topModal.classList.remove('active');
         return;
     }
 
-    // 4. SMART SUB-VIEW ROUTER (Checks what is visible on screen)
-    const isVisible = (id) => {
-        const el = document.getElementById(id);
-        return el && !el.classList.contains('hidden-view') && el.style.display !== 'none';
-    };
-
-    // A. Student Dashboard -> Go back to Student List
-    if (isVisible("studentDashboardView")) {
-        switchView(views.studentList, document.getElementById("btnNavStudentList"));
-        setTimeout(() => history.pushState({ layer: 'view' }, ''), 10); 
+    // ========================================================
+    // 🚨 NEW ACTION A.5: Intercept internal Sub-Views before closing to Home!
+    // ========================================================
+    
+    // 1. Check if Student Dashboard is open
+    const sdView = document.getElementById("studentDashboardView");
+    if (sdView && !sdView.classList.contains("hidden-view")) {
+        document.getElementById("btnBackToStudents")?.click();
+        history.pushState({ layer: 'view' }, ''); // Restore popped state!
         return;
     }
 
-    // B. Teacher Dashboard -> Go back to Teacher List (Principal App)
-    if (isVisible("teacherDashboardView")) {
-        switchView(views.teacherList, document.getElementById("btnNavTeacherList"));
-        setTimeout(() => history.pushState({ layer: 'view' }, ''), 10); 
+    // 2. Check if Teacher Dashboard is open
+    const tdView = document.getElementById("teacherDashboardView");
+    if (tdView && !tdView.classList.contains("hidden-view")) {
+        document.getElementById("btnBackToTeachers")?.click();
+        history.pushState({ layer: 'view' }, ''); 
         return;
     }
 
-    // C. Assign Classes -> Go back to Timetable
-    if (isVisible("assignView")) {
-        switchView(views.timetable, document.getElementById("btnNavTimetable"));
-        if (typeof TT_LoadTimetableForDay === "function") TT_LoadTimetableForDay(); // Refresh Principal Timetable if needed
-        if (typeof ttLoadTimetable === "function") ttLoadTimetable(); // Refresh Teacher Timetable if needed
-        setTimeout(() => history.pushState({ layer: 'view' }, ''), 10); 
+    // 3. Check if Assign Classes (Timetable) is open
+    const assignView = document.getElementById("assignView");
+    if (assignView && !assignView.classList.contains("hidden-view")) {
+        // 🚨 FIX: Corrected the button ID to match the actual exit button in initAssignEngine
+        document.getElementById("btnBackFromAssign")?.click();
+        history.pushState({ layer: 'view' }, ''); 
         return;
     }
+    // ========================================================
 
-    // D. Attendance Record Viewer -> Go back to History (Teacher App)
-    const attRec = document.getElementById("attRecordScreen");
-    if (attRec && attRec.style.display === "flex") {
-        attRec.style.display = "none";
-        document.getElementById("attHistoryScreen").style.display = "flex";
-        setTimeout(() => history.pushState({ layer: 'view' }, ''), 10); 
-        return;
-    }
-
-    // E. Attendance History -> Go back to Main Attendance (Teacher App)
-    const attHist = document.getElementById("attHistoryScreen");
-    if (attHist && attHist.style.display === "flex") {
-        attHist.style.display = "none";
-        document.getElementById("attMainScreen").style.display = "flex";
-        setTimeout(() => history.pushState({ layer: 'view' }, ''), 10); 
-        return;
-    }
-
-    // 5. CLOSE SIDEBAR VIEWS (Return to Home Dashboard)
+    // ACTION B: Close Sidebar View (Return to Home)
     if (navMainContent && navMainContent.classList.contains("mobile-active")) {
-        switchView("HOME", document.getElementById("btnHome"));
+        const btnHome = document.getElementById("btnHome");
+        if (btnHome) btnHome.click();
         return;
     }
 
-    // 6. DOUBLE-TAP TO EXIT THE APP COMPLETELY
+    // ACTION C: Double-Tap to Exit
     const currentTime = Date.now();
     if (currentTime - lastBackPressTime < 2000) {
-        if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
-            history.back(); 
+        const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+        
+        if (isPWA) {
+            history.back();
         } else {
             if (typeof showRcToast === "function") showRcToast("Please close the browser tab to exit.");
             history.pushState({ layer: 'home' }, '');
@@ -2073,9 +2056,9 @@ window.onpopstate = function(e) {
     } else {
         lastBackPressTime = currentTime;
         if (typeof showRcToast === "function") showRcToast("Press back again to exit");
-        history.pushState({ layer: 'home' }, ''); 
+        history.pushState({ layer: 'home' }, '');
     }
-};
+});
 
 // ==========================================
 // 🚨 SETTINGS DRAWER ACTIONS
@@ -6423,6 +6406,11 @@ function getAsnConfirmModal() {
             </div>
         </div>`;
         document.body.appendChild(modal);
+
+        // 🚨 FIX: Manually tell the smart back button engine to track this dynamic modal!
+        if (typeof modalObserver !== 'undefined') {
+            modalObserver.observe(modal, { attributes: true, attributeFilter: ['class'] });
+        }
     }
     return modal;
 }
