@@ -7306,15 +7306,43 @@ document.getElementById("btnSendMessage")?.addEventListener("click", async () =>
         if (composeIsPrivate && composeRecipientID) {
             let targetName = document.getElementById("composePrivateTarget").value;
             
-            await teacherAPI({
-                routeAction: "SEND_MESSAGE",
-                collegeId: currentCollegeID,
-                isPrivate: true,
-                targetID: composeRecipientID,
-                targetName: targetName,
+            // 🚀 FRONTEND WRITE BATCH: Directly write to chats to avoid backend cc'ing the Principal!
+            let chatID = currentUserID < composeRecipientID ? `${currentUserID}_${composeRecipientID}` : `${composeRecipientID}_${currentUserID}`;
+            let batchWrite = writeBatch(db);
+            
+            let roomRef = doc(db, "colleges", currentCollegeID, "chats", chatID);
+            batchWrite.set(roomRef, {
+                participants: [currentUserID, composeRecipientID],
+                lastUpdated: serverTimestamp()
+            }, { merge: true });
+            
+            let msgRef = doc(collection(roomRef, "messages"));
+            batchWrite.set(msgRef, {
+                senderID: currentUserID,
+                senderName: currentTeacherName,
+                senderRole: isHOD ? "Teacher (HOD)" : "Teacher",
                 title: title,
-                body: body
+                body: body,
+                timestamp: serverTimestamp(),
+                status: "sent"
             });
+            
+            let sentRef = doc(collection(db, "colleges", currentCollegeID, "sent_messages"));
+            batchWrite.set(sentRef, {
+                title: title,
+                body: body,
+                senderID: currentUserID,
+                senderName: currentTeacherName,
+                senderRole: isHOD ? "Teacher (HOD)" : "Teacher",
+                targetSummary: targetName,
+                timestamp: serverTimestamp(),
+                type: "private",
+                status: "sent",
+                linkedChatID: chatID,
+                linkedMessageID: msgRef.id
+            });
+            
+            await batchWrite.commit();
 
             if (composeFCMTokens && composeFCMTokens.length > 0) {
                 sendPushNotification(title, body, composeFCMTokens, null);
@@ -7341,15 +7369,43 @@ document.getElementById("btnSendMessage")?.addEventListener("click", async () =>
                 let prinID = prinSnap.docs[0].id;
                 let prinName = prinSnap.docs[0].data().name || "Principal";
                 
-                await teacherAPI({
-                    routeAction: "SEND_MESSAGE",
-                    collegeId: currentCollegeID,
-                    isPrivate: true,
-                    targetID: prinID,
-                    targetName: prinName,
+                // 🚀 FRONTEND WRITE BATCH (Direct chat with Principal)
+                let chatID = currentUserID < prinID ? `${currentUserID}_${prinID}` : `${prinID}_${currentUserID}`;
+                let batchWrite = writeBatch(db);
+                
+                let roomRef = doc(db, "colleges", currentCollegeID, "chats", chatID);
+                batchWrite.set(roomRef, {
+                    participants: [currentUserID, prinID],
+                    lastUpdated: serverTimestamp()
+                }, { merge: true });
+                
+                let msgRef = doc(collection(roomRef, "messages"));
+                batchWrite.set(msgRef, {
+                    senderID: currentUserID,
+                    senderName: currentTeacherName,
+                    senderRole: isHOD ? "Teacher (HOD)" : "Teacher",
                     title: title,
-                    body: body
+                    body: body,
+                    timestamp: serverTimestamp(),
+                    status: "sent"
                 });
+                
+                let sentRef = doc(collection(db, "colleges", currentCollegeID, "sent_messages"));
+                batchWrite.set(sentRef, {
+                    title: title,
+                    body: body,
+                    senderID: currentUserID,
+                    senderName: currentTeacherName,
+                    senderRole: isHOD ? "Teacher (HOD)" : "Teacher",
+                    targetSummary: prinName,
+                    timestamp: serverTimestamp(),
+                    type: "private",
+                    status: "sent",
+                    linkedChatID: chatID,
+                    linkedMessageID: msgRef.id
+                });
+                
+                await batchWrite.commit();
                 
                 let safeColID = getSafeTopic(currentCollegeID);
                 sendPushNotification(title, body, null, [`${safeColID}_PRINCIPAL`]);
