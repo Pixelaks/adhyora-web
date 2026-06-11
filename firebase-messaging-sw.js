@@ -29,6 +29,11 @@ self.addEventListener('notificationclick', function(event) {
       targetAction = 'openEventReq';
       targetHash = '#events';
     }
+    // 🚨 ADD THIS FIX: Stop "system" notifications from defaulting to the Inbox!
+    else if (msgType === 'general' || msgType === 'login') {
+      targetAction = 'none'; // Don't click any buttons
+      targetHash = ''; // Just open the plain home screen URL
+    }
   } catch(e) {
     console.log("Could not read message type, defaulting to inbox.");
   }
