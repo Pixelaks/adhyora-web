@@ -1,6 +1,62 @@
 @import url('https://fonts.googleapis.com/css2?family=Yatra+One&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
 
+
+/* 🚨 PREMIUM TEXT SHIMMER ANIMATION */
+@keyframes textShimmer {
+    0% { background-position: 200% center; }
+    100% { background-position: -200% center; }
+}
+
+.logo-text, .loader-title {
+    /* 🚨 SUBTLE SHIMMER EFFECT */
+    background: linear-gradient(110deg, var(--brand-green, #4ade80) 40%, rgba(255,255,255,0.3) 50%, var(--brand-green, #4ade80) 60%);
+    background-size: 200% auto;
+    color: transparent !important;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: textShimmer 4s linear infinite;
+}
+
+/* =========================================
+   🚨 MOBILE NATIVE UX FIXES (Bounce & Touch)
+   ========================================= */
+* {
+    /* 1. Removes the ugly default blue tap box on Android Chrome */
+    -webkit-tap-highlight-color: transparent;
+    /* 2. Forces the browser to register taps instantly (removes 300ms delay) */
+    touch-action: manipulation;
+}
+
+/* 3. Universal Native "Bounce" Effect on Touch */
+button:active, 
+.nav-icon-btn:active, 
+.menu-btn:active, 
+.data-upload-card:active, 
+.asn-day-btn:active, 
+.tt-day-btn:active, 
+.settings-btn:active,
+.evt-header:active,
+.ledger-row:active {
+    transform: scale(0.94) !important; /* Shrink slightly on press */
+    transition: transform 0.05s ease !important; /* Shrink instantly */
+}
+
+/* 4. Springy bounce back when the user lets go */
+button, 
+.nav-icon-btn, 
+.menu-btn, 
+.data-card, 
+.data-upload-card, 
+.asn-day-btn, 
+.tt-day-btn, 
+.settings-btn,
+.evt-header,
+.ss-stu-card,
+.bch-stu-card,
+.ledger-row {
+    transition: all 0.2s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
 /* =======================================================
    💧 LIQUID SLIDING WAVE EFFECT (VIEW TRANSITIONS)
    ======================================================= */
@@ -86,6 +142,7 @@
 
 .principal-loader.hidden {
     opacity: 0;
+    pointer-events: none; /* Instantly lets clicks pass through */
     visibility: hidden;
 }
 
@@ -1623,4 +1680,136 @@ body.dark-mode .icon-nav-container::before {
     background: #fef2f2;
     color: #dc2626;
     border: 1px solid #fecaca;
+}
+
+/* =========================================
+   🚨 NATIVE VAULT LOCK SCREEN UX (GLASSMORPHISM)
+   ========================================= */
+#appLockScreen {
+    background: #0e1522 !important; 
+    overflow: hidden; 
+}
+
+/* 1. The floating, glowing GREEN orb behind the glass */
+#appLockScreen::before {
+    content: '';
+    position: absolute;
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, var(--brand-green, #4ade80) 0%, transparent 70%);
+    border-radius: 50%;
+    top: 30%;
+    left: 50%;
+    opacity: 0.35;
+    filter: blur(50px); /* Soften the orb edges */
+    z-index: 0; /* Keeps it behind the glass box */
+    pointer-events: none; /* Prevents it from blocking taps */
+    
+    /* 🚨 ZERO-LAG GPU ACCELERATION */
+    transform: translate3d(-50%, -50%, 0);
+    will-change: transform, opacity;
+    animation: floatOrb 8s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+}
+
+@keyframes floatOrb {
+    0% { transform: translate3d(-80%, -30%, 0) scale(1); opacity: 0.3; }
+    50% { transform: translate3d(-20%, -60%, 0) scale(1.3); opacity: 0.5; }
+    100% { transform: translate3d(-50%, -10%, 0) scale(0.9); opacity: 0.3; }
+}
+
+/* 2. Ghost PIN Dot Styling */
+.pin-display-wrapper {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin: 25px 0 35px 0;
+    cursor: pointer;
+}
+
+.pin-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.2);
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.pin-dot.filled {
+    background: var(--brand-green);
+    border-color: var(--brand-green);
+    transform: scale(1.3);
+    box-shadow: 0 0 15px rgba(74, 222, 128, 0.4);
+}
+
+.shake-error {
+    animation: lockShake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+@keyframes lockShake {
+    10%, 90% { transform: translate3d(-2px, 0, 0); }
+    20%, 80% { transform: translate3d(4px, 0, 0); }
+    30%, 50%, 70% { transform: translate3d(-8px, 0, 0); }
+    40%, 60% { transform: translate3d(8px, 0, 0); }
+}
+
+#lockPinInput {
+    position: absolute !important;
+    opacity: 0 !important;
+    left: -9999px !important; 
+}
+
+/* =========================================
+   🚨 PREMIUM ISOMETRIC DOCUMENT STACK (PRINCIPAL GREEN)
+   ========================================= */
+.isometric-loader {
+    position: relative;
+    width: 45px;
+    height: 45px;
+    margin: 0 auto 35px auto;
+    transform: rotateX(60deg) rotateZ(45deg);
+    transform-style: preserve-3d;
+}
+
+.iso-layer {
+    position: absolute;
+    inset: 0;
+    background: var(--brand-green);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    
+    /* 🚀 Forces the Graphics Card (GPU) to handle this element */
+    will-change: transform;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+}
+
+.iso-layer:nth-child(1) {
+    transform: translateZ(0px);
+    opacity: 0.2;
+    animation: isoLayer1 1.5s infinite ease-in-out alternate;
+}
+.iso-layer:nth-child(2) {
+    transform: translateZ(15px);
+    opacity: 0.5;
+    animation: isoLayer2 1.5s infinite ease-in-out alternate;
+}
+.iso-layer:nth-child(3) {
+    transform: translateZ(30px);
+    opacity: 1;
+    box-shadow: -10px 10px 20px rgba(74, 222, 128, 0.2);
+    animation: isoLayer3 1.5s infinite ease-in-out alternate;
+}
+
+@keyframes isoLayer1 {
+    0% { transform: translateZ(0px); }
+    100% { transform: translateZ(-10px); }
+}
+@keyframes isoLayer2 {
+    0% { transform: translateZ(15px); }
+    100% { transform: translateZ(25px); }
+}
+@keyframes isoLayer3 {
+    0% { transform: translateZ(30px); }
+    100% { transform: translateZ(65px); }
 }
