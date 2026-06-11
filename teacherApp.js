@@ -1928,136 +1928,174 @@ attachSafeClick("btnNavEventAttendance", (e) => switchView(views.eventAttendance
 attachSafeClick("jumpCloseBtn", () => document.getElementById("jumpDateModal").classList.remove("active"));
 
 // ==========================================
-// 🚀 SMART BACK BUTTON NAVIGATION ENGINE v3 (Double-Tap Exit)
+// 🚀 SMART BACK BUTTON NAVIGATION ENGINE v7 (Forward-Push Method)
 // ==========================================
-let navActiveModals = [];
-let isProgrammaticBack = false;
 let lastBackPressTime = 0;
+let isProgrammaticClose = false;
 
-// 1. Initialize Base State
-history.replaceState({ layer: 'base' }, '');
-history.pushState({ layer: 'home' }, '');
+// 1. Set the baseline history state
+history.replaceState({ appState: 'home' }, '');
 
-// 2. Track Modals (Popups/Overlays)
-const modalObserver = new MutationObserver((mutations) => {
-    mutations.forEach(mutation => {
-        if (mutation.attributeName === 'class') {
-            const el = mutation.target;
-            const isActive = el.classList.contains('active');
-            const index = navActiveModals.indexOf(el);
+// 2. THE WATCHER: Push history states exactly when UI opens
+const uiObserver = new MutationObserver((mutations) => {
+    if (isProgrammaticClose) return; // Ignore closings caused by our own back button
 
-            if (isActive && index === -1) {
-                navActiveModals.push(el);
-                history.pushState({ layer: 'modal', id: el.id }, '');
-            } 
-            else if (!isActive && index !== -1) {
-                navActiveModals.splice(index, 1);
-                if (history.state && history.state.id === el.id) {
-                    isProgrammaticBack = true;
-                    history.back();
+    let shouldPushState = false;
+
+    mutations.forEach(m => {
+        if (shouldPushState) return;
+        const el = m.target;
+
+        // Watch for Modals, Overlays, and Sidebars opening
+        if (m.attributeName === 'class') {
+            const oldClass = m.oldValue || '';
+            
+            if (el.classList.contains('active') && !oldClass.includes('active')) {
+                if (el.classList.contains('modal-overlay') || el.id === 'settingsOverlay' || el.classList.contains('compose-modal')) {
+                    shouldPushState = true;
+                }
+            }
+            if (el.classList.contains('mobile-active') && !oldClass.includes('mobile-active')) {
+                shouldPushState = true;
+            }
+            if (el.id === 'studentDashboardView' || el.id === 'assignView') {
+                if (!el.classList.contains('hidden-view') && oldClass.includes('hidden-view')) {
+                    shouldPushState = true;
+                }
+            }
+        }
+
+        // Watch for Accordions and Sub-screens opening
+        if (m.attributeName === 'style') {
+            const oldStyle = m.oldValue || '';
+            const newDisplay = window.getComputedStyle(el).display;
+            
+            if (el.id.startsWith('subCardBody_') || el.id.startsWith('sa_group_body_') || 
+                el.id.startsWith('bch_group_body_') || el.id.startsWith('im_batch_body_') || 
+                el.id.startsWith('hist_rec_body_')) {
+                if (newDisplay === 'block' && !oldStyle.includes('display: block')) {
+                    shouldPushState = true;
+                }
+            }
+
+            if (el.id === 'attRecordScreen' || el.id === 'attHistoryScreen') {
+                if (newDisplay === 'flex' && !oldStyle.includes('display: flex')) {
+                    shouldPushState = true;
                 }
             }
         }
     });
+
+    if (shouldPushState) {
+        history.pushState({ appState: 'ui_open' }, '');
+    }
 });
 
-document.querySelectorAll('.modal-overlay').forEach(overlay => {
-    modalObserver.observe(overlay, { attributes: true, attributeFilter: ['class'] });
+// Start watching the app
+uiObserver.observe(document.body, { 
+    attributes: true, 
+    subtree: true, 
+    attributeFilter: ['class', 'style'],
+    attributeOldValue: true
 });
 
-// 3. Track Sidebar Views
-const viewObserver = new MutationObserver((mutations) => {
-    mutations.forEach(mutation => {
-        if (mutation.attributeName === 'class') {
-            const el = mutation.target;
-            const isViewOpen = el.classList.contains('mobile-active');
-            
-            if (isViewOpen && (!history.state || history.state.layer !== 'view')) {
-                history.pushState({ layer: 'view' }, '');
-            } 
-            else if (!isViewOpen && history.state && history.state.layer === 'view') {
-                isProgrammaticBack = true;
-                history.back();
-            }
-        }
-    });
-});
 
-const navMainContent = document.querySelector(".main-content");
-if (navMainContent) {
-    viewObserver.observe(navMainContent, { attributes: true, attributeFilter: ['class'] });
-}
-
-// 4. Handle Hardware / Browser Back Button
+// 3. HANDLE THE BACK BUTTON
 window.addEventListener('popstate', (e) => {
-    // 🚨 ADD THIS: Immediate haptic feedback on back action
     if (navigator.vibrate) navigator.vibrate(15);
     
-    if (isProgrammaticBack) {
-        isProgrammaticBack = false;
-        return;
+    // Temporarily pause the observer so it doesn't get confused while we close things
+    isProgrammaticClose = true; 
+
+    try {
+        const closedSomething = attemptToCloseTopUI();
+
+        // If the UI is completely clear, trigger double-tap to exit
+        if (!closedSomething) {
+            const currentTime = Date.now();
+            if (currentTime - lastBackPressTime < 2000) {
+                window.close();
+                if (typeof showRcToast === "function") showRcToast("Please close the app manually.");
+            } else {
+                lastBackPressTime = currentTime;
+                if (typeof showRcToast === "function") showRcToast("Press back again to exit");
+                // Re-push a state so they have something to pop on the 2nd tap
+                history.pushState({ appState: 'home' }, '');
+            }
+        }
+    } catch (err) {
+        console.error("Failsafe triggered during back navigation:", err);
+        if (typeof switchView === "function") switchView("HOME");
     }
 
-    // ACTION A: Close top-most modal
-    if (navActiveModals.length > 0) {
-        const topModal = navActiveModals[navActiveModals.length - 1]; 
-        topModal.classList.remove('active');
-        return;
+    // Re-enable the observer
+    setTimeout(() => { isProgrammaticClose = false; }, 100);
+});
+
+// 4. THE WATERFALL CLOSING LOGIC
+function attemptToCloseTopUI() {
+    // LEVEL 1: Modals
+    const modals = Array.from(document.querySelectorAll('.modal-overlay.active, #settingsOverlay.active, .compose-modal.active'));
+    if (modals.length > 0) {
+        modals[modals.length - 1].classList.remove('active');
+        return true;
     }
 
-    // ========================================================
-    // 🚨 NEW ACTION A.5: Intercept internal Sub-Views before closing to Home!
-    // ========================================================
+    // LEVEL 2: Accordions
+    const accordionPrefixes = ['subCardBody_', 'sa_group_body_', 'bch_group_body_', 'im_batch_body_', 'hist_rec_body_'];
+    for (let prefix of accordionPrefixes) {
+        let panels = document.querySelectorAll(`[id^='${prefix}']`);
+        for (let p of panels) {
+            if (window.getComputedStyle(p).display === 'block') {
+                if (prefix === 'subCardBody_') {
+                    // Substitute panels use an explicit button click
+                    document.getElementById(`subCardBtn_${p.id.replace(prefix, '')}`)?.click();
+                } else {
+                    // Standard accordions
+                    p.style.display = 'none';
+                    let icon = document.getElementById(p.id.replace('body', 'icon'));
+                    if (icon) icon.style.transform = 'rotate(0deg)';
+                }
+                return true;
+            }
+        }
+    }
     
-    // 1. Check if Student Dashboard is open
+    // LEVEL 3: Sub-Views
     const sdView = document.getElementById("studentDashboardView");
     if (sdView && !sdView.classList.contains("hidden-view")) {
         document.getElementById("btnBackToStudents")?.click();
-        history.pushState({ layer: 'view' }, ''); // Restore popped state!
-        return;
+        return true;
     }
 
-    // 2. Check if Teacher Dashboard is open
-    const tdView = document.getElementById("teacherDashboardView");
-    if (tdView && !tdView.classList.contains("hidden-view")) {
-        document.getElementById("btnBackToTeachers")?.click();
-        history.pushState({ layer: 'view' }, ''); 
-        return;
-    }
-
-    // 3. Check if Assign Classes (Timetable) is open
     const assignView = document.getElementById("assignView");
     if (assignView && !assignView.classList.contains("hidden-view")) {
-        document.getElementById("btnBackToTimetable")?.click();
-        history.pushState({ layer: 'view' }, ''); 
-        return;
+        document.getElementById("btnBackFromAssign")?.click();
+        return true;
     }
-    // ========================================================
 
-    // ACTION B: Close Sidebar View (Return to Home)
+    const recordScreen = document.getElementById("attRecordScreen");
+    if (recordScreen && window.getComputedStyle(recordScreen).display === "flex") {
+        document.getElementById("backFromRecordBtn")?.click();
+        return true;
+    }
+    
+    const historyScreen = document.getElementById("attHistoryScreen");
+    if (historyScreen && window.getComputedStyle(historyScreen).display === "flex") {
+        document.getElementById("backFromHistoryBtn")?.click();
+        return true;
+    }
+
+    // LEVEL 4: Main Panels
+    const navMainContent = document.querySelector(".main-content");
     if (navMainContent && navMainContent.classList.contains("mobile-active")) {
-        const btnHome = document.getElementById("btnHome");
-        if (btnHome) btnHome.click();
-        return;
+        if (typeof switchView === "function") switchView("HOME");
+        else document.getElementById("btnHome")?.click();
+        return true;
     }
 
-    // ACTION C: Double-Tap to Exit
-    const currentTime = Date.now();
-    if (currentTime - lastBackPressTime < 2000) {
-        const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-        
-        if (isPWA) {
-            history.back();
-        } else {
-            if (typeof showRcToast === "function") showRcToast("Please close the browser tab to exit.");
-            history.pushState({ layer: 'home' }, '');
-        }
-    } else {
-        lastBackPressTime = currentTime;
-        if (typeof showRcToast === "function") showRcToast("Press back again to exit");
-        history.pushState({ layer: 'home' }, '');
-    }
-});
+    return false;
+}
 
 // ==========================================
 // 🚨 SETTINGS DRAWER ACTIONS
