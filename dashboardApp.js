@@ -527,7 +527,12 @@ function processStudentData(data) {
                     if (subKey === "Strict_Global") { semInfo.strictPresent = subStats.present; semInfo.strictTotal = subStats.total; }
                     else if (typeof subStats === 'object') {
                         let p = subStats.present || 0; let t = subStats.total || 0;
-                        semInfo.subjects.push({ name: subKey.replace("-", "/"), present: p, total: t });
+                        
+                        // 🚨 THE FIX: Map 'Events' to 'Special Events' so the UI & Ledger can read it!
+                        let displayName = subKey.replace("-", "/");
+                        if (subKey === "Events") displayName = "Special Events";
+
+                        semInfo.subjects.push({ name: displayName, present: p, total: t });
                         sumPres += p; sumTot += t;
                     }
                 }
@@ -2468,10 +2473,13 @@ function RenderLedgerList() {
         let badgeText = record.isPresent ? "Present" : "Absent";
         let icon = record.isPresent ? '<i class="fas fa-check-circle"></i>' : '<i class="fas fa-times-circle"></i>';
         
+        // 🚨 SHOW SPECIFIC EVENT NAME BADGE IF IT'S AN EVENT!
+        let eventHtml = record.eventName ? `<div style="margin-top:6px;"><span style="font-size:10px; font-weight:800; color:var(--brand-green); background:var(--bg-grid-color); border:1px solid var(--border-color); padding:3px 8px; border-radius:6px; letter-spacing:0.5px;">${record.eventName}</span></div>` : "";
+
         return `
         <div class="ledger-row" style="display:flex; justify-content:space-between; align-items:center; padding:15px; background:var(--bg-base); border:1px solid var(--border-color); border-radius:12px; margin-bottom:10px; transition:0.2s;">
             
-            <div style="display:flex; flex-direction:column; gap:8px; flex:1; min-width:0; padding-right:10px;">
+            <div style="display:flex; flex-direction:column; gap:6px; flex:1; min-width:0; padding-right:10px;">
                 
                 <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px;">
                     <span style="font-size:14px; font-weight:800; color:var(--text-main); white-space:nowrap;">${record.dateFormatted}</span>
@@ -2480,14 +2488,14 @@ function RenderLedgerList() {
                     </span>
                 </div>
                 
-                <div style="font-size:11px; font-weight:700; background:var(--theme-light); color:var(--theme-main); padding:4px 8px; border-radius:6px; display:inline-flex; align-items:center; width:fit-content; max-width:100%;">
+                <div style="font-size:11px; font-weight:700; color:#64748b; display:inline-flex; align-items:center; width:fit-content; max-width:100%;">
                     <span style="white-space:nowrap;">PERIOD ${record.period}</span>
                     <span style="margin: 0 6px; opacity:0.4;">|</span>
                     <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                         <i class="fas fa-user-edit" style="margin-right:4px;"></i> ${record.teacherName}
                     </span>
                 </div>
-                
+                ${eventHtml}
             </div>
 
             <div class="ledger-badge ${badgeClass}" style="display:flex; align-items:center; gap:4px; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:800; text-transform:uppercase; flex-shrink:0;">
@@ -2521,6 +2529,11 @@ document.getElementById("ledgerListContainer").addEventListener("scroll", (e) =>
 async function FetchDatesForSubject(subjectNameFromUI, semDisplay) {
     let timeline = [];
     let dbSubjectName = subjectNameFromUI.split('<')[0].trim().replace("/", "-");
+
+    // 🚨 THE FIX: Map "Events" -> "Special Events" for database query
+    if (dbSubjectName === "Events" || dbSubjectName === "Special Events") {
+        dbSubjectName = "Special Events";
+    }
 
     try {
         let format1 = semDisplay; 
@@ -2560,6 +2573,12 @@ async function FetchDatesForSubject(subjectNameFromUI, semDisplay) {
                             }
                             
                             let teacherName = d[pKey].markedByTeacherName || "Unknown Teacher";
+                            let eventBadge = "";
+
+                            // 🚨 Extract Specific Event Name (e.g. "NSS")
+                            if (logSubjectClean === "Special Events" && d[pKey].event_details && d[pKey].event_details[currentRollNo]) {
+                                eventBadge = d[pKey].event_details[currentRollNo];
+                            }
 
                             timeline.push({
                                 dateFormatted: dateFormatted,
@@ -2567,7 +2586,8 @@ async function FetchDatesForSubject(subjectNameFromUI, semDisplay) {
                                 teacherName: teacherName,
                                 rawDate: dateObj,
                                 period: i,
-                                isPresent: d[pKey].attendance[currentRollNo]
+                                isPresent: d[pKey].attendance[currentRollNo],
+                                eventName: eventBadge
                             });
                         }
                     }
