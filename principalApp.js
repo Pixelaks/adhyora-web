@@ -95,6 +95,7 @@ let collegeSemesterType = "Odd";
 let attendanceCalculationMode = "SIMPLE";
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxVL1MGATuPxN4cmAkWbd8GsY5YaoWBkyVTkjfDV-f4jJrWBnMvZ-gXdMZU5pnhHmlPHw/exec";
 let myRealName = "Principal"; 
+let collegeType = "ARTS_SCIENCE"; // 👈 The Master Hybrid Switch
 let currentCollegePlan = "base";
 window.collegeTimeConfig = null; // 🚨 ADD THIS FOR V2 TIMETABLE
 
@@ -387,9 +388,25 @@ async function fetchPrincipalProfile() {
             const data = docSnap.data(); myRealName = data.name || "Principal";
             el.principalName.innerText = myRealName; el.principalEmail.innerText = data.email || "No Email Provided";
             
+            // 🚨 FETCH COLLEGE SETTINGS & SHOW INITIAL SETUP
+            const colSnap = await getDoc(doc(db, "colleges", currentCollegeID));
+            if (colSnap.exists()) {
+                if (!colSnap.data().collegeType) {
+                    showCollegeTypeSetupModal();
+                } else {
+                    collegeType = colSnap.data().collegeType;
+                    
+                    if (collegeType === "ENGINEERING_HYBRID") {
+                        let engSec = document.getElementById("ttEngConfigSection");
+                        let artsTitle = document.getElementById("ttArtsConfigTitle");
+                        if(engSec) engSec.style.display = "block";
+                        if(artsTitle) artsTitle.innerHTML = `<i class="fas fa-palette"></i> Arts & Science`;
+                    }
+                }
+            }
+            
             registerWebSession();
             startSessionListener();
-            // 🚨 PASS 'true' TO RUN IT SILENTLY ON BOOT
             requestPushPermissions(true);
             CheckSecurityPin(); 
         } else {
@@ -397,6 +414,41 @@ async function fetchPrincipalProfile() {
         }
     } catch (e) {}
 }
+
+function showCollegeTypeSetupModal() {
+    let modal = document.createElement("div");
+    modal.className = "modal-overlay active";
+    modal.id = "collegeTypeModal";
+    modal.innerHTML = `
+    <div class="compose-modal" style="background: white; width: 90%; max-width: 450px; margin: auto; margin-top: 15vh; border-radius: 20px; padding: 30px; text-align: center; border: 1px solid var(--border-color); box-shadow: 0 20px 50px rgba(0,0,0,0.2);">
+        <i class="fas fa-university" style="font-size: 40px; color: var(--brand-green); margin-bottom: 15px;"></i>
+        <h3 style="color: var(--text-green); margin-bottom: 15px;">Welcome to Adhyora!</h3>
+        <p style="font-size: 14px; color: #475569; margin-bottom: 25px; line-height: 1.5;">Please select your institution's academic structure to configure your dashboard.</p>
+        <div style="display: flex; flex-direction: column; gap: 15px;">
+            <button onclick="setCollegeType('ARTS_SCIENCE')" style="padding: 15px; border-radius: 12px; border: 1px solid #cbd5e1; background: white; color: var(--text-green); font-weight: bold; cursor: pointer; transition: 0.2s; text-align: left;"><i class="fas fa-palette" style="margin-right: 10px; color: #f59e0b;"></i> Arts & Science (NEP / CBCS)</button>
+            <button onclick="setCollegeType('ENGINEERING_HYBRID')" style="padding: 15px; border-radius: 12px; border: 1px solid #cbd5e1; background: white; color: var(--text-green); font-weight: bold; cursor: pointer; transition: 0.2s; text-align: left;"><i class="fas fa-cogs" style="margin-right: 10px; color: #3b82f6;"></i> Engineering (AICTE) / Hybrid Campus</button>
+        </div>
+    </div>`;
+    document.body.appendChild(modal);
+}
+
+window.setCollegeType = async function(type) {
+    document.getElementById("collegeTypeModal").innerHTML = `<div class="compose-modal" style="background:white; padding:30px; text-align:center; border-radius:20px;"><div style="width:40px; height:40px; border:3px solid #cbd5e1; border-top-color:var(--brand-green); border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 15px;"></div><h4 style="color:var(--text-green);">Configuring Dashboard...</h4></div>`;
+    try {
+        await principalAPI({ routeAction: "SET_COLLEGE_TYPE", collegeId: currentCollegeID, type: type });
+        collegeType = type;
+        document.getElementById("collegeTypeModal").remove();
+        
+        if (collegeType === "ENGINEERING_HYBRID") {
+            let engSec = document.getElementById("ttEngConfigSection");
+            let artsTitle = document.getElementById("ttArtsConfigTitle");
+            if(engSec) engSec.style.display = "block";
+            if(artsTitle) artsTitle.innerHTML = `<i class="fas fa-palette"></i> Arts & Science`;
+        }
+        
+        showRcToast("Configuration Saved!");
+    } catch(e) { showRcToast("Error saving configuration."); }
+};
 
 async function registerWebSession() {
     if (!myWebDeviceID) {
@@ -1135,17 +1187,34 @@ function startRoomcodeListener() {
             let d = doc.data(); let code = d.roomCode || "";
             if(!code) { code = String(Math.floor(100000 + Math.random() * 900000)); RC_SaveCodeToDB(d.name || doc.id, code, d.maxYears || 3, ""); }
             let linkedName = (d.linkedDepartments && d.linkedDepartments.length > 0) ? idToName[d.linkedDepartments[0]] : null;
-            rcCachedDepts.push({ id: doc.id, name: d.name || doc.id, roomCode: code, maxYears: d.maxYears || 3, linkedName: linkedName });
+            rcCachedDepts.push({ id: doc.id, name: d.name || doc.id, roomCode: code, maxYears: d.maxYears || 3, linkedName: linkedName, stream: d.stream });
         });
         if (rcCachedDepts.length === 0) document.getElementById("roomcodeList").innerHTML = `<div class="no-data-text">No Roomcodes Available</div>`;
         else renderRoomcodes();
     });
 }
+
 function renderRoomcodes() {
     document.getElementById("roomcodeList").innerHTML = rcCachedDepts.map(d => {
         let linkUI = d.linkedName ? `<span style="color:#eab308; font-size:12px; margin-left:8px;" title="Linked to ${d.linkedName}"><i class="fas fa-link"></i> ${d.linkedName}</span>` : "";
+        
+        let streamDropdown = "";
+        if (collegeType === "ENGINEERING_HYBRID") {
+            let isArts = d.stream === "ARTS_SCIENCE";
+            if (!d.stream) {
+                let lowerName = d.name.toLowerCase();
+                isArts = lowerName.includes("bcom") || lowerName.includes("ba ") || lowerName.includes("bsc") || lowerName.includes("b.sc");
+                if (d.roomCode) window.updateDeptStreamSilently(d.id, isArts ? "ARTS_SCIENCE" : "ENGINEERING");
+            }
+            streamDropdown = `
+            <select onchange="window.RC_UpdateStream('${d.id}', this.value)" style="margin-top:8px; padding:4px 8px; border-radius:6px; border:1px solid var(--brand-green); font-size:11px; font-weight:bold; font-family:'Poppins'; background:var(--bg-grid-color); color:var(--text-green); outline:none;">
+                <option value="ENGINEERING" ${!isArts ? 'selected' : ''}>⚙️ Engineering Stream</option>
+                <option value="ARTS_SCIENCE" ${isArts ? 'selected' : ''}>🎨 Arts & Science Stream</option>
+            </select>`;
+        }
+
         return `<div class="data-card" style="display:flex; justify-content:space-between; align-items:center; padding:15px 20px;">
-            <div><div class="card-title">${d.name} ${linkUI}</div><div class="card-body" style="margin-bottom:0;">Code: <strong style="font-size:16px; color:var(--brand-green); letter-spacing:1px;">${d.roomCode}</strong> (${d.maxYears} Yrs)</div></div>
+            <div><div class="card-title">${d.name} ${linkUI}</div><div class="card-body" style="margin-bottom:0;">Code: <strong style="font-size:16px; color:var(--brand-green); letter-spacing:1px;">${d.roomCode}</strong> (${d.maxYears} Yrs) <br> ${streamDropdown}</div></div>
             <div style="display:flex; gap:8px;">
                 <button class="action-icon-btn" title="Share" onclick="window.RC_Share('${d.name}', '${d.roomCode}')"><i class="fas fa-share-alt"></i></button>
                 <button class="action-icon-btn" title="Edit Duration" onclick="window.RC_EditDuration('${d.id}', '${d.name}', ${d.maxYears})"><i class="fas fa-pen"></i></button>
@@ -1155,6 +1224,13 @@ function renderRoomcodes() {
         </div>`;
     }).join('');
 }
+
+window.RC_UpdateStream = async (deptId, stream) => {
+    try { await principalAPI({ routeAction: "UPDATE_DEPT_STREAM", collegeId: currentCollegeID, deptId: deptId, stream: stream }); } catch(e) {}
+};
+window.updateDeptStreamSilently = (deptId, stream) => {
+    principalAPI({ routeAction: "UPDATE_DEPT_STREAM", collegeId: currentCollegeID, deptId: deptId, stream: stream }).catch(e=>{});
+};
 
 window.RC_Share = (name, code) => { let shareText = `Room Code for ${name}: ${code}`; if (navigator.share) { navigator.share({ title: 'Adhyora Room Code', text: shareText }); } else { navigator.clipboard.writeText(shareText); showRcToast("Room code copied to clipboard!"); } };
 window.RC_EditDuration = (id, name, years) => { rcIsCreatingNew = false; rcTargetID = id; rcTargetName = name; document.getElementById("durationTitle").innerHTML = `<i class="fas fa-clock"></i> Edit: ${name}`; document.getElementById("durationSelect").value = years; document.getElementById("durationOverlay").classList.add("active"); };
@@ -1292,6 +1368,41 @@ async function RC_ExecuteAction() {
             showRcToast(`✅ Fees published for ${res.data.count} Departments!`);
             FetchLiveFeeStructuresRoster();
         } catch(err) { showRcToast("❌ Database write error."); }
+    }
+
+    // 🚨 ADD THIS NEW ROUTE HERE:
+    else if (rcCurrentAction === "FLIP_SEMESTER_TYPE") {
+        document.getElementById("pinOverlay").classList.remove("active"); 
+        await ExecuteSemesterFlip(); 
+    }
+}
+
+// ==========================================
+// 🚨 FORCE FLIP SEMESTER ENGINE
+// ==========================================
+async function ExecuteSemesterFlip() {
+    showSubLoader("Flipping Semester Type securely...");
+    
+    try {
+        // Toggle the current value
+        let newType = collegeSemesterType === "Odd" ? "Even" : "Odd";
+        
+        // Write it to the root college document
+        await updateDoc(doc(db, "colleges", currentCollegeID), {
+            currentSemesterType: newType
+        });
+        
+        // 🚨 CRITICAL: Fire the global cache invalidator so all teachers 
+        // instantly switch their apps to the new semester!
+        notifyTeachersOfStudentUpdate();
+        
+        hideSubLoader();
+        showRcToast(`✅ Semester type forced to ${newType}!`);
+        
+    } catch(e) {
+        hideSubLoader();
+        showRcToast("❌ Error updating semester type. Check permissions.");
+        console.error("Semester Flip Error: ", e);
     }
 }
 
@@ -1884,7 +1995,7 @@ window.SL_OpenDashboard = async (sID) => {
     document.getElementById("sdRollText").innerText = ""; 
     document.getElementById("sdStatusBadge").innerText = "..."; 
     document.getElementById("sdSemesterTitle").innerText = "Loading...";
-    SD_UpdateWaveUI(0); 
+    SD_UpdateWaveUI(0, 0); 
     ["sdStatAtt", "sdStatAbs", "sdStatTot", "sdStatPAtt", "sdStatPAbs", "sdStatPTot"].forEach(id => document.getElementById(id).innerText = "0");
     document.getElementById("sdSubjectList").innerHTML = ""; 
     document.getElementById("sdEnrolledList").innerHTML = "<i>Loading subjects...</i>";
@@ -1988,9 +2099,30 @@ async function SD_BuildUI(specificDate = "All Time") {
             if(subName === "Strict_Global") { strictPresent = s.present || 0; strictTotal = s.total || 0; }
             else {
                 let p = s.present || 0, t = s.total || 0; simpleAtt += p; simpleTotal += t;
-                let cleanSubName = subName.replace("-", "/");
-                if(cleanSubName.toUpperCase().endsWith("_DROPPED")) cleanSubName = cleanSubName.substring(0, cleanSubName.length - 8) + " <span style='color:#ef4444; font-size:11px;'>(Dropped)</span>";
-                subjectAtt[cleanSubName] = { p:p, t:t };
+                
+                // 🚨 FIX: Reverse Lookup the real name with spaces!
+                let realDisplayName = subName.replace("-", "/"); 
+                let isDropped = false;
+                
+                let searchKey = subName;
+                if(searchKey.toUpperCase().endsWith("_DROPPED")) {
+                    searchKey = searchKey.substring(0, searchKey.length - 8);
+                    isDropped = true;
+                }
+
+                for (let globalSub of sdCachedGlobalSubjects) {
+                    let globalClean = globalSub.displayName.replace(/\s+/g, "").replace(/\//g, "-").replace(/\./g, "");
+                    if (globalClean.toLowerCase() === searchKey.toLowerCase()) {
+                        realDisplayName = globalSub.displayName; 
+                        break;
+                    }
+                }
+
+                if (isDropped) {
+                    realDisplayName += " <span style='color:#ef4444; font-size:11px;'>(Dropped)</span>";
+                }
+
+                subjectAtt[realDisplayName] = { p:p, t:t };
             }
         });
     }
@@ -2008,24 +2140,29 @@ async function SD_BuildUI(specificDate = "All Time") {
     let projectedAtt = 0;
     let projectedTot = 0;
 
-    // 🚨 THE FIX: Force it to respect the Principal's global setting!
     let isStrict = (attendanceCalculationMode === "STRICT_SESSION");
 
     // 🚨 2. Apply projection logic based on calculation mode
     if (strictTotal > 0) {
-        // STRICT MODE (Calculate by day)
         projectedAtt = strictPresent + remainingDays;
         projectedTot = strictTotal + remainingDays;
     } else {
-        // SIMPLE MODE (Calculate by 6 periods per day)
         let remainingPeriods = remainingDays * 6;
         projectedAtt = simpleAtt + remainingPeriods;
         projectedTot = simpleTotal + remainingPeriods;
     }
 
-    let percent = projectedTot > 0 ? (projectedAtt / projectedTot) * 100 : 0;
+    let projectedPercent = projectedTot > 0 ? (projectedAtt / projectedTot) * 100 : 0;
     
-    SD_UpdateWaveUI(percent);
+    // 🚨 FIX: Calculate the Actual Current Percentage!
+    let currentPercent = 0;
+    if (strictTotal > 0) {
+        currentPercent = (strictPresent / strictTotal) * 100;
+    } else {
+        currentPercent = simpleTotal > 0 ? (simpleAtt / simpleTotal) * 100 : 0;
+    }
+    
+    SD_UpdateWaveUI(projectedPercent, currentPercent);
     document.getElementById("sdStatAtt").innerText = strictPresent; document.getElementById("sdStatAbs").innerText = strictTotal - strictPresent; document.getElementById("sdStatTot").innerText = strictTotal;
     document.getElementById("sdStatPAtt").innerText = simpleAtt; document.getElementById("sdStatPAbs").innerText = simpleTotal - simpleAtt; document.getElementById("sdStatPTot").innerText = simpleTotal;
 
@@ -2033,18 +2170,17 @@ async function SD_BuildUI(specificDate = "All Time") {
         document.getElementById("sdNoDataText").style.display = Object.keys(subjectAtt).length === 0 ? "block" : "none";
         document.getElementById("sdNoDataText").innerText = "No attendance data for this semester.";
         
-        // Inside SD_BuildUI(specificDate = "All Time")
         document.getElementById("sdSubjectList").innerHTML = Object.entries(subjectAtt).map(([name, data]) => {
             let p = data.p, t = data.t, per = t>0 ? (p/t)*100 : 0; 
-            let col = per >= 75 ? "#4CAF50" : (per >= 60 ? "#FF9800" : "#F44336");
+            let col = per >= 75 ? "#10b981" : (per >= 60 ? "#f59e0b" : "var(--brand-red)");
             
-            // 🚨 Added cursor:pointer and onclick hook
-            return `<div onclick="OpenAttendanceLedger('${name}', ${p}, ${t})" style="background:white; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:8px; cursor: pointer; transition: 0.2s;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                    <span style="font-weight:bold; font-size:13px; color:#334155;">${name} <i class="fas fa-external-link-alt" style="font-size: 10px; color: #cbd5e1; margin-left: 5px;"></i></span> 
-                    <span style="font-size:12px; font-weight:bold; color:${col};">${per.toFixed(0)}% (${p}/${t})</span>
+            // 🚨 FIX: Added word-break and flex layout to stop UI overflow
+            return `<div onclick="window.OpenAttendanceLedger('${name.replace(/'/g, "\\'")}', ${p}, ${t})" style="background:var(--bg-base); border:1px solid var(--border-color); border-radius:10px; padding:12px; margin-bottom:8px; transform: translateZ(0); cursor:pointer; transition:0.2s;" onmouseover="this.style.borderColor='var(--brand-red)';" onmouseout="this.style.borderColor='var(--border-color)';">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:5px; gap: 10px;">
+                    <span style="font-weight:bold; font-size:13px; color:var(--text-dark); word-break: break-word; flex: 1;">${name} <i class="fas fa-external-link-alt" style="font-size: 10px; color: var(--text-muted); margin-left: 5px;"></i></span> 
+                    <span style="font-size:12px; font-weight:bold; color:${col}; flex-shrink: 0; text-align: right;">${per.toFixed(0)}% (${p}/${t})</span>
                 </div>
-                <div style="background:#f1f5f9; height:6px; border-radius:3px; overflow:hidden;"><div style="height:100%; background:${col}; width:${per}%;"></div></div>
+                <div style="background:var(--bg-surface); height:6px; border-radius:3px; overflow:hidden; transform: translateZ(0); margin-top: 8px;"><div style="height:100%; background:${col}; width:${per}%;"></div></div>
             </div>`;
         }).join('');
     } else {
@@ -2052,21 +2188,26 @@ async function SD_BuildUI(specificDate = "All Time") {
     }
 }
 
-function SD_UpdateWaveUI(percentage) {
-    let col = percentage >= 75 ? "var(--brand-green)" : (percentage >= 60 ? "#f59e0b" : "#ef4444");
-    let txt = percentage.toFixed(2) + "%";
-    let visualPercent = 10 + (percentage * 0.75); 
+function SD_UpdateWaveUI(projectedPercentage = 0, currentPercentage = 0) {
+    let col = currentPercentage >= 75 ? "var(--brand-green)" : (currentPercentage >= 60 ? "#f59e0b" : "#ef4444");
+    let projTxt = projectedPercentage.toFixed(2) + "%";
+    let currTxt = currentPercentage.toFixed(2) + "%";
+    
+    let visualPercent = 10 + (currentPercentage * 0.75); 
 
     let circleFill = document.getElementById("sdCircleWave");
     circleFill.style.setProperty('--wave-color', col);
     circleFill.style.top = `${105 - visualPercent}%`; 
     
-    document.getElementById("sdCircleText").innerHTML = `<span style="font-size: 11px; display: block; line-height: 1; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px;">Projected</span><span id="sdCirclePercentVal" style="font-size: 26px;">${txt}</span>`;
+    circleFill.style.willChange = "transform, top"; 
+    
+    document.getElementById("sdCircleText").innerHTML = `<span style="font-size: 11px; display: block; line-height: 1; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px;">Projected</span><span id="sdCirclePercentVal" style="font-size: 26px;">${projTxt}</span>`;
 
     let rowFill = document.getElementById("sdWavyFill");
     rowFill.style.setProperty('--wave-color', col);
     rowFill.style.setProperty('--wave-percent', `${visualPercent}%`);
-    document.getElementById("sdWavyText").innerText = `Current: ${txt}`;
+    
+    document.getElementById("sdWavyText").innerText = `Current: ${currTxt}`;
 }
 
 document.getElementById("sdBtnAllTime").addEventListener("click", () => { document.getElementById("sdDateFilter").value = ""; SD_BuildUI("All Time"); });
@@ -2122,11 +2263,16 @@ async function SD_FetchDailyAttendance(targetDate, dbSemesterFormat) {
                     let subName = pData.subject || "Unknown Subject"; 
                     let teacherName = pData.markedByTeacherName || "Unknown Teacher";
                     
-                    // 🚨 NEW: Extract and format the time
                     let timeString = "--:--";
                     if (pData.timestamp) {
                         let jsDate = pData.timestamp.toDate ? pData.timestamp.toDate() : new Date(pData.timestamp.seconds * 1000);
                         timeString = jsDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                    }
+
+                    // 🚨 NEW: Extract specific event name for the daily card!
+                    let eventBadge = "";
+                    if (subName === "Special Events" && pData.event_details && pData.event_details[sdCurrentStudentID]) {
+                        eventBadge = pData.event_details[sdCurrentStudentID];
                     }
 
                     dailyRecords.push({
@@ -2134,7 +2280,8 @@ async function SD_FetchDailyAttendance(targetDate, dbSemesterFormat) {
                         subName: subName,
                         teacherName: teacherName,
                         timeString: timeString,
-                        isPres: isPres
+                        isPres: isPres,
+                        eventName: eventBadge // Pass it to the HTML renderer
                     });
                 }
             }
@@ -2149,12 +2296,18 @@ async function SD_FetchDailyAttendance(targetDate, dbSemesterFormat) {
             let badgeText = record.isPres ? "Present" : "Absent";
             let icon = record.isPres ? '<i class="fas fa-check-circle"></i>' : '<i class="fas fa-times-circle"></i>';
             
+            // 🚨 NEW: Create the visual badge if eventName exists
+            let eventHtml = record.eventName ? `<span style="font-size:10px; font-weight:800; color:var(--brand-green); background:var(--bg-grid-color); border:1px solid var(--border-color); padding:3px 8px; border-radius:6px; margin-left:8px; letter-spacing:0.5px;">${record.eventName}</span>` : "";
+
             return `
             <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; background:var(--bg-base); border:1px solid var(--border-color); border-radius:12px; box-shadow:0 2px 5px rgba(0,0,0,0.02); transition:0.2s; margin-bottom:10px;">
                 <div style="display:flex; flex-direction:column; gap:6px;">
                     
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <span style="font-size:14px; font-weight:800; color:var(--text-dark);">${record.subName}</span>
+                        <div style="display:flex; align-items:center;">
+                            <span style="font-size:14px; font-weight:800; color:var(--text-dark);">${record.subName}</span>
+                            ${eventHtml}
+                        </div>
                         <span style="font-size:10px; font-weight:700; color:#94a3b8; background:var(--bg-grid-color); padding:2px 6px; border-radius:6px;"><i class="far fa-clock" style="margin-right:3px;"></i> ${record.timeString}</span>
                     </div>
                     
@@ -2252,10 +2405,30 @@ function BCH_Init() {
 function BCH_RefreshCategories() {
     let types = new Set();
     bchSubjectsCache.forEach(sub => { let sems = sub.semesters.split(',').map(s=>s.trim()); if (sems.includes(bchCurrentSem) && sub.type) types.add(sub.type.trim()); });
+    
     let catDrop = document.getElementById("bchCatDrop");
-    if (types.size === 0) catDrop.innerHTML = `<option value="">No Categories</option>`;
-    else {
-        let arr = Array.from(types).sort(); catDrop.innerHTML = `<option value="">Select Category</option>` + arr.map(t => `<option value="${t}">${t}</option>`).join('');
+    if (types.size === 0) {
+        catDrop.innerHTML = `<option value="">No Categories</option>`;
+    } else {
+        let arr = Array.from(types).sort(); 
+        let optionsHTML = `<option value="">Select Category</option>`;
+        
+        // 🚨 ADDED OPTGROUPS: Smart separation for Hybrid Colleges
+        if (collegeType === "ENGINEERING_HYBRID") {
+            let engCats = arr.filter(c => ["CORE", "LAB", "PE", "OE", "BSC", "MCC"].includes(c.toUpperCase()));
+            let artsCats = arr.filter(c => !["CORE", "LAB", "PE", "OE", "BSC", "MCC"].includes(c.toUpperCase()));
+            
+            if (engCats.length > 0) {
+                optionsHTML += `<optgroup label="⚙️ Engineering Types">` + engCats.map(t => `<option value="${t}">${t}</option>`).join('') + `</optgroup>`;
+            }
+            if (artsCats.length > 0) {
+                optionsHTML += `<optgroup label="🎨 Arts & Science Types">` + artsCats.map(t => `<option value="${t}">${t}</option>`).join('') + `</optgroup>`;
+            }
+        } else {
+            // NORMAL ARTS & SCIENCE LOGIC (Completely untouched)
+            optionsHTML += arr.map(t => `<option value="${t}">${t}</option>`).join('');
+        }
+        catDrop.innerHTML = optionsHTML;
     }
     BCH_RefreshSubjects();
 }
@@ -2430,7 +2603,7 @@ async function BCH_ExecuteMove(sourceID, targetID, studentIDsArray) {
 // ==========================================
 // TIMETABLE STRUCTURE MANAGER
 // ==========================================
-let ttLoaded = false; let ttPhase = 0; let ttCurrentSem = "1"; let ttSelectedDay = "Monday";
+let ttLoaded = false; let ttPhase = 0; let ttCurrentSem = "1"; let ttSelectedDay = "Monday"; let ttCurrentMode = "ENG";
 let ttSubjectsCached = false; let ttAllSubjectsMasterList = []; let ttCachedCategoriesList = []; let ttCachedSubjectsByCategory = {}; let ttCachedTimetableStructures = {}; let ttStructureListener = null;
 let ttActiveSlotsData = []; 
 
@@ -2481,11 +2654,37 @@ function TT_Init() {
         TT_LoadTimetableForDay(); 
     });
 
+    // 🚨 ADD HYBRID TOGGLE HERE
+    window.TT_SwitchMode = function(mode) {
+        ttCurrentMode = mode;
+        document.getElementById("ttModeArts").style.borderColor = mode === "ARTS" ? "var(--brand-green)" : "#cbd5e1";
+        document.getElementById("ttModeArts").style.color = mode === "ARTS" ? "var(--brand-green)" : "#64748b";
+        document.getElementById("ttModeArts").style.background = mode === "ARTS" ? "#f0fdf4" : "transparent";
+
+        document.getElementById("ttModeEng").style.borderColor = mode === "ENG" ? "var(--brand-green)" : "#cbd5e1";
+        document.getElementById("ttModeEng").style.color = mode === "ENG" ? "var(--brand-green)" : "#64748b";
+        document.getElementById("ttModeEng").style.background = mode === "ENG" ? "#f0fdf4" : "transparent";
+        
+        TT_LoadTimetableForDay();
+    };
+
+    if (collegeType === "ENGINEERING_HYBRID" && !document.getElementById("ttModeToggle")) {
+        let toggleContainer = document.createElement("div");
+        toggleContainer.id = "ttModeToggle";
+        toggleContainer.style.cssText = "display:flex; gap:10px; margin-bottom:15px; width:100%; flex-shrink: 0;";
+        toggleContainer.innerHTML = `
+            <button id="ttModeEng" onclick="window.TT_SwitchMode('ENG')" style="flex:1; padding:10px; border-radius:8px; border:2px solid var(--brand-green); background:#f0fdf4; color:var(--brand-green); font-weight:bold; cursor:pointer; transition:0.2s;">⚙️ Engineering (Shared Subjects)</button>
+            <button id="ttModeArts" onclick="window.TT_SwitchMode('ARTS')" style="flex:1; padding:10px; border-radius:8px; border:2px solid #cbd5e1; background:transparent; color:#64748b; font-weight:bold; cursor:pointer; transition:0.2s;">🎨 Arts & Science (B.Com/B.Sc)</button>
+        `;
+        document.getElementById("ttDaysContainer").parentNode.insertBefore(toggleContainer, document.getElementById("ttDaysContainer"));
+    }
+
     TT_LoadGlobalCategories();
     
     if (window.ttInterval) clearInterval(window.ttInterval);
     window.ttInterval = setInterval(() => { if (!document.getElementById('timetableView').classList.contains('hidden-view')) TT_UpdateTimelineVisuals(); }, 60000); 
 }
+
 function TT_LoadGlobalCategories() {
     if (ttSubjectsCached) { TT_ProcessSubjectsFromRAM(); return; }
     getDocs(collection(db, "colleges", currentCollegeID, "subjects")).then(snap => {
@@ -2514,6 +2713,10 @@ function TT_ProcessSubjectsFromRAM() {
 
 function TT_LoadTimetableForDay() {
     let docID = `Sem${ttCurrentSem}_${ttSelectedDay}`;
+    if (collegeType === "ENGINEERING_HYBRID") {
+        docID = ttCurrentMode === "ARTS" ? `ARTSSCI_Sem${ttCurrentSem}_${ttSelectedDay}` : `SHARED_Sem${ttCurrentSem}_${ttSelectedDay}`;
+    }
+
     if (ttStructureListener) ttStructureListener(); 
     if (ttCachedTimetableStructures[docID]) TT_BuildSlotsFromData(ttCachedTimetableStructures[docID]);
 
@@ -2525,8 +2728,15 @@ function TT_LoadTimetableForDay() {
 
 function TT_BuildSlotsFromData(slotsData) {
     ttActiveSlotsData = []; let hasStructure = Object.keys(slotsData).length > 0;
-    // 🚨 V2 DYNAMIC PERIOD COUNT
-    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    
+    let pCount = 6;
+    if (window.collegeTimeConfig) {
+        if (collegeType === "ENGINEERING_HYBRID" && ttCurrentMode === "ENG" && window.collegeTimeConfig.eng_config) {
+            pCount = window.collegeTimeConfig.eng_config.periodCount || 8;
+        } else {
+            pCount = window.collegeTimeConfig.periodCount || 6;
+        }
+    }
     
     for (let p = 1; p <= pCount; p++) {
         let mainKey = `P${p}`; let mainCat = slotsData[mainKey] || "Select Category";
@@ -2547,13 +2757,35 @@ function TT_RenderLayout() {
     let wrapper = document.getElementById("ttMainWrapper");
     ttActiveSlotsData.sort((a, b) => { if (a.period !== b.period) return a.period - b.period; return a.splitIndex - b.splitIndex; });
 
-    // 🚨 ADDED: Bring in pCount for the line renderer!
-    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    let pCount = 6;
+    if (window.collegeTimeConfig) {
+        pCount = (collegeType === "ENGINEERING_HYBRID" && ttCurrentMode === "ENG" && window.collegeTimeConfig.eng_config) 
+            ? (window.collegeTimeConfig.eng_config.periodCount || 8) 
+            : (window.collegeTimeConfig.periodCount || 6);
+    }
 
     let html = "";
     ttActiveSlotsData.forEach((slot, idx) => {
         let idBase = `tt_${slot.period}_${slot.splitIndex}`;
-        let catOpts = ttCachedCategoriesList.map(c => `<option value="${c}" ${c === slot.category ? 'selected' : ''}>${c}</option>`).join('');
+        
+        let catOpts = `<option value="Select Category">Select Category</option>`;
+        if (collegeType === "ENGINEERING_HYBRID") {
+            let engCats = ttCachedCategoriesList.filter(c => ["CORE", "LAB", "PE", "OE", "BSC", "MCC"].includes(c.toUpperCase()));
+            
+            // 🚨 THE FIX: Changed to completely UPPERCASE so the filter perfectly catches and removes the duplicates!
+            let artsCats = ttCachedCategoriesList.filter(c => !["CORE", "LAB", "PE", "OE", "BSC", "MCC", "SELECT CATEGORY", "BREAK", "LUNCH"].includes(c.toUpperCase()));
+            
+            if (ttCurrentMode === "ENG") {
+                engCats.forEach(c => catOpts += `<option value="${c}" ${c === slot.category ? 'selected' : ''}>${c}</option>`);
+            } else {
+                artsCats.forEach(c => catOpts += `<option value="${c}" ${c === slot.category ? 'selected' : ''}>${c}</option>`);
+            }
+            catOpts += `<option value="Break" ${slot.category === 'Break' ? 'selected' : ''}>Break</option>`;
+            catOpts += `<option value="Lunch" ${slot.category === 'Lunch' ? 'selected' : ''}>Lunch</option>`;
+        } else {
+            catOpts = ttCachedCategoriesList.map(c => `<option value="${c}" ${c === slot.category ? 'selected' : ''}>${c}</option>`).join('');
+        }
+
         let subOpts = `<option value="Select Subject">Select Subject</option>`;
         if (ttPhase === 1 && !slot.isSplit && ttCachedSubjectsByCategory[slot.category]) subOpts += ttCachedSubjectsByCategory[slot.category].map(s => `<option value="${s}" ${s === slot.subject ? 'selected' : ''}>${s}</option>`).join('');
         else if (slot.subject !== "Select Subject") subOpts += `<option value="${slot.subject}" selected>${slot.subject}</option>`;
@@ -2632,7 +2864,11 @@ async function TT_SaveStructureAndLock() {
         if (!s.isSplit) newSlots[`P${s.period}`] = s.category; 
     });
     
-    // 🚨 LOCK SCREEN
+    let targetDocID = `Sem${ttCurrentSem}_${ttSelectedDay}`;
+    if (collegeType === "ENGINEERING_HYBRID") {
+        targetDocID = ttCurrentMode === "ARTS" ? `ARTSSCI_Sem${ttCurrentSem}_${ttSelectedDay}` : `SHARED_Sem${ttCurrentSem}_${ttSelectedDay}`;
+    }
+    
     showSubLoader("Saving timetable structure securely...");
 
     try {
@@ -2641,10 +2877,10 @@ async function TT_SaveStructureAndLock() {
             collegeId: currentCollegeID,
             semester: ttCurrentSem,
             day: ttSelectedDay,
+            docID: targetDocID,
             slots: newSlots
         });
 
-        // 🚨 UNLOCK SCREEN
         hideSubLoader();
         showRcToast("✅ Categories Updated!"); 
         btn.innerHTML = '<i class="fas fa-save"></i> Save Structure'; 
@@ -2652,7 +2888,6 @@ async function TT_SaveStructureAndLock() {
         TT_SetPhase(1);
         
     } catch(error) {
-        // 🚨 UNLOCK SCREEN
         hideSubLoader();
         showRcToast("❌ Error saving structure: " + error.message);
         btn.innerHTML = '<i class="fas fa-save"></i> Save Structure'; 
@@ -2666,7 +2901,11 @@ function TT_UpdateTimelineVisuals() {
         if (slot.isSplit) return;
         
         // 🚨 V2 DYNAMIC LIVE CLOCK SYNC
-        let timing = window.getPeriodTiming(window.collegeTimeConfig, slot.period);
+        let activeConfig = window.collegeTimeConfig;
+        if (collegeType === "ENGINEERING_HYBRID" && ttCurrentMode === "ENG" && window.collegeTimeConfig && window.collegeTimeConfig.eng_config) {
+            activeConfig = window.collegeTimeConfig.eng_config;
+        }
+        let timing = window.getPeriodTiming(activeConfig, slot.period);
         const toDec = (t) => { let [hm, m] = t.split(' '); let [h, min] = hm.split(':').map(Number); if(m==='PM'&&h!==12)h+=12; if(m==='AM'&&h===12)h=0; return h+(min/60); };
         
         let startTime = toDec(timing.start);
@@ -2722,7 +2961,19 @@ function ASN_Init(startSem, startDay) {
     if (asnAllTeachers.length === 0) {
         getDocs(collection(db, "colleges", currentCollegeID, "teachers")).then(snap => {
             asnAllTeachers = []; snap.forEach(d => asnAllTeachers.push({ id: d.id, name: d.data().name || d.data().teacherName || "Unknown", dept: d.data().departmentID || "" }));
-            ASN_LoadData();
+            
+            // 🚨 FIX 1: Fetch who teaches what so we don't dump all teachers into every dropdown!
+            getDocs(query(collection(db, "colleges", currentCollegeID, "faculty_subjects"), where("isActive", "==", true))).then(fsSnap => {
+                window.asnSubjectTeachersMap = {};
+                fsSnap.forEach(d => {
+                    let data = d.data();
+                    if (data.subjectName && data.teacherID && data.teacherName) {
+                        if (!window.asnSubjectTeachersMap[data.subjectName]) window.asnSubjectTeachersMap[data.subjectName] = [];
+                        window.asnSubjectTeachersMap[data.subjectName].push({ id: data.teacherID, name: data.teacherName });
+                    }
+                });
+                ASN_LoadData();
+            });
         });
     } else {
         ASN_LoadData();
@@ -2806,7 +3057,18 @@ function ASN_RenderLayout() {
 
             let teacherOptions = `<option value="">Unassigned</option>`;
             if (row.subject) {
-                teacherOptions += asnAllTeachers.map(t => `<option value="${t.id}|${t.name}" ${t.name === row.teacher ? 'selected' : ''}>${t.name}</option>`).join('');
+                // 🚨 FIX 2: Only show teachers who ACTUALLY teach this subject!
+                let validTeachers = window.asnSubjectTeachersMap ? window.asnSubjectTeachersMap[row.subject] : [];
+                
+                if (validTeachers && validTeachers.length > 0) {
+                    // Remove duplicates just in case a teacher was assigned twice
+                    let uniqueT = []; let seen = new Set();
+                    validTeachers.forEach(t => { if(!seen.has(t.id)) { seen.add(t.id); uniqueT.push(t); } });
+                    
+                    teacherOptions += uniqueT.map(t => `<option value="${t.id}|${t.name}" ${t.name === row.teacher ? 'selected' : ''}>${t.name}</option>`).join('');
+                } else {
+                    teacherOptions += `<option value="" disabled>No faculty assigned</option>`;
+                }
             }
 
             let isDel = row.isSplit; 
@@ -3235,7 +3497,7 @@ const DataParser = {
                 else if (sems.includes("5") || sems.includes("V")) type = "MJD 5";
                 else if (sems.includes("6") || sems.includes("VI")) type = "MJD 6";
             }
-            subjects.push({ code: code, name: name, type: type, department: dept, semester: sems.join(","), search_key: name.toLowerCase(), isElective: (type === "MLD" || type === "VAC" || type === "SEC") });
+            subjects.push({ code: code, name: name, type: type, department: dept, semester: sems.join(","), search_key: name.toLowerCase(), isElective: (type === "MLD" || type === "VAC" || type === "SEC" || type === "PE" || type === "OE") });
         }
         return subjects;
     },
@@ -3371,6 +3633,16 @@ async function ExecuteDataUpload() {
     
     pendingUploadData = null;
 }
+
+// ==========================================
+// MANUAL SEMESTER TOGGLE
+// ==========================================
+document.getElementById("btnOpenSemFlip")?.addEventListener("click", () => {
+    document.getElementById("pinInput").value = "";
+    document.getElementById("pinOverlay").classList.add("active");
+    rcCurrentAction = "FLIP_SEMESTER_TYPE"; 
+});
+
 
 // ==========================================
 // YEAR UPDATER & PROMOTION ENGINE
@@ -4215,11 +4487,7 @@ function SS_RefreshCategories() {
     subCachedData.forEach(sub => { 
         let sems = sub.semester.split(',').map(s => s.trim()); 
         if (sems.includes(ssCurrentSem) && sub.type) {
-            
             let typeUpper = sub.type.trim().toUpperCase();
-            
-            // 🚨 C# PORT: Hide MJD and CORE subjects from the Reassignment view!
-            // Because they are core subjects, students can't be "moved" between them manually.
             if (!typeUpper.startsWith("MJD") && !typeUpper.startsWith("CORE")) {
                 types.add(sub.type.trim()); 
             }
@@ -4232,7 +4500,24 @@ function SS_RefreshCategories() {
         catDrop.innerHTML = `<option value="">No Categories</option>`;
     } else {
         let arr = Array.from(types).sort(); 
-        catDrop.innerHTML = `<option value="">Select Category</option>` + arr.map(t => `<option value="${t}">${t}</option>`).join('');
+        let optionsHTML = `<option value="">Select Category</option>`;
+        
+        // 🚨 ADDED OPTGROUPS: Smart separation for Hybrid Colleges
+        if (collegeType === "ENGINEERING_HYBRID") {
+            let engCats = arr.filter(c => ["CORE", "LAB", "PE", "OE", "BSC", "MCC"].includes(c.toUpperCase()));
+            let artsCats = arr.filter(c => !["CORE", "LAB", "PE", "OE", "BSC", "MCC"].includes(c.toUpperCase()));
+            
+            if (engCats.length > 0) {
+                optionsHTML += `<optgroup label="⚙️ Engineering Types">` + engCats.map(t => `<option value="${t}">${t}</option>`).join('') + `</optgroup>`;
+            }
+            if (artsCats.length > 0) {
+                optionsHTML += `<optgroup label="🎨 Arts & Science Types">` + artsCats.map(t => `<option value="${t}">${t}</option>`).join('') + `</optgroup>`;
+            }
+        } else {
+            // NORMAL ARTS & SCIENCE LOGIC (Completely untouched)
+            optionsHTML += arr.map(t => `<option value="${t}">${t}</option>`).join('');
+        }
+        catDrop.innerHTML = optionsHTML;
     }
     
     SS_RefreshSubjects();
@@ -4974,9 +5259,18 @@ function startSubscriptionListener() {
         
         let data = snapshot.data();
         
-        if (data.currentSemesterType) collegeSemesterType = data.currentSemesterType;
+        if (data.currentSemesterType) {
+            collegeSemesterType = data.currentSemesterType;
+            
+            // 🚨 NEW: Update the Data Section UI
+            let semStateTxt = document.getElementById("uiCurrentSemStateText");
+            let flipBtn = document.getElementById("btnOpenSemFlip");
+            if(semStateTxt) semStateTxt.innerText = collegeSemesterType + " Semester";
+            if(flipBtn) flipBtn.innerText = `Flip to ${collegeSemesterType === "Odd" ? "Even" : "Odd"}`;
+        }
         if (data.settings && data.settings.attendanceCalculationMode) attendanceCalculationMode = data.settings.attendanceCalculationMode;
 
+        // 👇 NEW: Auto-fill Timetable Popup if data exists 👇
         // 👇 NEW: Auto-fill Timetable Popup if data exists 👇
         if (data.timetable_config) {
             window.collegeTimeConfig = data.timetable_config; // 🚨 STORE IT IN MEMORY
@@ -4986,6 +5280,15 @@ function startSubscriptionListener() {
             if(document.getElementById("ttPeriodDuration")) document.getElementById("ttPeriodDuration").value = config.periodDurationMin;
             if(document.getElementById("ttLunchAfter")) document.getElementById("ttLunchAfter").value = config.lunchBreakAfterPeriod;
             if(document.getElementById("ttLunchDuration")) document.getElementById("ttLunchDuration").value = config.lunchDurationMin;
+            
+            // 🚨 Load Engineering configs if it's a Hybrid College
+            if (collegeType === "ENGINEERING_HYBRID" && config.eng_config) {
+                document.getElementById("ttEngPeriodCount").value = config.eng_config.periodCount;
+                document.getElementById("ttEngStartTime").value = config.eng_config.startTime;
+                document.getElementById("ttEngPeriodDuration").value = config.eng_config.periodDurationMin;
+                document.getElementById("ttEngLunchAfter").value = config.eng_config.lunchBreakAfterPeriod;
+                document.getElementById("ttEngLunchDuration").value = config.eng_config.lunchDurationMin;
+            }
         }
         // 👆 END OF NEW CODE 👆
 
@@ -6457,6 +6760,11 @@ async function FetchDatesForSubject(subjectNameFromUI) {
     let semDisplay = document.getElementById("sdSemesterTitle").innerText.trim(); 
     let dbSubjectName = subjectNameFromUI.split('<')[0].trim().replace("/", "-");
 
+    // 🚨 THE FIX 1: Translate the UI card name to the Database Log name
+    if (dbSubjectName === "Events") {
+        dbSubjectName = "Special Events";
+    }
+
     try {
         let format1 = semDisplay; 
         let format2 = semDisplay.replace(/\s+/g, "_"); 
@@ -6488,7 +6796,6 @@ async function FetchDatesForSubject(subjectNameFromUI) {
                     if (logSubjectClean === subjectNameFromUI || logSubjectClean === dbSubjectName) {
                         if (d[pKey].attendance && d[pKey].attendance[sdCurrentStudentID] !== undefined) {
                             
-                            // 🚨 NEW: Extract Time and Teacher Name
                             let timeString = "--:--";
                             if (d[pKey].timestamp) {
                                 let jsDate = d[pKey].timestamp.toDate ? d[pKey].timestamp.toDate() : new Date(d[pKey].timestamp.seconds * 1000);
@@ -6497,10 +6804,15 @@ async function FetchDatesForSubject(subjectNameFromUI) {
                             
                             let teacherName = d[pKey].markedByTeacherName || "Unknown Teacher";
 
+                            // // 🚨 THE FIX 2: Replace Teacher's name with Event Name in the ledger!
+                            // if (logSubjectClean === "Special Events" && d[pKey].event_details && d[pKey].event_details[sdCurrentStudentID]) {
+                            //      teacherName = `<span style="color:var(--brand-green); font-weight:800;">${d[pKey].event_details[sdCurrentStudentID]}</span>`;
+                            // }
+
                             timeline.push({
                                 dateFormatted: dateFormatted,
-                                timeFormatted: timeString,       // Passed to UI
-                                teacherName: teacherName,        // Passed to UI
+                                timeFormatted: timeString,
+                                teacherName: teacherName,
                                 rawDate: dateObj,
                                 period: i,
                                 isPresent: d[pKey].attendance[sdCurrentStudentID]
@@ -6575,7 +6887,8 @@ const uiObserver = new MutationObserver((mutations) => {
                 }
             }
 
-            if (el.id === 'attRecordScreen' || el.id === 'attHistoryScreen') {
+            // 🚨 FIXED: Added timetableConfigOverlay to the watcher so it pushes a back state
+            if (el.id === 'attRecordScreen' || el.id === 'attHistoryScreen' || el.id === 'timetableConfigOverlay') {
                 if (newDisplay === 'flex' && !oldStyle.includes('display: flex')) {
                     shouldPushState = true;
                 }
@@ -6636,7 +6949,13 @@ window.addEventListener('popstate', (e) => {
 
 // 4. THE WATERFALL CLOSING LOGIC (PRINCIPAL MAPPED)
 function attemptToCloseTopUI() {
-    // LEVEL 1: Modals
+    // LEVEL 1: Modals & Flex Overlays
+    const ttOverlay = document.getElementById("timetableConfigOverlay");
+    if (ttOverlay && window.getComputedStyle(ttOverlay).display === 'flex') {
+        ttOverlay.style.display = 'none';
+        return true;
+    }
+
     const modals = Array.from(document.querySelectorAll('.modal-overlay.active, #settingsOverlay.active, #composeOverlay.active, .compose-modal.active'));
     if (modals.length > 0) {
         modals[modals.length - 1].classList.remove('active');
@@ -6714,7 +7033,7 @@ function attemptToCloseTopUI() {
 // =================================================================
 window.saveTimetableConfig = async function(btnElement) {
     if (!currentCollegeID) {
-        if(typeof showToast === "function") showToast("❌ College ID not found. Please refresh.");
+        if(typeof showRcToast === "function") showRcToast("❌ College ID not found. Please refresh.");
         return;
     }
 
@@ -6723,46 +7042,52 @@ window.saveTimetableConfig = async function(btnElement) {
     btnElement.disabled = true;
     
     try {
-        // Read values from popup inputs
-        const periodCount = parseInt(document.getElementById("ttPeriodCount").value) || 6;
-        const startTime = document.getElementById("ttStartTime").value || "09:30";
-        const periodDuration = parseInt(document.getElementById("ttPeriodDuration").value) || 60;
-        const lunchAfter = parseInt(document.getElementById("ttLunchAfter").value) || 3;
-        const lunchDuration = parseInt(document.getElementById("ttLunchDuration").value) || 45;
-
         const configData = {
             timetable_config: {
-                periodCount: periodCount,
-                startTime: startTime,
-                periodDurationMin: periodDuration,
-                lunchBreakAfterPeriod: lunchAfter,
-                lunchDurationMin: lunchDuration
+                periodCount: parseInt(document.getElementById("ttPeriodCount").value) || 6,
+                startTime: document.getElementById("ttStartTime").value || "09:30",
+                periodDurationMin: parseInt(document.getElementById("ttPeriodDuration").value) || 60,
+                lunchBreakAfterPeriod: parseInt(document.getElementById("ttLunchAfter").value) || 3,
+                lunchDurationMin: parseInt(document.getElementById("ttLunchDuration").value) || 45
             }
         };
 
-        // Save directly to the main college document (0 extra read costs!)
-        // Using the imported modular SDK functions from your file
+        // 🚨 ADD ENGINEERING CONFIGURATION (HYBRID ONLY)
+        if (collegeType === "ENGINEERING_HYBRID") {
+            configData.timetable_config.eng_config = {
+                periodCount: parseInt(document.getElementById("ttEngPeriodCount").value) || 8,
+                startTime: document.getElementById("ttEngStartTime").value || "09:00",
+                periodDurationMin: parseInt(document.getElementById("ttEngPeriodDuration").value) || 50,
+                lunchBreakAfterPeriod: parseInt(document.getElementById("ttEngLunchAfter").value) || 4,
+                lunchDurationMin: parseInt(document.getElementById("ttEngLunchDuration").value) || 45
+            };
+        }
+
         const { updateDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js");
         const collegeRef = doc(db, "colleges", currentCollegeID);
         await updateDoc(collegeRef, configData);
         
-        // Trigger cache sync if available
-        if (typeof notifyTeachersOfStudentUpdate === "function") {
-            await notifyTeachersOfStudentUpdate();
-        }
+        if (typeof notifyTeachersOfStudentUpdate === "function") { await notifyTeachersOfStudentUpdate(); }
         
-        if(typeof showToast === "function") showToast("✅ Timetable settings saved!");
-        
-        // Close the popup
+        if(typeof showRcToast === "function") showRcToast("✅ Timetable settings saved!");
         document.getElementById('timetableConfigOverlay').style.display = 'none';
     } catch (error) {
         console.error("Error saving timetable config:", error);
-        if(typeof showToast === "function") showToast("❌ Failed to save configuration.");
+        if(typeof showRcToast === "function") showRcToast("❌ Failed to save configuration.");
     } finally {
         btnElement.innerText = originalText;
         btnElement.disabled = false;
     }
 };
+
+// 🚨 The Copy button hook for Hybrid colleges
+document.getElementById("btnCopyTimeToEng")?.addEventListener("click", () => {
+    document.getElementById("ttEngPeriodCount").value = document.getElementById("ttPeriodCount").value;
+    document.getElementById("ttEngStartTime").value = document.getElementById("ttStartTime").value;
+    document.getElementById("ttEngPeriodDuration").value = document.getElementById("ttPeriodDuration").value;
+    document.getElementById("ttEngLunchAfter").value = document.getElementById("ttLunchAfter").value;
+    document.getElementById("ttEngLunchDuration").value = document.getElementById("ttLunchDuration").value;
+});
 
 // ==========================================
 // 💳 RAZORPAY GATEWAY CONFIGURATION
