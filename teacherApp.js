@@ -30,6 +30,28 @@ let hasStartedInbox = false;
 let sdAttListenerUnsub = null;
 let sdMarksListenerUnsub = null;
 
+// 🚨 HYBRID STATE VARIABLES
+let collegeType = "ARTS_SCIENCE";
+let currentDeptStream = "ARTS_SCIENCE";
+
+// 🚨 DYNAMIC TIME HELPERS (Automatically switches between 6-period Arts and 8-period Engineering)
+function getTeacherPeriodCount() {
+    if (window.collegeTimeConfig) {
+        if (collegeType === "ENGINEERING_HYBRID" && currentDeptStream === "ENGINEERING" && window.collegeTimeConfig.eng_config) {
+            return window.collegeTimeConfig.eng_config.periodCount || 8;
+        }
+        return window.collegeTimeConfig.periodCount || 6;
+    }
+    return 6;
+}
+
+function getTeacherTimeConfig() {
+    if (collegeType === "ENGINEERING_HYBRID" && currentDeptStream === "ENGINEERING" && window.collegeTimeConfig && window.collegeTimeConfig.eng_config) {
+        return window.collegeTimeConfig.eng_config;
+    }
+    return window.collegeTimeConfig || { periodCount: 6, startTime: "09:30", periodDurationMin: 60, lunchBreakAfterPeriod: 3, lunchDurationMin: 45 };
+}
+
 // Notification Variables
 let allMessagesMap = new Map();
 let allNotifsMap = new Map();
@@ -424,6 +446,8 @@ function ListenToProfile() {
                 const deptSnap = await getDoc(doc(db, "colleges", currentCollegeID, "departments", data.departmentID));
                 if (deptSnap.exists()) {
                     deptName = deptSnap.data().name || data.departmentID;
+                    // 🚨 FETCH THE DEPARTMENT STREAM TAG (Engineering vs Arts)
+                    currentDeptStream = deptSnap.data().stream || "ARTS_SCIENCE";
                 } else {
                     deptName = data.departmentID.replace("DEPT_", "").replace(/_/g, " ");
                 }
@@ -818,6 +842,9 @@ async function syncSemesterWithDatabase() {
         if (collegeSnap.exists()) {
             let data = collegeSnap.data();
             
+            // 🚨 FETCH HYBRID MASTER SWITCH
+            if (data.collegeType) collegeType = data.collegeType;
+            
             if (data.currentSemesterType) {
                 currentSemesterType = data.currentSemesterType;
             }
@@ -1156,18 +1183,22 @@ async function checkTimetableAllocation(ticket, dateStr) {
     const globalDocID = `${dateStr}_Semester${selectedSem}_GLOBAL`;
 
     try {
-        // 🚨 V2: Read the new lightweight lock sheet instead of GLOBAL
-        const lockSnap = await getDoc(doc(db, "colleges", currentCollegeID, "daily_locks", dateStr));
+        // 🚨 V3: Read the new PERIOD-SHARDED lightweight lock sheet
+        const lockSnap = await getDoc(doc(db, "colleges", currentCollegeID, "daily_locks", `${dateStr}_P${pIndex}`));
         if(lockSnap.exists()) {
             const data = lockSnap.data();
+            
+            // Check Teacher Lock (Prefix removed!)
             if(data.teacher_locks) {
-                let lockedSubj = data.teacher_locks[`p${pIndex}_${currentUserID}`];
+                let lockedSubj = data.teacher_locks[currentUserID];
                 if(lockedSubj && lockedSubj !== selectedSubject) {
                     showAttCenterMessage(`Double Booking Prevented:<br>You already marked '${lockedSubj}' for Period ${pIndex}.`); return;
                 }
             }
+            
+            // Check Department Lock (Prefix removed!)
             if(data.dept_locks) {
-                let dLock = data.dept_locks[`p${pIndex}_${teacherDeptRaw}`];
+                let dLock = data.dept_locks[teacherDeptRaw];
                 if(dLock && dLock.subject !== selectedSubject) {
                     if(dLock.teacherID !== currentUserID) {
                         showAttCenterMessage(`Period ${pIndex} is locked for your department.<br>Already marked for '${dLock.subject}' by ${dLock.teacherName || "another teacher"}.`); return;
@@ -1359,6 +1390,9 @@ function attachSubCardListener(docSnap, sem, subj) {
             document.getElementById(`subCardIcon_${id}`).style.transform = "rotate(0deg)";
             attIsSubstitutePanelOpen = false;
             updateMainButtonState();
+            
+            // 🚨 FIX 2: If they manually close the substitute card, force a reload to restore the Main Class listener!
+            loadSessionData();
         } else {
             attPendingSubBatchName = bName;
             attPendingSubBatchIndex = bIndex;
@@ -1424,6 +1458,9 @@ function spawnManualBatchCards(subDocs, sem, subj) {
                 document.getElementById(`subCardIcon_${id}`).style.transform = "rotate(0deg)";
                 attIsSubstitutePanelOpen = false;
                 updateMainButtonState();
+                
+                // 🚨 FIX 3: If they manually close the substitute card, force a reload to restore the Main Class listener!
+                loadSessionData();
             } else {
                 attPendingSubBatchName = bName;
                 attPendingSubBatchIndex = bIndex;
@@ -1543,13 +1580,14 @@ async function loadAttendanceRegister(filterStudentIDs, ticket, trueCategory, da
     attCurrentPeriodEvents.clear();
 
     try {
-        // 🚨 V2: Pull student claims from the daily lock sheet
-        const lockSnap = await getDoc(doc(db, "colleges", currentCollegeID, "daily_locks", dateStr));
+        // 🚨 V3: Pull student claims from the period-sharded lock sheet
+        const lockSnap = await getDoc(doc(db, "colleges", currentCollegeID, "daily_locks", `${dateStr}_P${pIndex}`));
         if(lockSnap.exists() && lockSnap.data().student_claims) {
             let claims = lockSnap.data().student_claims;
-            let prefix = `p${pIndex}_`;
-            for(let key in claims) {
-                if(key.startsWith(prefix)) attCurrentPeriodClaims.set(key.substring(prefix.length), claims[key]);
+            
+            // No prefix filtering needed anymore! All claims here belong to this period.
+            for(let studentID in claims) {
+                attCurrentPeriodClaims.set(studentID, claims[studentID]);
             }
         }
 
@@ -1861,11 +1899,8 @@ async function saveAttendance() {
         setTimeout(() => {
             document.getElementById("updateProgressModal").classList.remove("active");
             if(attIsSubstitutePanelOpen) {
-                document.getElementById(`subCardBody_${attPendingSubCardId}`).style.display = "none";
-                document.getElementById(`subCardIcon_${attPendingSubCardId}`).style.transform = "rotate(0deg)";
+                // 🚨 FIX 1: Do NOT close the substitute panel! Keep it open so the teacher can see the updated marks!
                 document.getElementById(`subCardSaveBtn_${attPendingSubCardId}`).style.pointerEvents = "auto";
-                attIsSubstitutePanelOpen = false;
-                updateMainButtonState();
             } else {
                 document.getElementById("attSaveBtn").style.pointerEvents = "auto";
                 loadSessionData(); 
@@ -2475,7 +2510,7 @@ function histProcessDailyData(snapshot, targetSemester) {
         if (docSnap.id.endsWith("_GLOBAL") || docSnap.id.endsWith("_EVENTS")) return;
 
         let dayData = docSnap.data();
-        let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+        let pCount = getTeacherPeriodCount();
         for (let i = 1; i <= pCount; i++) {
             let pKey = `period_${i}`;
             if (dayData[pKey]) {
@@ -2837,7 +2872,11 @@ async function subjLoadMasterSubjects() {
             let code = d.code || d.id;
             let name = d.Name || d.name || "Unknown";
             let sems = d.semester !== undefined ? String(d.semester) : (d.Semester !== undefined ? String(d.Semester) : "");
-            subjAllSubjectsCache.push({ code: code, name: name, semesters: sems });
+            
+            // 🚨 THE FIX 1: We must extract and cache the 'type' so the dropdown can sort it later!
+            let type = d.Type || d.type || d.category || "UNKNOWN";
+            
+            subjAllSubjectsCache.push({ code: code, name: name, semesters: sems, type: type });
         });
 
         subjIsMasterLoaded = true;
@@ -2908,11 +2947,35 @@ function subjRefreshDropdown() {
     let masterDrop = document.getElementById("subjMasterDropdown");
     let optionsHTML = `<option value="NONE">Select Subject to Add...</option>`;
 
-    subjMasterList.forEach((name, code) => {
-        if (!subjActiveLinks.has(code)) {
-            optionsHTML += `<option value="${code}">${name} (${code})</option>`;
-        }
-    });
+    if (collegeType === "ENGINEERING_HYBRID") {
+        let engOpts = "";
+        let artsOpts = "";
+        
+        subjMasterList.forEach((name, code) => {
+            if (!subjActiveLinks.has(code)) {
+                let subData = subjAllSubjectsCache.find(s => s.code === code);
+                
+                // 🚨 THE FIX 2: Now 'subData.type' actually exists in the RAM!
+                let sType = (subData && subData.type) ? subData.type.toUpperCase() : "";
+                
+                // Added "MCC" to match your HOD Assignment panel logic
+                if (["CORE", "LAB", "PE", "OE", "BSC", "MCC"].includes(sType)) {
+                    engOpts += `<option value="${code}">${name} (${code})</option>`;
+                } else {
+                    artsOpts += `<option value="${code}">${name} (${code})</option>`;
+                }
+            }
+        });
+        
+        if (engOpts) optionsHTML += `<optgroup label="⚙️ Engineering Subjects">${engOpts}</optgroup>`;
+        if (artsOpts) optionsHTML += `<optgroup label="🎨 Arts & Science Subjects">${artsOpts}</optgroup>`;
+    } else {
+        subjMasterList.forEach((name, code) => {
+            if (!subjActiveLinks.has(code)) {
+                optionsHTML += `<option value="${code}">${name} (${code})</option>`;
+            }
+        });
+    }
 
     masterDrop.innerHTML = optionsHTML;
     masterDrop.value = "NONE";
@@ -2935,12 +2998,21 @@ function subjSpawnSubjectHTML(code, name) {
     let isPending = subjActiveLinks.get(code) === "PENDING";
     let statusBadge = isPending ? `<span style="font-size:10px; background:#fef3c7; color:#d97706; padding:3px 8px; border-radius:8px; font-weight:bold; margin-left:10px;">UNSAVED</span>` : "";
 
+    // 🚨 THE FIX 3: Injecting the Badge exactly like the Principal script
+    let subData = subjAllSubjectsCache.find(s => s.code === code);
+    let sType = (subData && subData.type) ? subData.type.toUpperCase() : "UNKNOWN";
+    let typeBadge = `<span style="font-size:10px; background:var(--bg-grid-color); color:var(--text-muted); border: 1px solid var(--border-color); padding:3px 8px; border-radius:8px; margin-left:10px; font-weight:bold;">${sType}</span>`;
+
     let div = document.createElement("div");
     div.id = `subjItem_${code}`;
     div.style.cssText = "background:white; border:1px solid var(--border-color); border-radius:12px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 2px 5px rgba(0,0,0,0.02);";
     
     div.innerHTML = `
-        <div style="font-weight:600; font-size:14px; color:var(--text-dark); flex:1;">${name} <span style="font-size:11px; color:var(--text-muted); font-weight:normal;">(${code})</span>${statusBadge}</div>
+        <div style="font-weight:600; font-size:14px; color:var(--text-dark); flex:1;">
+            ${name} <span style="font-size:11px; color:var(--text-muted); font-weight:normal;">(${code})</span>
+            ${typeBadge}
+            ${statusBadge}
+        </div>
         <button id="subjDelBtn_${code}" style="background:#fee2e2; border:none; color:var(--brand-red); width:35px; height:35px; border-radius:8px; cursor:pointer; transition:0.2s;"><i class="fas fa-trash-alt"></i></button>
     `;
 
@@ -3800,7 +3872,7 @@ window.SL_OpenDashboard = async (sID) => {
     switchView(views.studentDashboard, document.getElementById('btnNavStudentList'));
     
     document.getElementById("sdNameText").innerText = "Loading..."; document.getElementById("sdRollText").innerText = ""; document.getElementById("sdStatusBadge").innerText = "..."; document.getElementById("sdSemesterTitle").innerText = "Loading...";
-    SD_UpdateWaveUI(0); ["sdStatAtt", "sdStatAbs", "sdStatTot", "sdStatPAtt", "sdStatPAbs", "sdStatPTot"].forEach(id => document.getElementById(id).innerText = "0");
+    SD_UpdateWaveUI(0, 0); ["sdStatAtt", "sdStatAbs", "sdStatTot", "sdStatPAtt", "sdStatPAbs", "sdStatPTot"].forEach(id => document.getElementById(id).innerText = "0");
     document.getElementById("sdSubjectList").innerHTML = ""; document.getElementById("sdEnrolledList").innerHTML = "<i>Loading subjects...</i>";
     
     if(sdWorkingDays.size === 0) {
@@ -3925,9 +3997,32 @@ async function SD_BuildUI(specificDate = "All Time") {
             if(subName === "Strict_Global") { strictPresent = s.present || 0; strictTotal = s.total || 0; }
             else {
                 let p = s.present || 0, t = s.total || 0; simpleAtt += p; simpleTotal += t;
-                let cleanSubName = subName.replace("-", "/");
-                if(cleanSubName.toUpperCase().endsWith("_DROPPED")) cleanSubName = cleanSubName.substring(0, cleanSubName.length - 8) + " <span style='color:#ef4444; font-size:11px;'>(Dropped)</span>";
-                subjectAtt[cleanSubName] = { p:p, t:t };
+                
+                // 🚨 NEW FIX: Reverse Lookup the real name with spaces!
+                let realDisplayName = subName.replace("-", "/"); // Fallback name
+                let isDropped = false;
+                
+                // Strip the "_DROPPED" tag temporarily if it exists
+                let searchKey = subName;
+                if(searchKey.toUpperCase().endsWith("_DROPPED")) {
+                    searchKey = searchKey.substring(0, searchKey.length - 8);
+                    isDropped = true;
+                }
+
+                // Search the global subjects cache for the matching spaceless name
+                for (let globalSub of sdCachedGlobalSubjects) {
+                    let globalClean = globalSub.displayName.replace(/\s+/g, "").replace(/\//g, "-").replace(/\./g, "");
+                    if (globalClean.toLowerCase() === searchKey.toLowerCase()) {
+                        realDisplayName = globalSub.displayName; // Found the real name with spaces!
+                        break;
+                    }
+                }
+
+                if (isDropped) {
+                    realDisplayName += " <span style='color:#ef4444; font-size:11px;'>(Dropped)</span>";
+                }
+
+                subjectAtt[realDisplayName] = { p:p, t:t };
             }
         });
     }
@@ -3957,9 +4052,17 @@ async function SD_BuildUI(specificDate = "All Time") {
         projectedTot = simpleTotal + remainingPeriods;
     }
 
-    let percent = projectedTot > 0 ? (projectedAtt / projectedTot) * 100 : 0;
+    let projectedPercent = projectedTot > 0 ? (projectedAtt / projectedTot) * 100 : 0;
     
-    SD_UpdateWaveUI(percent);
+    // 🚨 NEW: Calculate the Actual Current Percentage!
+    let currentPercent = 0;
+    if (strictTotal > 0) {
+        currentPercent = (strictPresent / strictTotal) * 100;
+    } else {
+        currentPercent = simpleTotal > 0 ? (simpleAtt / simpleTotal) * 100 : 0;
+    }
+    
+    SD_UpdateWaveUI(projectedPercent, currentPercent);
     document.getElementById("sdStatAtt").innerText = strictPresent; document.getElementById("sdStatAbs").innerText = strictTotal - strictPresent; document.getElementById("sdStatTot").innerText = strictTotal;
     document.getElementById("sdStatPAtt").innerText = simpleAtt; document.getElementById("sdStatPAbs").innerText = simpleTotal - simpleAtt; document.getElementById("sdStatPTot").innerText = simpleTotal;
 
@@ -3972,11 +4075,11 @@ async function SD_BuildUI(specificDate = "All Time") {
             
             // 🚨 NEW: Added onclick and hover states to make the card clickable!
             return `<div onclick="window.OpenAttendanceLedger('${name.replace(/'/g, "\\'")}', ${p}, ${t})" style="background:var(--bg-base); border:1px solid var(--border-color); border-radius:10px; padding:12px; margin-bottom:8px; transform: translateZ(0); cursor:pointer; transition:0.2s;" onmouseover="this.style.borderColor='var(--brand-red)';" onmouseout="this.style.borderColor='var(--border-color)';">
-                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                    <span style="font-weight:bold; font-size:13px; color:var(--text-dark);">${name} <i class="fas fa-external-link-alt" style="font-size: 10px; color: var(--text-muted); margin-left: 5px;"></i></span> 
-                    <span style="font-size:12px; font-weight:bold; color:${col};">${per.toFixed(0)}% (${p}/${t})</span>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:5px; gap: 10px;">
+                    <span style="font-weight:bold; font-size:13px; color:var(--text-dark); word-break: break-word; flex: 1;">${name} <i class="fas fa-external-link-alt" style="font-size: 10px; color: var(--text-muted); margin-left: 5px;"></i></span> 
+                    <span style="font-size:12px; font-weight:bold; color:${col}; flex-shrink: 0; text-align: right;">${per.toFixed(0)}% (${p}/${t})</span>
                 </div>
-                <div style="background:var(--bg-surface); height:6px; border-radius:3px; overflow:hidden; transform: translateZ(0);"><div style="height:100%; background:${col}; width:${per}%;"></div></div>
+                <div style="background:var(--bg-surface); height:6px; border-radius:3px; overflow:hidden; transform: translateZ(0); margin-top: 8px;"><div style="height:100%; background:${col}; width:${per}%;"></div></div>
             </div>`;
         }).join('');
     } else {
@@ -4012,7 +4115,11 @@ window.OpenAttendanceLedger = async (subjectNameFromUI, presentCount, totalCount
     if (!overlay) return;
     overlay.classList.add("active");
     
-    document.getElementById("ledgerSubjectName").innerText = subjectNameFromUI.split('<')[0].trim();
+    let ledgerTitle = document.getElementById("ledgerSubjectName");
+    ledgerTitle.innerText = subjectNameFromUI.split('<')[0].trim();
+    ledgerTitle.style.wordBreak = "break-word";
+    ledgerTitle.style.whiteSpace = "normal"; // Forces the text to wrap
+    ledgerTitle.style.paddingRight = "30px"; // Adds a buffer so the text doesn't overlap your close 'X' button
     document.getElementById("ledgerStudentStats").innerText = `Attended: ${presentCount} / ${totalCount} Classes`;
     
     const listContainer = document.getElementById("ledgerDatesList");
@@ -4086,6 +4193,11 @@ async function FetchDatesForSubject(subjectNameFromUI) {
     let semDisplay = document.getElementById("sdSemesterTitle").innerText.trim(); 
     let dbSubjectName = subjectNameFromUI.split('<')[0].trim().replace("/", "-");
 
+    // 🚨 THE FIX: Translate the UI card name to the Database Log name
+    if (dbSubjectName === "Events") {
+        dbSubjectName = "Special Events";
+    }
+
     try {
         // Handle all 3 format styles to prevent read misses
         let format1 = semDisplay; 
@@ -4108,7 +4220,7 @@ async function FetchDatesForSubject(subjectNameFromUI) {
             let dateObj = new Date(rawDateStr);
             let dateFormatted = isNaN(dateObj.getTime()) ? rawDateStr : dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-            let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+            let pCount = getTeacherPeriodCount();
             for (let i = 1; i <= pCount; i++) {
                 let pKey = `period_${i}`;
 
@@ -4125,6 +4237,11 @@ async function FetchDatesForSubject(subjectNameFromUI) {
                             }
                             
                             let teacherName = d[pKey].markedByTeacherName || "Unknown Teacher";
+
+                            // // 🚨 BONUS FIX: Replace the Teacher's name with the specific Event Name (e.g., "NSS")!
+                            // if (logSubjectClean === "Special Events" && d[pKey].event_details && d[pKey].event_details[sdCurrentStudentID]) {
+                            //     teacherName = `<span style="color:var(--brand-red); font-weight:800;">${d[pKey].event_details[sdCurrentStudentID]}</span>`;
+                            // }
 
                             timeline.push({
                                 dateFormatted: dateFormatted,
@@ -4150,24 +4267,30 @@ async function FetchDatesForSubject(subjectNameFromUI) {
     return timeline;
 }
 
-function SD_UpdateWaveUI(percentage) {
-    let col = percentage >= 75 ? "#10b981" : (percentage >= 60 ? "#f59e0b" : "var(--brand-red)");
-    let txt = percentage.toFixed(2) + "%";
-    let visualPercent = 10 + (percentage * 0.75); 
+function SD_UpdateWaveUI(projectedPercentage = 0, currentPercentage = 0) {
+    // Determine colors and visuals based on the Current percentage
+    let col = currentPercentage >= 75 ? "#10b981" : (currentPercentage >= 60 ? "#f59e0b" : "var(--brand-red)");
+    let projTxt = projectedPercentage.toFixed(2) + "%";
+    let currTxt = currentPercentage.toFixed(2) + "%";
+    
+    // Animate the wave based on the Current percentage
+    let visualPercent = 10 + (currentPercentage * 0.75); 
 
     let circleFill = document.getElementById("sdCircleWave");
     circleFill.style.setProperty('--wave-color', col);
     circleFill.style.top = `${105 - visualPercent}%`; 
     
-    // 🚨 FIX: Removed the inline transform override so the CSS rotation animation can run!
     circleFill.style.willChange = "transform, top"; 
     
-    document.getElementById("sdCircleText").innerHTML = `<span style="font-size: 11px; display: block; line-height: 1; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px;">Projected</span><span id="sdCirclePercentVal" style="font-size: 26px;">${txt}</span>`;
+    // 🚨 Print Projected in the Circle
+    document.getElementById("sdCircleText").innerHTML = `<span style="font-size: 11px; display: block; line-height: 1; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px;">Projected</span><span id="sdCirclePercentVal" style="font-size: 26px;">${projTxt}</span>`;
 
     let rowFill = document.getElementById("sdWavyFill");
     rowFill.style.setProperty('--wave-color', col);
     rowFill.style.setProperty('--wave-percent', `${visualPercent}%`);
-    document.getElementById("sdWavyText").innerText = `Current: ${txt}`;
+    
+    // 🚨 Print Current in the Bar
+    document.getElementById("sdWavyText").innerText = `Current: ${currTxt}`;
 }
 
 document.getElementById("sdBtnAllTime").addEventListener("click", () => { document.getElementById("sdDateFilter").value = ""; SD_BuildUI("All Time"); });
@@ -4213,10 +4336,20 @@ function SD_FetchDailyAttendance(targetDate, dbSemesterFormat) {
                             
                             let subName = pData.subject || "Unknown Subject"; 
                             let col = isPres ? "#10b981" : "var(--brand-red)";
-                            
+
+                            // 🚨 NEW: Extract the exact Event Name from the database for this specific student
+                            let eventBadge = "";
+                            if (subName === "Special Events" && pData.event_details && pData.event_details[sdCurrentStudentID]) {
+                                let specificEventName = pData.event_details[sdCurrentStudentID];
+                                eventBadge = `<span style="font-size:10px; font-weight:800; color:var(--brand-red); background:var(--bg-grid-color); border:1px solid var(--border-color); padding:3px 8px; border-radius:6px; margin-left:8px; letter-spacing:0.5px;">${specificEventName}</span>`;
+                            }
+
                             html += `
                             <div style="background:var(--bg-base); border:1px solid var(--border-color); border-radius:10px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; transform: translateZ(0); transition: 0.2s;">
-                                <span style="font-weight:bold; font-size:13px; color:var(--text-dark);">${subName}</span> 
+                                <div style="display:flex; align-items:center;">
+                                    <span style="font-weight:bold; font-size:13px; color:var(--text-dark);">${subName}</span> 
+                                    ${eventBadge}
+                                </div>
                                 <span style="font-size:12px; font-weight:bold; color:white; background:${col}; padding:3px 8px; border-radius:6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${isPres ? 'Present' : 'Absent'}</span>
                             </div>`;
                         }
@@ -4371,10 +4504,28 @@ function saRefreshCategories() {
     });
     
     let catDrop = document.getElementById("saCatDrop");
-    if (types.size === 0) catDrop.innerHTML = `<option value="">No Categories</option>`;
-    else {
+    if (types.size === 0) {
+        catDrop.innerHTML = `<option value="">No Categories</option>`;
+    } else {
         let arr = Array.from(types).sort(); 
-        catDrop.innerHTML = `<option value="">Select Category</option>` + arr.map(t => `<option value="${t}">${t}</option>`).join('');
+        let optionsHTML = `<option value="">Select Category</option>`;
+        
+        // 🚨 ADDED OPTGROUPS: Smart separation for Hybrid Colleges
+        if (collegeType === "ENGINEERING_HYBRID") {
+            let engCats = arr.filter(c => ["CORE", "LAB", "PE", "OE", "BSC", "MCC"].includes(c.toUpperCase()));
+            let artsCats = arr.filter(c => !["CORE", "LAB", "PE", "OE", "BSC", "MCC"].includes(c.toUpperCase()));
+            
+            if (engCats.length > 0) {
+                optionsHTML += `<optgroup label="⚙️ Engineering Types">` + engCats.map(t => `<option value="${t}">${t}</option>`).join('') + `</optgroup>`;
+            }
+            if (artsCats.length > 0) {
+                optionsHTML += `<optgroup label="🎨 Arts & Science Types">` + artsCats.map(t => `<option value="${t}">${t}</option>`).join('') + `</optgroup>`;
+            }
+        } else {
+            // NORMAL ARTS & SCIENCE LOGIC (Completely untouched)
+            optionsHTML += arr.map(t => `<option value="${t}">${t}</option>`).join('');
+        }
+        catDrop.innerHTML = optionsHTML;
     }
     saRefreshSubjects();
 }
@@ -6022,7 +6173,7 @@ function ttLoadTimetable() {
 function ttRenderDay(periodData) {
     let wrapper = document.getElementById("ttMyWrapper");
     let html = "";
-    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    let pCount = getTeacherPeriodCount();
 
     for (let i = 0; i < pCount; i++) {
         let hasClass = periodData[i] !== undefined;
@@ -6065,7 +6216,7 @@ function ttRenderDay(periodData) {
 function ttUpdateVisuals() {
     let now = new Date();
     let currentHour = now.getHours() + (now.getMinutes() / 60.0);
-    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    let pCount = getTeacherPeriodCount();
     
     for (let i = 0; i < pCount; i++) {
         let idBase = `my_tt_${i}`;
@@ -6073,7 +6224,7 @@ function ttUpdateVisuals() {
         let fillEl = document.getElementById(`fill_${idBase}`);
         
         // 🚨 V2 DYNAMIC CLOCK SYNC
-        let timing = window.getPeriodTiming(window.collegeTimeConfig, i + 1);
+        let timing = window.getPeriodTiming(getTeacherTimeConfig(), i + 1);
         const toDec = (t) => { let [hm, m] = t.split(' '); let [h, min] = hm.split(':').map(Number); if(m==='PM'&&h!==12)h+=12; if(m==='AM'&&h===12)h=0; return h+(min/60); };
         
         let startTime = toDec(timing.start);
@@ -6166,7 +6317,15 @@ function initAssignEngine() {
     // Fetch all teachers once for caching
     getDocs(collection(db, "colleges", currentCollegeID, "teachers")).then(snap => {
         asnCachedTeachers = [];
-        snap.forEach(d => asnCachedTeachers.push({ id: d.id, name: d.data().name || d.data().teacherName || "Unknown", dept: d.data().departmentID || "" }));
+        snap.forEach(d => {
+            let data = d.data();
+            // 🚨 C# Port: Aggressively grab the name and department variations
+            asnCachedTeachers.push({ 
+                id: d.id, 
+                name: data.name || data.teacherName || data.FullName || "Unknown", 
+                dept: data.departmentID || data.Department || data.department || "" 
+            });
+        });
         
         let todayIdx = new Date().getDay() - 1;
         if (todayIdx >= 0 && todayIdx <= 4) dayBtns[todayIdx].click();
@@ -6178,7 +6337,11 @@ async function asnLoadData() {
     document.getElementById("asnListContainer").innerHTML = `<div class="no-data-text">Loading Assign Panel...</div>`;
 
     // 1. Fetch Structure to know Categories
+    // 🚨 NEW: Read the correct structure path based on Hybrid rules
     let docID = `Sem${asnCurrentSem}_${asnSelectedDay}`;
+    if (collegeType === "ENGINEERING_HYBRID") {
+        docID = currentDeptStream === "ARTS_SCIENCE" ? `ARTSSCI_Sem${asnCurrentSem}_${asnSelectedDay}` : `SHARED_Sem${asnCurrentSem}_${asnSelectedDay}`;
+    }
     const structSnap = await getDoc(doc(db, "colleges", currentCollegeID, "timetable_structure", docID));
     
     if (!structSnap.exists() || !structSnap.data().slots) {
@@ -6189,7 +6352,7 @@ async function asnLoadData() {
     let slots = structSnap.data().slots;
     let validPeriods = [];
     let pCats = {};
-    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    let pCount = getTeacherPeriodCount();
     for (let i = 1; i <= pCount; i++) {
         if (slots[`P${i}`]) {
             let cat = slots[`P${i}`].trim();
@@ -6235,6 +6398,7 @@ async function asnLoadData() {
                     splitIndex: currentSplitIndex, 
                     isSplit: isSubBatch, 
                     category: actualCat, 
+                    masterCategory: cat, // 🚨 ADDED
                     subject: d.subjectName || "", 
                     teacher: d.teacherName || "", 
                     teacherID: d.teacherID || "", 
@@ -6242,7 +6406,7 @@ async function asnLoadData() {
                 });
             });
         } else {
-            asnActiveRows.push({ id: `r_${p}_0`, period: p, splitIndex: 0, isSplit: false, category: cat, subject: "", teacher: "", teacherID: "", room: "" });
+            asnActiveRows.push({ id: `r_${p}_0`, period: p, splitIndex: 0, isSplit: false, category: cat, masterCategory: cat, subject: "", teacher: "", teacherID: "", room: "" });
         }
     });
 
@@ -6251,6 +6415,20 @@ async function asnLoadData() {
     
     // 🚨 COST OPTIMIZED: Fetch only the specific year using the new Cache Engine!
     asnCachedYearStudents = await AdhyoraStudentCache.getStudentsByYear(yearStr);
+
+    // =========================================================
+    // 🚨 NEW FIX: Cache the EXACT category names from the database
+    // =========================================================
+    let cachedSubs = await AdhyoraMasterCache.getSubjects(currentCollegeID, db);
+    window.asnAvailableTypes = new Set();
+    cachedSubs.forEach(d => {
+        let docSem = (d.semester || d.Semester || "").toString();
+        if (docSem.split(',').some(s => s.trim() == asnCurrentSem)) {
+            let type = (d.type || d.Type || d.category || "").trim();
+            if (type) window.asnAvailableTypes.add(type);
+        }
+    });
+    // =========================================================
 
     asnRenderLayout();
 }
@@ -6275,30 +6453,55 @@ function asnRenderLayout() {
         html += `<div class="asn-period-header">Period ${p}</div>`;
         
         rows.forEach((row, idx) => {
-            let isMjdOrTut = row.category.toUpperCase().includes("MJD") || row.category.toUpperCase().includes("MID") || row.category.toUpperCase().includes("SEC") || row.category.toUpperCase().includes("TUTORIAL");
-            
+            let masterCat = row.masterCategory || row.category; // Uses the anchor we set up earlier
+            let upperMaster = masterCat.toUpperCase();
+            let upperCat = row.category.toUpperCase();
             let catOptions = "";
-            if (isMjdOrTut) {
-                let mjd = "Tutorial", mid = "Tutorial", sec = "Tutorial";
+
+            // 🚨 THE FIX: Dynamic Database-Driven Toggle
+            if (upperMaster.includes("MJD") || upperMaster.includes("MID") || upperMaster.includes("SEC") || upperMaster.includes("TUTORIAL")) {
                 
-                // Only swap prefixes if it's NOT already Tutorial
-                if (!row.category.toUpperCase().includes("TUTORIAL")) {
-                    mjd = row.category.replace("MID", "MJD").replace("SEC", "MJD");
-                    mid = row.category.replace("MJD", "MID").replace("SEC", "MID");
-                    sec = row.category.replace("MJD", "SEC").replace("MID", "SEC");
+                let smartTypes = new Set();
+                
+                // 1. Pull EXACT categories that exist in the database for this semester
+                if (window.asnAvailableTypes) {
+                    window.asnAvailableTypes.forEach(t => {
+                        let tUp = t.toUpperCase();
+                        // Only grab theory-based subjects (MJD, MID, SEC, TUTORIAL)
+                        if (tUp.includes("MJD") || tUp.includes("MID") || tUp.includes("SEC") || tUp.includes("TUTORIAL")) {
+                            smartTypes.add(t);
+                        }
+                    });
                 }
-            
-                // Use a Set to prevent duplicates
-                let uniqueCats = new Set([mjd, mid, sec, "Tutorial"]);
-                uniqueCats.forEach(c => {
-                    catOptions += `<option value="${c}" ${row.category === c ? 'selected' : ''}>${c}</option>`;
+                
+                // 2. Always fallback to include the Master and Current categories to prevent blanks
+                smartTypes.add(masterCat);
+                if (row.category) smartTypes.add(row.category);
+                // Hardcoded "Tutorial" removed. It will now only show if it exists in the database for this semester!
+
+                // 3. Build the options directly from the database's true values
+                Array.from(smartTypes).sort().forEach(t => {
+                    let sel = (row.category === t) ? 'selected' : '';
+                    catOptions += `<option value="${t}" ${sel}>${t}</option>`;
                 });
+
             } else {
-                catOptions = `<option value="${row.category}">${row.category}</option>`;
+                // It's a Core or VAC subject, so LOCK IT!
+                catOptions = `<option value="${row.category}" selected>${row.category}</option>`;
             }
 
+            let isMjdOrTut = upperCat.includes("MJD") || upperCat.includes("MID") || upperCat.includes("SEC") || upperCat.includes("TUTORIAL");
             let catLocked = row.isSplit || !isMjdOrTut ? "disabled" : "";
-            let subLocked = row.isSplit ? "disabled" : "";
+            
+            let isEngineeringType = ["CORE", "LAB", "PE", "OE", "BSC"].includes(upperCat);
+            
+            // 🚨 FIX: Detect General Subjects (VAC, AECC, MLD, MDC) so we can lock them out from HOD edits!
+            let isGeneralSubject = upperCat.includes("VAC") || upperCat.includes("AECC") || upperCat.includes("MLD") || upperCat.includes("MDC");
+
+            // 🚨 Apply the lock to Subject, Teacher, and Room dropdowns!
+            let subLocked = ((row.isSplit && !isEngineeringType) || isGeneralSubject) ? "disabled" : "";
+            let teaLocked = isGeneralSubject ? "disabled" : "";
+            let roomLocked = isGeneralSubject ? "disabled" : "";
 
             let isDel = row.isSplit; 
             let btnClass = isDel ? "asn-split-btn del" : "asn-split-btn"; 
@@ -6310,7 +6513,7 @@ function asnRenderLayout() {
                 badgeHtml = `<div class="asn-batch-badge" style="background:var(--brand-red); color:white;">Batch ${idx + 1}</div>`;
             }
 
-            // 🚨 FIX 3: Using 'asn-card' and 'asn-grid' with 'asn-input' cleanly
+            // 🚨 Inject the new locks into the HTML!
             html += `
             <div class="${cardClass}" id="card_${row.id}">
                 ${badgeHtml}
@@ -6319,10 +6522,10 @@ function asnRenderLayout() {
                     <select class="asn-input select" id="sub_${row.id}" ${subLocked} onchange="asnOnSubChange('${row.id}', this.value)">
                         <option value="">${row.subject ? row.subject : 'Loading...'}</option>
                     </select>
-                    <select class="asn-input select" id="tea_${row.id}" onchange="asnOnTeacherChange('${row.id}', this.value)">
+                    <select class="asn-input select" id="tea_${row.id}" ${teaLocked} onchange="asnOnTeacherChange('${row.id}', this.value)">
                         <option value="">${row.teacher ? row.teacher : 'Loading...'}</option>
                     </select>
-                    <input type="text" class="asn-input" id="rm_${row.id}" value="${row.room}" placeholder="Room TBD" onchange="asnOnRoomChange('${row.id}', this.value)">
+                    <input type="text" class="asn-input" id="rm_${row.id}" value="${row.room}" placeholder="Room TBD" ${roomLocked} onchange="asnOnRoomChange('${row.id}', this.value)">
                 </div>
                 <button class="${btnClass}" onclick="asnRequestSplit('${row.id}')">${btnIcon}</button>
             </div>`;
@@ -6343,6 +6546,7 @@ async function asnPopulateSubjects(row) {
     if (!subDrop) return;
 
     if (row.category.toLowerCase().includes("tutorial")) {
+        row.subject = "Tutorial"; // 🚨 THE FIX: Tell the data model we actually selected a subject!
         subDrop.innerHTML = `<option value="Tutorial" selected>Tutorial</option>`;
         subDrop.disabled = true;
         asnPopulateTeachers(row);
@@ -6408,17 +6612,27 @@ async function asnPopulateTeachers(row) {
     let isTutorial = row.subject.toLowerCase() === "tutorial" || row.category.toLowerCase().includes("tutorial");
     let cleanRowTeacher = (row.teacher || "").trim().toLowerCase();
     
+    // 🚨 THE FIX: The Detective Teacher Bypass!
     if (isTutorial) {
         let safeHodDept = teacherDeptRaw.replace("DEPT_", "").replace(/\s+/g, "").toLowerCase();
+        let safeDeptName = currentDeptName.replace(/\s+/g, "").toLowerCase();
+
         let opts = `<option value="" ${cleanRowTeacher ? '' : 'selected'}>Unassigned</option>`;
-        
+        let foundAny = false;
+
         asnCachedTeachers.forEach(t => {
+            // Aggressively check if they belong to this HOD's department
             let tDept = (t.dept || "").replace("DEPT_", "").replace(/\s+/g, "").toLowerCase();
-            if (tDept === safeHodDept || safeHodDept.includes(tDept)) {
+            let isMyDepartment = (tDept === safeHodDept || tDept === safeDeptName || tDept.includes(safeHodDept) || safeHodDept.includes(tDept) || tDept.includes(safeDeptName));
+
+            if (isMyDepartment) {
+                foundAny = true;
                 let isMatch = cleanRowTeacher === t.name.trim().toLowerCase();
                 opts += `<option value="${t.id}|${t.name}" ${isMatch ? 'selected' : ''}>${t.name}</option>`;
             }
         });
+
+        if (!foundAny) opts += `<option value="">No department faculty found</option>`;
         teaDrop.innerHTML = opts;
     } else {
         try {
@@ -6461,8 +6675,10 @@ window.asnOnSubChange = async (rowId, val) => {
     row.teacherID = ""; 
     row.room = "";
     
-    // Remove any existing split rows for this period
-    asnActiveRows = asnActiveRows.filter(r => !(r.period === row.period && r.isSplit)); 
+    // 🚨 PROTECT PARALLEL LABS: Only wipe sibling split rows if the MAIN row is changed!
+    if (!row.isSplit) {
+        asnActiveRows = asnActiveRows.filter(r => !(r.period === row.period && r.isSplit)); 
+    }
     
     if (val) {
         try {
@@ -6480,21 +6696,24 @@ window.asnOnSubChange = async (rowId, val) => {
             allocs.sort((a,b) => (parseInt(a.splitIndex)||0) - (parseInt(b.splitIndex)||0));
 
             // Apply the main row (Batch 1 / Common) allocation if it exists
-            if (allocs.length > 0) {
-                let mainAlloc = allocs[0];
-                row.teacher = mainAlloc.teacherName || "";
-                row.teacherID = mainAlloc.teacherID || "";
-                row.room = mainAlloc.room || "";
+            let targetAlloc = allocs.find(a => parseInt(a.splitIndex || 0) === row.splitIndex);
+            if (!targetAlloc && allocs.length > 0) targetAlloc = allocs[0]; // Fallback to main if sub doesn't exist
+
+            if (targetAlloc) {
+                row.teacher = targetAlloc.teacherName || "";
+                row.teacherID = targetAlloc.teacherID || "";
+                row.room = targetAlloc.room || "";
             }
 
-            // 2. 🚨 THE FIX: Fetch batches independently! (Matches C# RestoreSplitsForMainRow)
+            // 2. Fetch batches to see if we need to auto-spawn rows
             const bSnap = await getDocs(query(
                 collection(db, "colleges", currentCollegeID, "subject_batches"), 
                 where("semester", "==", asnCurrentSem), 
                 where("subjectName", "==", val)
             ));
 
-            if (bSnap.size > 1) {
+            // 🚨 ONLY auto-spawn new split rows if the HOD changed the MAIN row
+            if (bSnap.size > 1 && !row.isSplit) {
                 let bDocs = []; 
                 bSnap.forEach(d => bDocs.push(d.data())); 
                 bDocs.sort((a,b) => a.batchName.localeCompare(b.batchName));
@@ -6512,6 +6731,7 @@ window.asnOnSubChange = async (rowId, val) => {
                         splitIndex: i, 
                         isSplit: true, 
                         category: row.category, 
+                        masterCategory: row.masterCategory, // 🚨 ADDED
                         subject: val, 
                         teacher: tName, 
                         teacherID: tID, 
@@ -6650,7 +6870,7 @@ function asnExecuteSplitAction() {
         if (isDeptSplit) asnOpenDeptSplit(row, false); 
         else {
             let newIdx = asnActiveRows.filter(r => r.period === row.period && r.isSplit).length + 1; 
-            asnActiveRows.push({ id: `r_${row.period}_${newIdx}_${Date.now()}`, period: row.period, splitIndex: newIdx, isSplit: true, category: row.category, subject: row.subject, teacher: "", teacherID: "", room: "" }); 
+            asnActiveRows.push({ id: `r_${row.period}_${newIdx}_${Date.now()}`, period: row.period, splitIndex: newIdx, isSplit: true, category: row.category, masterCategory: row.masterCategory, subject: row.subject, teacher: "", teacherID: "", room: "" }); 
             asnRenderLayout(); 
             asnExecuteDivideEvenly(row.subject, newIdx + 1, row.category);
         }
@@ -6807,7 +7027,7 @@ async function asnConfirmDeptSplit(subject, uniqueDepts, studentToDept) {
 
         let existingCount = asnActiveRows.filter(r => r.period === asnPendSplitRow.period).length;
         if (totalBatches > existingCount) { 
-            for(let i=existingCount; i<totalBatches; i++) asnActiveRows.push({ id: `r_${asnPendSplitRow.period}_${i}_${Date.now()}`, period: asnPendSplitRow.period, splitIndex: i, isSplit: true, category: asnPendSplitRow.category, subject: subject, teacher: "", teacherID: "", room: "" }); 
+            for(let i=existingCount; i<totalBatches; i++) asnActiveRows.push({ id: `r_${asnPendSplitRow.period}_${i}_${Date.now()}`, period: asnPendSplitRow.period, splitIndex: i, isSplit: true, category: asnPendSplitRow.category, masterCategory: asnPendSplitRow.masterCategory, subject: subject, teacher: "", teacherID: "", room: "" }); 
         } else if (totalBatches < existingCount) { 
             asnActiveRows = asnActiveRows.filter(r => r.period !== asnPendSplitRow.period || r.splitIndex < totalBatches); 
         }
@@ -7176,7 +7396,7 @@ async function generateNepAttendanceStatsCSV(students, sem) {
 
 // 6. CSV GENERATOR: DAILY LOGS (Optimized & Dynamic)
 async function generateDailyLogsCSV(students, sem) {
-    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    let pCount = getTeacherPeriodCount();
     
     // Dynamically build the header (P1, P2, P3... up to pCount)
     let periodHeaders = [];
@@ -8898,7 +9118,7 @@ async function MD_FetchTimetableAndSubjects(filterDate) {
 
 function MD_GenerateTimetableGrid(ttSnap) {
     const gridEl = document.getElementById("mdTimetableGrid"); 
-    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    let pCount = getTeacherPeriodCount();
     let grid = Array.from({ length: 6 }, () => Array(pCount).fill('<span class="tt-empty" style="color:var(--text-muted); padding-top:8px; display:block;">--</span>'));
     const dayMap = { "monday":0, "tuesday":1, "wednesday":2, "thursday":3, "friday":4, "saturday":5 };
     
@@ -8956,14 +9176,31 @@ async function MD_FetchHours(targetDate) {
             const snap = await getDocs(query(collection(db, "colleges", currentCollegeID, "attendance"), where("date", "==", targetDate)));
             let totalHrs = 0; let subjectHours = {};
             
+            // 🚨 THE FIX: Use a Set to prevent double-counting across multiple semesters!
+            let uniquePeriodsCounted = new Set(); 
+
             snap.forEach(doc => { 
                 let d = doc.data(); 
                 Object.keys(d).forEach(k => { 
                     if (k.startsWith("period_") && d[k].markedByTeacherID === currentUserID) { 
                         let subName = d[k].subject || "Unknown Subject"; 
-                        if (!subjectHours[subName]) subjectHours[subName] = 0; 
-                        subjectHours[subName]++; 
-                        totalHrs++; 
+                        
+                        // 🚨 Extract actual Event Name for the Summary Header
+                        let displaySubName = subName;
+                        if (subName === "Special Events" && d[k].event_details) {
+                            let eNames = new Set(Object.values(d[k].event_details));
+                            if (eNames.size > 0) {
+                                displaySubName = `Special Events (${Array.from(eNames).join(', ')})`;
+                            }
+                        }
+
+                        let uniqueKey = `${k}_${subName}`; // e.g. "period_1_Special Events"
+                        if (!uniquePeriodsCounted.has(uniqueKey)) {
+                            uniquePeriodsCounted.add(uniqueKey);
+                            if (!subjectHours[displaySubName]) subjectHours[displaySubName] = 0; 
+                            subjectHours[displaySubName]++; 
+                            totalHrs++; 
+                        }
                     } 
                 }); 
             });
@@ -9000,8 +9237,8 @@ function MD_DrawSubjectRows(hoursMap) {
 }
 
 function ExtractMyTimeline(snapshot) {
-    let records = [];
-    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6; // 🚨 ADDED
+    let recordsMap = new Map(); // 🚨 THE FIX: Map merges multiple documents into one card!
+    let pCount = getTeacherPeriodCount(); 
     
     snapshot.forEach(doc => {
         let d = doc.data();
@@ -9009,11 +9246,23 @@ function ExtractMyTimeline(snapshot) {
         let dateObj = new Date(rawDateStr);
         let dateFormatted = isNaN(dateObj.getTime()) ? rawDateStr : dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-        for(let i=1; i<=pCount; i++) { // 🚨 CHANGED TO pCount
+        for(let i=1; i<=pCount; i++) { 
             let pKey = `period_${i}`;
             let pData = d[pKey];
             
             if (pData && pData.markedByTeacherID === currentUserID) {
+                let subjectName = pData.subject || "Unknown Subject";
+                let mergeKey = `${rawDateStr}_P${i}_${subjectName}`; // The unique merger ID
+
+                // 🚨 NEW: Extract Custom Event Name securely
+                let eventNamesSet = new Set();
+                if (pData.event_details) {
+                    Object.values(pData.event_details).forEach(e => {
+                        if(e) eventNamesSet.add(e.trim());
+                    });
+                }
+                let customEventLabel = eventNamesSet.size > 0 ? Array.from(eventNamesSet).join(", ") : "";
+
                 let timeString = "--:--";
                 let rawTime = 0;
                 
@@ -9029,20 +9278,44 @@ function ExtractMyTimeline(snapshot) {
                     presentCount = pData.stats.presentCount || 0;
                 }
 
-                records.push({
-                    subject: pData.subject || "Unknown Subject",
-                    dateFormatted: dateFormatted,
-                    timeString: timeString,
-                    rawTime: rawTime,
-                    rawDate: dateObj, 
-                    period: i,
-                    totalStudents: totalStudents,
-                    presentCount: presentCount
-                });
+                if (recordsMap.has(mergeKey)) {
+                    // 🚨 MERGE EVENT: Add the student counts together!
+                    let existing = recordsMap.get(mergeKey);
+                    existing.totalStudents += totalStudents;
+                    existing.presentCount += presentCount;
+                    
+                    // Merge event labels if multiple semesters have different event names
+                    if (customEventLabel) {
+                        let oldEvents = existing.customEventLabel ? existing.customEventLabel.split(", ") : [];
+                        if (!oldEvents.includes(customEventLabel)) {
+                            existing.customEventLabel = existing.customEventLabel ? `${existing.customEventLabel}, ${customEventLabel}` : customEventLabel;
+                        }
+                    }
+
+                    // Keep the earliest timestamp if they differ by milliseconds
+                    if (rawTime > 0 && (existing.rawTime === 0 || rawTime < existing.rawTime)) {
+                        existing.rawTime = rawTime;
+                        existing.timeString = timeString;
+                    }
+                } else {
+                    // Create the initial card
+                    recordsMap.set(mergeKey, {
+                        subject: subjectName,
+                        customEventLabel: customEventLabel,
+                        dateFormatted: dateFormatted,
+                        timeString: timeString,
+                        rawTime: rawTime,
+                        rawDate: dateObj, 
+                        period: i,
+                        totalStudents: totalStudents,
+                        presentCount: presentCount
+                    });
+                }
             }
         }
     });
 
+    let records = Array.from(recordsMap.values());
     records.sort((a, b) => {
         if (b.rawDate.getTime() !== a.rawDate.getTime()) {
             return b.rawDate - a.rawDate;
@@ -9063,11 +9336,17 @@ function RenderMyTimeline(records) {
     let html = records.map(record => {
         let percentage = record.totalStudents > 0 ? Math.round((record.presentCount / record.totalStudents) * 100) : 0;
         
+        // 🚨 NEW: Mobile-safe Custom Event Badge
+        let eventBadge = record.customEventLabel ? `<span style="font-size:10px; font-weight:800; color:var(--brand-red); background:var(--bg-grid-color); border:1px solid var(--border-color); padding:3px 8px; border-radius:6px; letter-spacing:0.5px;">${record.customEventLabel}</span>` : "";
+        
         return `
         <div style="background:var(--bg-base); border:1px solid var(--border-color); border-radius:12px; padding:15px; margin-bottom:12px; display:flex; flex-direction:column; gap:12px; box-shadow:0 2px 5px rgba(0,0,0,0.02); transition:0.2s;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
                 <div style="display:flex; flex-direction:column; gap:6px;">
-                    <span style="font-size:14px; font-weight:800; color:var(--text-dark); line-height:1.3;">${record.subject}</span>
+                    <div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px;">
+                        <span style="font-size:14px; font-weight:800; color:var(--text-dark); line-height:1.3;">${record.subject}</span>
+                        ${eventBadge}
+                    </div>
                     <div style="display:inline-flex;">
                         <span style="font-size:10px; font-weight:700; color:var(--text-muted); background:var(--bg-grid-color); padding:3px 8px; border-radius:6px;"><i class="far fa-clock" style="margin-right:4px;"></i>${record.timeString}</span>
                     </div>
@@ -9225,7 +9504,7 @@ function updateSystemThemeBar() {
 
 // Auto-populates the HTML dropdowns we just emptied
 function populateDynamicPeriodDropdowns() {
-    let pCount = window.collegeTimeConfig ? (window.collegeTimeConfig.periodCount || 6) : 6;
+    let pCount = getTeacherPeriodCount();
     let attDrop = document.getElementById("attPeriodDropdown");
     let evtDrop = document.getElementById("evtPeriodDrop");
     
