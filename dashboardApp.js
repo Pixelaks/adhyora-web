@@ -376,7 +376,17 @@ function startBackgroundListeners() {
             let isExplicitMatch = enrolledSubjectsList.some(s => s.trim().toLowerCase() === sub.trim().toLowerCase());
             let isDepartmentMatch = (d.teacherDeptID || "").trim().toLowerCase() === myDepartmentID.toLowerCase() && (d.semester || "").trim().toLowerCase() === mySemStr.toLowerCase();
             if (isExplicitMatch || isDepartmentMatch || enrolledSubjectsList.length === 0) {
-                freshAssignments.push({ id: doc.id, title: `Assignment: ${sub}`, body: d.topic || "No Topic", teach: d.teacherName || "Teacher", due: d.dueDate || "N/A", time: d.createdAt ? d.createdAt.toDate() : new Date() });
+                // 🚨 FIX: Combine the Topic and Description securely for the UI
+                let combinedBody = `<b>${d.topic || "Assignment"}</b><br><span style="opacity: 0.85; margin-top: 4px; display: block;">${d.description || "No instructions provided."}</span>`;
+                
+                freshAssignments.push({ 
+                    id: doc.id, 
+                    title: `Assignment: ${sub}`, 
+                    body: combinedBody, 
+                    teach: d.teacherName || "Teacher", 
+                    due: d.dueDate || "N/A", 
+                    time: d.createdAt ? d.createdAt.toDate() : new Date() 
+                });
             }
         });
         cachedAssignments = freshAssignments;
@@ -2561,10 +2571,16 @@ async function FetchDatesForSubject(subjectNameFromUI, semDisplay) {
                 let pKey = `period_${i}`;
 
                 if (d[pKey] && d[pKey].subject) {
-                    let logSubjectClean = d[pKey].subject.trim();
-                    
-                    if (logSubjectClean === subjectNameFromUI || logSubjectClean === dbSubjectName) {
-                        if (d[pKey].attendance && d[pKey].attendance[currentRollNo] !== undefined) {
+                        let logSubjectClean = d[pKey].subject.trim();
+                        
+                        // 🚨 FIX: Aggressively normalize both strings by removing ALL spaces and converting to lowercase
+                        let normalizedLogSubject = logSubjectClean.replace(/[\s-]/g, '').toLowerCase();
+                        let normalizedUISubject = subjectNameFromUI.split('<')[0].replace(/[\s-]/g, '').toLowerCase();
+                        let normalizedDbSubject = dbSubjectName.replace(/[\s-]/g, '').toLowerCase();
+                        
+                        // Compare the normalized versions so spaces, hyphens, and casing don't break the timeline
+                        if (normalizedLogSubject === normalizedUISubject || normalizedLogSubject === normalizedDbSubject) {
+                            if (d[pKey].attendance && d[pKey].attendance[currentRollNo] !== undefined) {
                             
                             let timeString = "--:--";
                             if (d[pKey].timestamp) {
