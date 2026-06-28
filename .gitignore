@@ -1,0 +1,5 @@
+node_modules/
+src/
+obfuscator.json
+package.json
+package-lock.json
