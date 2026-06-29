@@ -1,8 +1,12 @@
 [{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "com.PixelaksTechnologies.Adhyora",
-        "sha256_cert_fingerprints": ["B8:8C:AF:0F:7B:81:98:6F:D3:7B:D9:36:4C:0C:CC:E4:2E:7B:19:3E:D6:8D:12:92:E9:62:10:CB:4B:6B:72:8C"]
-      }
-    }]
+  "relation": [
+    "delegate_permission/common.handle_all_urls",
+    "delegate_permission/common.get_login_creds",
+    "delegate_permission/common.use_as_origin"
+  ],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.PixelaksTechnologies.Adhyora",
+    "sha256_cert_fingerprints": ["B8:8C:AF:0F:7B:81:98:6F:D3:7B:D9:36:4C:0C:CC:E4:2E:7B:19:3E:D6:8D:12:92:E9:62:10:CB:4B:6B:72:8C"]
+  }
+}]
