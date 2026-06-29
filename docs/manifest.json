@@ -2,17 +2,31 @@
   "name": "Adhyora Academic System",
   "short_name": "Adhyora",
   "description": "Student and Teacher Portal",
+  "id": "com.PixelaksTechnologies.Adhyora",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "background_color": "#0b111e",
+  "theme_color": "#0b111e",
   "orientation": "portrait-primary",
+  "categories": ["education"],
   "icons": [
     {
-      "src": "../AdhyoraSplashLogo5.png",
+      "src": "./web-app-manifest-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./web-app-manifest-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable"
+    },
+    {
+      "src": "./AdhyoraSplashLogo5.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }
