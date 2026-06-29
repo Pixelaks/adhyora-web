@@ -12,7 +12,7 @@ self.addEventListener('notificationclick', function(event) {
 
   // THE SMART ROUTER: Read the hidden Firebase payload!
   try {
-    let msgType = event.notification.data.FCM_MSG.data.type;
+    let msgType = event.notification.data.type || event.notification.data.FCM_MSG?.data?.type;
     
     if (msgType === 'admin_broadcast') {
       targetAction = 'openNotifications';
@@ -81,7 +81,29 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// 🚨 NEW: Force the Native Android App Icon Badge when a push arrives in the background
+// 🚨 SERVICE WORKER HANDLES NOTIFICATION — enables heads-up banner + vibration!
+messaging.onBackgroundMessage((payload) => {
+  console.log('Background message received:', payload);
+
+  const title = payload.data.title || 'Adhyora';
+  const body = payload.data.body || 'You have a new notification';
+  const type = payload.data.type || 'general';
+  const icon = payload.data.image || './web-app-manifest-192x192.png';
+
+  const notificationOptions = {
+    body: body,
+    icon: icon,
+    badge: './web-app-manifest-192x192.png',
+    vibrate: [200, 100, 200],
+    requireInteraction: true,
+    tag: type,
+    data: payload.data
+  };
+
+  return self.registration.showNotification(title, notificationOptions);
+});
+
+// 🚨 Badge count
 self.addEventListener('push', (event) => {
   if ('setAppBadge' in navigator) {
     navigator.setAppBadge(1).catch(error => console.error("Badging failed:", error));
