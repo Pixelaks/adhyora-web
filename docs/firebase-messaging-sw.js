@@ -81,6 +81,13 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// 🚨 NEW: Force the Native Android App Icon Badge when a push arrives in the background
+self.addEventListener('push', (event) => {
+  if ('setAppBadge' in navigator) {
+    navigator.setAppBadge(1).catch(error => console.error("Badging failed:", error));
+  }
+});
+
 // ==========================================================
 // 3. OFFLINE CACHING FOR GOOGLE PLAY PWA APPROVAL
 // ==========================================================
