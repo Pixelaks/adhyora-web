@@ -1,13 +1,16 @@
 {
-  "name": "Adhyora Academic System",
+  "name": "Adhyora Academic Management System",
   "short_name": "Adhyora",
   "description": "Adhyora is an Academic Management System for colleges. Students, Teachers, Staff, Principal and Accountants can manage attendance, assignments, fees, timetables and announcements all in one place. Powered by Pixelaks Technologies.",
   "id": "com.PixelaksTechnologies.Adhyora",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#0b111e",
   "theme_color": "#0b111e",
   "orientation": "portrait-primary",
+  "lang": "en",
+  "dir": "ltr",
   "categories": ["education"],
   "icons": [
     {
@@ -23,7 +26,7 @@
       "purpose": "any"
     },
     {
-      "src": "./maskable_icon_x512.png",
+      "src": "./maskable_icon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
