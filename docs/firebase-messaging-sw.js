@@ -91,9 +91,8 @@ messaging.onBackgroundMessage((payload) => {
 
   const notificationOptions = {
     body: body,
-    icon:   './ic_stat_notify.png',
-    badge:  './ic_stat_notify.png',
-    image:  payload.data.image || './web-app-manifest-192x192.png',
+    icon:  './ic_stat_notify.png',
+    badge: './ic_stat_notify.png',
     vibrate: [200, 100, 200],
     requireInteraction: true,
     tag: type,
