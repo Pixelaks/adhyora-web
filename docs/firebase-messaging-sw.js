@@ -88,12 +88,12 @@ messaging.onBackgroundMessage((payload) => {
   const title = payload.data.title || 'Adhyora';
   const body = payload.data.body || 'You have a new notification';
   const type = payload.data.type || 'general';
-  const icon = payload.data.image || './ic_stat_notify_bw.png';
+  const icon = payload.data.image || './web-app-manifest-192x192.png';
 
   const notificationOptions = {
     body: body,
     icon: icon,
-    badge: './web-app-manifest-192x192.png',
+    badge: './ic_stat_notify_bw.png',
     vibrate: [200, 100, 200],
     requireInteraction: true,
     tag: type,
