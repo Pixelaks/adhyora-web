@@ -60,6 +60,9 @@ self.addEventListener('notificationclick', function(event) {
       if (clients.openWindow) {
         return clients.openWindow('https://adhyora.pixelaks.in/' + targetHash); // 🚨 DYNAMIC HASH
       }
+    }).catch((err) => {
+      console.error('Notification click routing failed, falling back to plain open:', err);
+      if (clients.openWindow) return clients.openWindow('https://adhyora.pixelaks.in/');
     })
   );
 });
