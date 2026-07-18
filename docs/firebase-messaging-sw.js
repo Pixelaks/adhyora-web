@@ -118,7 +118,7 @@ self.addEventListener('push', (event) => {
 // ==========================================================
 // 3. OFFLINE CACHING FOR GOOGLE PLAY PWA APPROVAL
 // ==========================================================
-const CACHE_NAME = 'adhyora-offline-v2'; // 🚨 Bumped to v2 — forces SW update on all devices
+const CACHE_NAME = 'adhyora-offline-v3'; // 🚨 Bumped to v2 — forces SW update on all devices
 const OFFLINE_URL = './offline.html'; 
 
 // When the app is installed, save offline.html to the phone
