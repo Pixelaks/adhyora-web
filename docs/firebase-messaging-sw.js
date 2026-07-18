@@ -22,7 +22,6 @@ self.addEventListener('notificationclick', function(event) {
       targetAction = 'openAssignments';
       targetHash = '#assignments';
     }
-    // 🚨 ADD THESE TWO LINES FOR THE PRINCIPAL DASHBOARD 🚨
     else if (msgType === 'teacher_request') {
       targetAction = 'openTeacherReq';
       targetHash = '#teacher_requests';
@@ -31,18 +30,15 @@ self.addEventListener('notificationclick', function(event) {
       targetAction = 'openEventReq';
       targetHash = '#events';
     }
-    // 🚨 NEW: ROUTER FOR STAFF & ACCOUNTANT APPROVALS 🚨
     else if (msgType === 'admin_request') {
       targetAction = 'openAdminReq';
       targetHash = '#admin_requests';
     }
-    
-    // Route security/login alerts to the Active Devices panel
+    // 🚨 Security alert → open Active Devices panel
     else if (msgType === 'login') {
       targetAction = 'openSessions';
       targetHash = '#sessions';
     }
-    // 🚨 Stop "general" notifications from defaulting to the Inbox!
     else if (msgType === 'general') {
       targetAction = 'none';
       targetHash = '';
