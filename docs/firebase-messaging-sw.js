@@ -22,7 +22,6 @@ self.addEventListener('notificationclick', function(event) {
       targetAction = 'openAssignments';
       targetHash = '#assignments';
     }
-    // 🚨 ADD THESE TWO LINES FOR THE PRINCIPAL DASHBOARD 🚨
     else if (msgType === 'teacher_request') {
       targetAction = 'openTeacherReq';
       targetHash = '#teacher_requests';
@@ -31,16 +30,19 @@ self.addEventListener('notificationclick', function(event) {
       targetAction = 'openEventReq';
       targetHash = '#events';
     }
-    // 🚨 NEW: ROUTER FOR STAFF & ACCOUNTANT APPROVALS 🚨
     else if (msgType === 'admin_request') {
       targetAction = 'openAdminReq';
       targetHash = '#admin_requests';
     }
-    
-    // 🚨 ADD THIS FIX: Stop "system" notifications from defaulting to the Inbox!
-    else if (msgType === 'general' || msgType === 'login') {
-      targetAction = 'none'; // Don't click any buttons
-      targetHash = ''; // Just open the plain home screen URL
+    // 🚨 SECURITY ALERT: Opens the Devices/Sessions panel
+    else if (msgType === 'login') {
+      targetAction = 'openSessions';
+      targetHash = '#sessions';
+    }
+    // General system notifications — just open the home screen
+    else if (msgType === 'general') {
+      targetAction = 'none';
+      targetHash = '';
     }
   } catch(e) {
     console.log("Could not read message type, defaulting to inbox.");
@@ -52,13 +54,13 @@ self.addEventListener('notificationclick', function(event) {
       for (let i = 0; i < windowClients.length; i++) {
         let client = windowClients[i];
         if (client.url.includes('adhyora.pixelaks.in')) {
-          client.postMessage({ action: targetAction }); // 🚨 DYNAMIC ACTION
+          client.postMessage({ action: targetAction });
           return client.focus(); 
         }
       }
       
       if (clients.openWindow) {
-        return clients.openWindow('https://adhyora.pixelaks.in/' + targetHash); // 🚨 DYNAMIC HASH
+        return clients.openWindow('https://adhyora.pixelaks.in/' + targetHash);
       }
     }).catch((err) => {
       console.error('Notification click routing failed, falling back to plain open:', err);
@@ -116,7 +118,7 @@ self.addEventListener('push', (event) => {
 // ==========================================================
 // 3. OFFLINE CACHING FOR GOOGLE PLAY PWA APPROVAL
 // ==========================================================
-const CACHE_NAME = 'adhyora-offline-v1';
+const CACHE_NAME = 'adhyora-offline-v3'; // 🚨 Bumped to v2 — forces SW update on all devices
 const OFFLINE_URL = './offline.html'; 
 
 // When the app is installed, save offline.html to the phone
