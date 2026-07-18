@@ -37,10 +37,15 @@ self.addEventListener('notificationclick', function(event) {
       targetHash = '#admin_requests';
     }
     
-    // 🚨 ADD THIS FIX: Stop "system" notifications from defaulting to the Inbox!
-    else if (msgType === 'general' || msgType === 'login') {
-      targetAction = 'none'; // Don't click any buttons
-      targetHash = ''; // Just open the plain home screen URL
+    // Route security/login alerts to the Active Devices panel
+    else if (msgType === 'login') {
+      targetAction = 'openSessions';
+      targetHash = '#sessions';
+    }
+    // 🚨 Stop "general" notifications from defaulting to the Inbox!
+    else if (msgType === 'general') {
+      targetAction = 'none';
+      targetHash = '';
     }
   } catch(e) {
     console.log("Could not read message type, defaulting to inbox.");
