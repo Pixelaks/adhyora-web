@@ -22,6 +22,7 @@ self.addEventListener('notificationclick', function(event) {
       targetAction = 'openAssignments';
       targetHash = '#assignments';
     }
+    // 🚨 ADD THESE TWO LINES FOR THE PRINCIPAL DASHBOARD 🚨
     else if (msgType === 'teacher_request') {
       targetAction = 'openTeacherReq';
       targetHash = '#teacher_requests';
@@ -30,18 +31,16 @@ self.addEventListener('notificationclick', function(event) {
       targetAction = 'openEventReq';
       targetHash = '#events';
     }
+    // 🚨 NEW: ROUTER FOR STAFF & ACCOUNTANT APPROVALS 🚨
     else if (msgType === 'admin_request') {
       targetAction = 'openAdminReq';
       targetHash = '#admin_requests';
     }
-    // 🚨 Security alert → open Active Devices panel
-    else if (msgType === 'login') {
-      targetAction = 'openSessions';
-      targetHash = '#sessions';
-    }
-    else if (msgType === 'general') {
-      targetAction = 'none';
-      targetHash = '';
+    
+    // 🚨 ADD THIS FIX: Stop "system" notifications from defaulting to the Inbox!
+    else if (msgType === 'general' || msgType === 'login') {
+      targetAction = 'none'; // Don't click any buttons
+      targetHash = ''; // Just open the plain home screen URL
     }
   } catch(e) {
     console.log("Could not read message type, defaulting to inbox.");
