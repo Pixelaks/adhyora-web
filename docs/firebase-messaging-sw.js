@@ -118,14 +118,18 @@ self.addEventListener('push', (event) => {
 // ==========================================================
 // 3. OFFLINE CACHING FOR GOOGLE PLAY PWA APPROVAL
 // ==========================================================
-const CACHE_NAME = 'adhyora-offline-v3'; // 🚨 Bumped to v2 — forces SW update on all devices
+const CACHE_NAME = 'adhyora-offline-v4'; // 🚨 Bumped — forces SW update on all devices, adds icon caching
 const OFFLINE_URL = './offline.html'; 
+// 🚨 NEW: Notification icon assets — cached at install so push notifications never depend on a live
+// network fetch (which times out on sleeping/Doze devices and causes the white-box / grey-monogram fallback).
+const NOTIF_ICON_URL = './web-app-manifest-192x192.png';
+const NOTIF_BADGE_URL = './ic_stat_notify.png';
 
-// When the app is installed, save offline.html to the phone
+// When the app is installed, save offline.html and the notification icons to the phone
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.add(OFFLINE_URL);
+      return cache.addAll([OFFLINE_URL, NOTIF_ICON_URL, NOTIF_BADGE_URL]);
     })
   );
   self.skipWaiting();
@@ -144,6 +148,15 @@ self.addEventListener('fetch', (event) => {
         // If the network fails (offline), pull offline.html from the cache!
         return caches.match(OFFLINE_URL);
       })
+    );
+    return;
+  }
+
+  // 🚨 NEW: Serve notification icons cache-first — instant, no network round-trip,
+  // so scheduled pushes (which wake a sleeping device) always render the correct icon/badge.
+  if (event.request.url.endsWith('web-app-manifest-192x192.png') || event.request.url.endsWith('ic_stat_notify.png')) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => cached || fetch(event.request))
     );
   }
 });
