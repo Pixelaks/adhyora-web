@@ -44,6 +44,11 @@ self.addEventListener('notificationclick', function(event) {
       targetAction = 'none';
       targetHash = '';
     }
+    // 🚨 PROMOTION HOLD: just open the app — the home page banner already shows the status
+    else if (msgType === 'promotion_hold') {
+      targetAction = 'none';
+      targetHash = '';
+    }
   } catch(e) {
     console.log("Could not read message type, defaulting to inbox.");
   }
