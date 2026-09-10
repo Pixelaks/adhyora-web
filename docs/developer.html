@@ -1,0 +1,125 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Adhyora - Developer Portal</title><style>body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: #1e293b; padding: 30px; border-radius: 12px; width: 100%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #334155; }
+        input, textarea, select, button { width: 100%; margin-top: 10px; padding: 12px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: white; box-sizing: border-box; font-family: inherit; }
+        button { background: #10b981; color: white; font-weight: bold; border: none; cursor: pointer; margin-top: 20px; transition: 0.2s; }
+        button:hover { background: #059669; }
+        .hidden { display: none; }</style></head><body><div id="loginScreen" class="card"><h2 style="margin-top: 0; color: #10b981;">Developer Login</h2><input type="email" id="devEmail" placeholder="Developer Email"> <input type="password" id="devPass" placeholder="Password"> <button id="btnLogin">Secure Login</button><p id="loginStatus" style="color: #ef4444; font-size: 13px; text-align: center;"></p></div><div id="portalScreen" class="card hidden"><h2 style="margin-top: 0; color: #10b981;">Push Notification System</h2><select id="targetMode"><option value="GLOBAL">Global (All Adhyora Users)</option><option value="COLLEGE">Specific College</option></select> <select id="collegeIdDrop" class="hidden"><option value="">Loading colleges...</option></select> <input type="text" id="msgTitle" placeholder="Message Title (e.g., Update Available)"> <textarea id="msgBody" placeholder="Type your full message here..." rows="5"></textarea> <button id="btnSend">Send Push Notification</button><p id="portalStatus" style="font-size: 13px; text-align: center;"></p></div><script type="module">import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+        import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-functions.js";
+
+        // 🚨 PASTE YOUR FIREBASE CONFIG HERE
+        const firebaseConfig = {
+            apiKey: "AIzaSyD_ixI42lNdSqWxHj2EZNpXDLBZ2U8coLA",
+            authDomain: "adhyora-5d4c1.firebaseapp.com",
+            projectId: "adhyora-5d4c1",
+            storageBucket: "adhyora-5d4c1.firebasestorage.app",
+            messagingSenderId: "206050348148",
+            appId: "1:206050348148:web:da4e421e00ec2f77429521"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const functions = getFunctions(app, "asia-south1");
+        const developerAPI = httpsCallable(functions, 'developerAPI');
+
+        const loginScreen = document.getElementById("loginScreen");
+        const portalScreen = document.getElementById("portalScreen");
+        const loginStatus = document.getElementById("loginStatus");
+        const portalStatus = document.getElementById("portalStatus");
+        const collegeDrop = document.getElementById("collegeIdDrop");
+
+        // Fetch Colleges for Dropdown
+        async function loadColleges() {
+            try {
+                const snap = await getDocs(collection(db, "colleges"));
+                let opts = '<option value="">Select a College...</option>';
+                snap.forEach(doc => {
+                    // Try to grab a nice name, fallback to the raw document ID
+                    let collegeName = doc.id; 
+                    opts += `<option value="${doc.id}">${collegeName}</option>`;
+                });
+                collegeDrop.innerHTML = opts;
+            } catch (e) {
+                console.error("Failed to load colleges", e);
+                collegeDrop.innerHTML = '<option value="">Error loading colleges</option>';
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                loginScreen.classList.add("hidden");
+                portalScreen.classList.remove("hidden");
+                loadColleges(); // Load the dropdown once logged in
+            } else {
+                loginScreen.classList.remove("hidden");
+                portalScreen.classList.add("hidden");
+            }
+        });
+
+        document.getElementById("targetMode").addEventListener("change", (e) => {
+            collegeDrop.classList.toggle("hidden", e.target.value === "GLOBAL");
+        });
+
+        document.getElementById("btnLogin").addEventListener("click", async () => {
+            const email = document.getElementById("devEmail").value.trim();
+            const pass = document.getElementById("devPass").value;
+            loginStatus.innerText = "Authenticating...";
+            try {
+                await signInWithEmailAndPassword(auth, email, pass);
+            } catch (error) {
+                loginStatus.innerText = "Access Denied.";
+            }
+        });
+
+        document.getElementById("btnSend").addEventListener("click", async () => {
+            const targetMode = document.getElementById("targetMode").value;
+            const collegeId = collegeDrop.value;
+            const title = document.getElementById("msgTitle").value.trim();
+            const body = document.getElementById("msgBody").value.trim();
+            const btn = document.getElementById("btnSend");
+
+            if (!title || !body) {
+                portalStatus.innerText = "Title and Body are required.";
+                portalStatus.style.color = "#ef4444";
+                return;
+            }
+
+            if (targetMode === "COLLEGE" && !collegeId) {
+                portalStatus.innerText = "Please select a College from the dropdown.";
+                portalStatus.style.color = "#ef4444";
+                return;
+            }
+
+            let confirmMsg = targetMode === "GLOBAL" 
+                ? "Blast this to EVERY user on the entire platform?" 
+                : `Send to all users in college: ${collegeId}?`;
+
+            if (!confirm(confirmMsg)) return;
+
+            btn.innerText = "Sending...";
+            btn.disabled = true;
+            portalStatus.innerText = "Executing server command...";
+            portalStatus.style.color = "#94a3b8";
+
+            try {
+                await developerAPI({
+                    targetMode: targetMode,
+                    collegeId: collegeId,
+                    title: title,
+                    body: body
+                });
+                
+                portalStatus.innerText = "✅ Push Notification Delivered!";
+                portalStatus.style.color = "#10b981";
+                document.getElementById("msgTitle").value = "";
+                document.getElementById("msgBody").value = "";
+            } catch (error) {
+                portalStatus.innerText = "❌ Failed: " + error.message;
+                portalStatus.style.color = "#ef4444";
+            }
+            
+            btn.innerText = "Send Push Notification";
+            btn.disabled = false;
+        });</script></body></html>
