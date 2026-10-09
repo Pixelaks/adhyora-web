@@ -123,7 +123,7 @@ self.addEventListener('push', (event) => {
 // ==========================================================
 // 3. OFFLINE CACHING FOR GOOGLE PLAY PWA APPROVAL
 // ==========================================================
-const CACHE_NAME = 'adhyora-offline-v4'; // 🚨 Bumped — forces SW update on all devices, adds icon caching
+const CACHE_NAME = 'adhyora-offline-v5'; // 🚨 Bumped — forces SW update on all devices, adds icon caching
 const OFFLINE_URL = './offline.html'; 
 // 🚨 NEW: Notification icon assets — cached at install so push notifications never depend on a live
 // network fetch (which times out on sleeping/Doze devices and causes the white-box / grey-monogram fallback).
@@ -134,7 +134,11 @@ const NOTIF_BADGE_URL = './ic_stat_notify.png';
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll([OFFLINE_URL, NOTIF_ICON_URL, NOTIF_BADGE_URL]);
+      return Promise.allSettled(
+        [OFFLINE_URL, NOTIF_ICON_URL, NOTIF_BADGE_URL].map((url) =>
+          cache.add(url).catch((err) => console.warn('SW cache skipped:', url, err))
+        )
+      );
     })
   );
   self.skipWaiting();
@@ -151,7 +155,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request).catch(() => {
         // If the network fails (offline), pull offline.html from the cache!
-        return caches.match(OFFLINE_URL);
+        return caches.match(OFFLINE_URL).then((r) => r || Response.error());
       })
     );
     return;
